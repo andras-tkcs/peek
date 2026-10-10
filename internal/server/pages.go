@@ -17,16 +17,38 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	u, err := s.store.GetUpload(r.Context(), slug)
 	if err != nil {
+		if cur, aerr := s.store.ResolveSlugAlias(r.Context(), slug); aerr == nil {
+			redirectRenamedPage(w, r, "/p/"+cur)
+			return
+		}
 		s.renderWebError(w, http.StatusNotFound, "Page not found", "This shared page does not exist or is no longer available.")
 		return
 	}
 	s.servePage(w, r, u, u.LatestVersion, "/p/"+slug)
 }
 
+// redirectRenamedPage sends an old link to the page's current link. 302, not 301:
+// a page can be renamed back, and a cached permanent redirect would then loop.
+func redirectRenamedPage(w http.ResponseWriter, r *http.Request, path string) {
+	if r.URL.RawQuery != "" {
+		path += "?" + r.URL.RawQuery
+	}
+	http.Redirect(w, r, path, http.StatusFound)
+}
+
 func (s *Server) handlePageVersion(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	u, err := s.store.GetUpload(r.Context(), slug)
 	if err != nil {
+		if cur, aerr := s.store.ResolveSlugAlias(r.Context(), slug); aerr == nil {
+			n, err := strconv.Atoi(r.PathValue("n"))
+			if err != nil || n < 1 {
+				s.renderVersionNotFound(w)
+				return
+			}
+			redirectRenamedPage(w, r, "/p/"+cur+"/v/"+strconv.Itoa(n))
+			return
+		}
 		s.renderWebError(w, http.StatusNotFound, "Page not found", "This shared page does not exist or is no longer available.")
 		return
 	}
