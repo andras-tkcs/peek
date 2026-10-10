@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /dashboard", s.handleDashboard)
 	mux.HandleFunc("POST /dashboard/upload", s.handleDashboardUpload)
 	mux.HandleFunc("POST /dashboard/delete/{slug}", s.handleDashboardDelete)
+	mux.HandleFunc("POST /dashboard/visibility/{slug}", s.handleDashboardVisibility)
 	mux.HandleFunc("POST /dashboard/settings", s.handleDashboardSettings)
 	mux.HandleFunc("POST /dashboard/invites", s.handleDashboardCreateInvite)
 	mux.HandleFunc("POST /dashboard/invites/revoke/{id}", s.handleDashboardRevokeInvite)

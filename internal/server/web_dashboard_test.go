@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/puemos/peek/internal/db"
 	"github.com/puemos/peek/internal/uploadquota"
 	webui "github.com/puemos/peek/internal/web"
@@ -399,5 +401,113 @@ func TestDashboardOffersRestrictedVisibility(t *testing.T) {
 	rec := doRequest(t, s, http.MethodGet, "/dashboard", nil, asSession(s, account.ID))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `value="restricted"`) {
 		t.Fatalf("status = %d, body lacks restricted radio", rec.Code)
+	}
+}
+
+func dashboardPost(t *testing.T, s *Server, accountID int64, path string, form url.Values, withCSRF bool) *httptest.ResponseRecorder {
+	t.Helper()
+	opts := []func(*http.Request){
+		func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") },
+		asSession(s, accountID),
+	}
+	if withCSRF {
+		form.Set("csrf", "csrf-token")
+		opts = append(opts, func(r *http.Request) {
+			r.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
+		})
+	}
+	return doRequest(t, s, http.MethodPost, path, strings.NewReader(form.Encode()), opts...)
+}
+
+func assertDashboardRedirect(t *testing.T, rec *httptest.ResponseRecorder, want string) {
+	t.Helper()
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestDashboardVisibilitySetsPasswordAndAudits(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "page")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}, "password": {"pw"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?ok=Password+updated+for+%2Fp%2Fpage")
+	got, err := s.store.GetUpload(context.Background(), "page")
+	if err != nil {
+		t.Fatalf("get upload: %v", err)
+	}
+	if got.Visibility != "password" {
+		t.Fatalf("visibility = %q, want password", got.Visibility)
+	}
+	if bcrypt.CompareHashAndPassword([]byte(got.PasswordHash), []byte("pw")) != nil {
+		t.Fatal("stored hash does not verify the password")
+	}
+	entries, err := s.store.ListAuditLog(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("list audit: %v", err)
+	}
+	found := false
+	for _, e := range entries {
+		if e.Action == "upload.visibility.set" && e.Detail == "slug=page visibility=password password=updated" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("audit entry not found: %+v", entries)
+	}
+}
+
+func TestDashboardVisibilityMakesPublic(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "page")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"public"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?ok=%2Fp%2Fpage+is+now+public")
+	got, err := s.store.GetUpload(context.Background(), "page")
+	if err != nil {
+		t.Fatalf("get upload: %v", err)
+	}
+	if got.Visibility != "public" || got.PasswordHash != "" {
+		t.Fatalf("visibility = %q hash = %q, want public and empty", got.Visibility, got.PasswordHash)
+	}
+}
+
+func TestDashboardVisibilityRejectsPasswordWithoutValue(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "page")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err=password+visibility+requires+a+password")
+	assertVisibilityUnchanged(t, s, "page")
+}
+
+func TestDashboardVisibilityRejectsNonOwner(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	restrictedPage(t, s, "page")
+	other, err := s.store.CreateAccount(context.Background(), "user@example.test", "User", false)
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	rec := dashboardPost(t, s, other.ID, "/dashboard/visibility/page", url.Values{"visibility": {"public"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err=not+owner")
+	assertVisibilityUnchanged(t, s, "page")
+}
+
+func TestDashboardVisibilityRejectsMissingCSRF(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "page")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"public"}}, false)
+	assertDashboardRedirect(t, rec, "/dashboard?err=invalid+session")
+	assertVisibilityUnchanged(t, s, "page")
+}
+
+func assertVisibilityUnchanged(t *testing.T, s *Server, slug string) {
+	t.Helper()
+	got, err := s.store.GetUpload(context.Background(), slug)
+	if err != nil {
+		t.Fatalf("get upload: %v", err)
+	}
+	if got.Visibility != "restricted" {
+		t.Fatalf("visibility = %q, want restricted", got.Visibility)
 	}
 }
