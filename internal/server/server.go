@@ -68,6 +68,7 @@ type Server struct {
 	s3AllowPrivateEndpoint bool
 	oidcAllowPrivateIssuer bool
 	visitQueue             chan visitEvent
+	groups                 GroupChecker
 }
 
 func New(cfg Config) (*Server, error) {

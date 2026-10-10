@@ -73,7 +73,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if !s.viewerCanAccessUpload(r, u) {
-		jsonError(w, http.StatusUnauthorized, uploadAccessRequiredMessage(u))
+		jsonError(w, s.uploadAccessStatus(r, u), uploadAccessRequiredMessage(u))
 		return
 	}
 	version, ok := s.commentVersion(r, u)
@@ -109,7 +109,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.viewerCanAccessUpload(r, u) {
-		jsonError(w, http.StatusUnauthorized, uploadAccessRequiredMessage(u))
+		jsonError(w, s.uploadAccessStatus(r, u), uploadAccessRequiredMessage(u))
 		return
 	}
 	version, ok := s.commentVersion(r, u)
@@ -220,16 +220,33 @@ func (s *Server) viewerCanAccessUpload(r *http.Request, u *models.Upload) bool {
 	case models.UploadVisibilityPrivate:
 		_, ok := s.webAuth(r)
 		return ok
+	case models.UploadVisibilityRestricted:
+		a, ok := s.webAuth(r)
+		return ok && s.accountCanViewRestricted(r.Context(), a, u)
 	default:
 		return false
 	}
 }
 
 func uploadAccessRequiredMessage(u *models.Upload) string {
-	if u.Visibility == models.UploadVisibilityPrivate {
+	switch u.Visibility {
+	case models.UploadVisibilityPrivate:
 		return "login required"
+	case models.UploadVisibilityRestricted:
+		return "access denied"
 	}
 	return "password required"
+}
+
+// uploadAccessStatus is the status for a failed viewerCanAccessUpload: 403 for a
+// signed-in viewer of a restricted upload, 401 otherwise.
+func (s *Server) uploadAccessStatus(r *http.Request, u *models.Upload) int {
+	if u.Visibility == models.UploadVisibilityRestricted {
+		if _, ok := s.webAuth(r); ok {
+			return http.StatusForbidden
+		}
+	}
+	return http.StatusUnauthorized
 }
 
 func authCookieName(slug string) string {

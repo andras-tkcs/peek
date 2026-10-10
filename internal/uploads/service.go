@@ -122,7 +122,7 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 		return nil, newError(KindInvalidHTML, "file does not look like HTML")
 	}
 	switch in.Visibility {
-	case models.UploadVisibilityPublic, models.UploadVisibilityPrivate:
+	case models.UploadVisibilityPublic, models.UploadVisibilityPrivate, models.UploadVisibilityRestricted:
 		if in.Password != "" {
 			return nil, newError(KindPasswordNotAllowed, "password is only allowed with password visibility")
 		}
@@ -131,7 +131,7 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 			return nil, newError(KindPasswordRequired, "password visibility requires a password")
 		}
 	default:
-		return nil, newError(KindInvalidVisibility, "visibility must be public, password, or private")
+		return nil, newError(KindInvalidVisibility, "visibility must be public, password, private, or restricted")
 	}
 
 	pwHash := ""

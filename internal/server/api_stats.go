@@ -153,7 +153,7 @@ func (s *Server) handleViews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.viewerCanAccessUpload(r, u) {
-		jsonError(w, http.StatusUnauthorized, uploadAccessRequiredMessage(u))
+		jsonError(w, s.uploadAccessStatus(r, u), uploadAccessRequiredMessage(u))
 		return
 	}
 	total, unique, err := s.store.CountVisits(r.Context(), u.ID)
