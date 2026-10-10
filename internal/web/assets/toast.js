@@ -134,7 +134,10 @@
         };
         this.toasts.push(toast);
         this.$nextTick(() => {
-          toast.show = true;
+          // Flip the reactive copy Alpine holds in this.toasts, not the raw object.
+          const live = this.toasts.find((item) => item.id === toast.id);
+          if (!live) return;
+          live.show = true;
           if (toast.duration > 0) {
             setTimeout(() => this.remove(toast.id), toast.duration);
           }

@@ -29,7 +29,7 @@
   <kbd class="text-[11px] text-muted-foreground bg-muted rounded-md px-1.5 py-0.5 leading-none border border-border">Esc</kbd>
 </div>
 
-<div id="hn-bar"
+<div id="hn-bar" x-show="!barHidden"
      class="hn-floating-surface hn-toolbar fixed bottom-5 left-1/2 -translate-x-1/2 z-[1000] transition-opacity duration-150"
      :class="{ 'opacity-90': !panelOpen && !composerOpen }">
   <button id="hn-comment-btn" type="button" @click="toggleCommentMode"
@@ -45,6 +45,9 @@
   <button id="hn-panel-btn" class="hn-toolbar-button" type="button" title="View comments" @click="panelOpen = !panelOpen" :class="{ 'hn-button-primary': panelOpen }">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-95 shrink-0"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
     <span id="hn-count" class="hn-badge" x-text="commentCount" :class="{ 'hn-badge-empty': commentCount === 0 }">0</span>
+  </button>
+  <button id="hn-hide-btn" class="hn-toolbar-button" type="button" title="Hide toolbar (Shift+H)" aria-label="Hide toolbar" @click="hideBar">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-95 shrink-0"><path d="M6 9l6 6 6-6"/></svg>
   </button>
 </div>
 

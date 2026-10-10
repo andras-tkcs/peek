@@ -41,7 +41,7 @@ peek visibility <slug> private
 
 ## Review In Context
 
-Open `/p/<slug>`. Peek keeps the uploaded page full-screen and adds a small toolbar for comments, view count, and the comments panel.
+Open `/p/<slug>`. Peek keeps the uploaded page full-screen and adds a small toolbar for comments, view count, and the comments panel. Use the chevron button at the end of the toolbar to hide it while reading; press Shift+H to bring it back (or hide it again). Reloading the page always shows the toolbar.
 
 Select text when exact wording matters:
 

@@ -488,3 +488,37 @@ func TestDashboardRendersGenericAndUploadFlashesSeparately(t *testing.T) {
 		t.Fatalf("dashboard rendered old inline upload flash instead of toast marker: %s", html)
 	}
 }
+
+func TestPageTemplateToolbarCanBeHidden(t *testing.T) {
+	renderer, err := newRenderer(func(name string) string {
+		return "/" + name + "?v=test"
+	})
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123?t=t&v=v", Visibility: "public"})
+	if err != nil {
+		t.Fatalf("execute page: %v", err)
+	}
+	html := string(body)
+	start := strings.Index(html, `<div id="hn-bar"`)
+	if start < 0 {
+		t.Fatalf("page template missing toolbar: %s", html)
+	}
+	end := strings.Index(html[start:], ">")
+	if end < 0 {
+		t.Fatalf("toolbar tag was not closed: %s", html[start:])
+	}
+	tag := html[start : start+end+1]
+	if !strings.Contains(tag, `x-show="!barHidden"`) {
+		t.Fatalf("toolbar must be hideable with Alpine x-show: %s", tag)
+	}
+	if strings.Contains(tag, "x-cloak") {
+		t.Fatalf("toolbar must render visible before Alpine boots: %s", tag)
+	}
+	for _, want := range []string{`id="hn-hide-btn"`, `@click="hideBar"`, `title="Hide toolbar (Shift+H)"`} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("page template missing %q", want)
+		}
+	}
+}

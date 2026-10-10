@@ -354,3 +354,65 @@ func TestBridgePositionsPinsInLayerCoordinateSpace(t *testing.T) {
 		t.Fatal("bridge must not place pins by adding viewport rects to scroll offsets")
 	}
 }
+
+func TestParentAppHidesToolbarUntilReload(t *testing.T) {
+	b, err := assetsFS.ReadFile("assets/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{
+		"barHidden: false",
+		"barHintShown: false",
+		"hideBar() {",
+		"toggleBar() {",
+		`if (data.hn === "togglebar")`,
+		"if (isToggleBarKey(e))",
+		"!isEditableTarget(e.target)",
+	} {
+		if !strings.Contains(src, want) {
+			t.Fatalf("parent app toolbar hiding missing %q", want)
+		}
+	}
+	if got := strings.Count(src, "localStorage."); got != 8 {
+		t.Fatalf("parent app should only use localStorage for the reviewer name, got %d uses", got)
+	}
+	if strings.Contains(src, "sessionStorage") {
+		t.Fatal("toolbar visibility must not be persisted; it is always shown after reload")
+	}
+}
+
+func TestBridgeForwardsToolbarShortcut(t *testing.T) {
+	b, err := assetsFS.ReadFile("assets/bridge.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{
+		`window.addEventListener("keydown", onKeyDown);`,
+		"if (e.defaultPrevented) return;",
+		`parent.postMessage({ hn: "togglebar" }, "*");`,
+		"!isEditableTarget(e.target)",
+	} {
+		if !strings.Contains(src, want) {
+			t.Fatalf("bridge toolbar shortcut missing %q", want)
+		}
+	}
+	if got := strings.Count(src, "preventDefault"); got != 3 {
+		t.Fatalf("bridge must not swallow the shared page's Shift+H, got %d preventDefault calls", got)
+	}
+}
+
+func TestToastShowsReactiveCopy(t *testing.T) {
+	b, err := assetsFS.ReadFile("assets/toast.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	if !strings.Contains(src, "const live = this.toasts.find((item) => item.id === toast.id);") || !strings.Contains(src, "live.show = true;") {
+		t.Fatal("toast must flip show on the reactive item in this.toasts, or Alpine never renders it")
+	}
+	if strings.Contains(src, "toast.show = true;") {
+		t.Fatal("setting show on the raw toast object bypasses Alpine reactivity")
+	}
+}
