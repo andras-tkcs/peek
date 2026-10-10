@@ -1,0 +1,36 @@
+project:
+  name: peek
+
+docs:
+  must_read:
+    - AGENTS.md
+    - CONTRIBUTING.md
+    - docs/architecture.md
+    - docs/operations.md
+  plan_dir: docs/plans/
+
+git:
+  main_branch: main
+  branch_pattern: "<type>/<slug>"
+  branch_types: [feat, fix, docs, refactor, test, chore, style]
+  merge_style: squash
+
+verify:
+  fast:
+    - mise run fmt-check
+    - mise run vet
+    - mise run test
+  dod:
+    - mise run check
+  dod_conditional:
+    - when: ["internal/server/**", "internal/db/**", "internal/objectstore/**", "internal/uploads/**"]
+      do: mise run check-full
+  dod_manual:
+    - Smoke test with `mise run run` and `mise run smoke` when upload, view or auth behaviour changed.
+
+ci:
+  dispatchable:
+    - workflow: pages.yml
+      use_when: Verifying that the Astro docs site under docs/ still builds.
+
+stacks: []
