@@ -17,6 +17,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/settings", s.authAdmin(s.handleGetSettings))
 	mux.HandleFunc("PUT /api/settings", s.authAdmin(s.handleUpdateSettings))
 	mux.HandleFunc("GET /api/audit", s.authAdmin(s.handleAuditLog))
+	mux.HandleFunc("GET /api/uploads/{slug}/versions", s.authToken(s.handleListVersions))
 	mux.HandleFunc("GET /api/uploads/{slug}/export", s.authToken(s.handleExportUpload))
 	mux.HandleFunc("DELETE /api/uploads-by-owner", s.authToken(s.handleDeleteAllByOwner))
 	mux.HandleFunc("GET /api/auth/providers", s.handleAuthProviders)
