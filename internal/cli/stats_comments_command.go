@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -75,12 +76,12 @@ func cmdComments(args []string) error {
 			continue
 		}
 		if slug != "" || strings.HasPrefix(args[i], "-") {
-			return fmt.Errorf(commentsUsage)
+			return errors.New(commentsUsage)
 		}
 		slug = args[i]
 	}
 	if slug == "" {
-		return fmt.Errorf(commentsUsage)
+		return errors.New(commentsUsage)
 	}
 	cfg, err := LoadConfig()
 	if err != nil {
