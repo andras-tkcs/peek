@@ -312,3 +312,31 @@ func TestAuditLogRetrieval(t *testing.T) {
 		t.Fatalf("expected token.create audit entry, got %+v", entries)
 	}
 }
+
+func TestSetVisibilityAPIValidation(t *testing.T) {
+	app := newTestApp(t)
+	up := uploadRawHTML(t, app, "vis-api", "public")
+
+	cases := []struct {
+		name   string
+		body   string
+		status int
+		want   string
+	}{
+		{"password without value", `{"visibility":"password"}`, http.StatusBadRequest, "password visibility requires a password"},
+		{"password with public", `{"visibility":"public","password":"x"}`, http.StatusBadRequest, "password is only allowed with password visibility"},
+		{"unknown visibility", `{"visibility":"nope"}`, http.StatusBadRequest, "visibility must be public, password, private, or restricted"},
+		{"password too long", `{"visibility":"password","password":"` + strings.Repeat("a", 73) + `"}`, http.StatusBadRequest, "password must be 72 characters or fewer"},
+		{"restricted", `{"visibility":"restricted"}`, http.StatusOK, `"visibility":"restricted"`},
+		{"private", `{"visibility":"private"}`, http.StatusOK, `"visibility":"private"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := app.requestString(t, http.MethodPost, "/api/uploads/"+up.Slug+"/visibility", tc.body, withAuth(app.AdminToken), withContentType("application/json"))
+			assertStatus(t, resp, tc.status)
+			if !strings.Contains(string(resp.Body), tc.want) {
+				t.Fatalf("body = %s, want it to contain %q", resp.Body, tc.want)
+			}
+		})
+	}
+}

@@ -87,7 +87,7 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 		return
 	}
 	if u.Visibility == models.UploadVisibilityPassword {
-		s.setPageAuthCookie(w, slug)
+		s.setPageAuthCookie(w, u)
 	}
 	vid := s.visitorID(w, r)
 	s.recordVisit(r, u, vid, version)
@@ -131,14 +131,14 @@ func (s *Server) handlePagePassword(w http.ResponseWriter, r *http.Request) {
 		s.renderHTML(w, http.StatusUnauthorized, webui.TemplateGate, webui.GateData{Slug: slug, Action: pagePath, Error: true})
 		return
 	}
-	s.setPageAuthCookie(w, slug)
+	s.setPageAuthCookie(w, u)
 	http.Redirect(w, r, pagePath, http.StatusSeeOther)
 }
 
-func (s *Server) setPageAuthCookie(w http.ResponseWriter, slug string) {
+func (s *Server) setPageAuthCookie(w http.ResponseWriter, u *models.Upload) {
 	s.setCookie(w, &http.Cookie{
-		Name:     authCookieName(slug),
-		Value:    makeSessionCookieValue(s.secret, slug, sessionTTL),
+		Name:     authCookieName(u.Slug),
+		Value:    makePageAuthCookieValue(s.secret, u.Slug, u.PasswordHash, sessionTTL),
 		Path:     "/",
 		MaxAge:   int(sessionTTL.Seconds()),
 		SameSite: http.SameSiteLaxMode,
