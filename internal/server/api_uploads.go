@@ -122,6 +122,10 @@ func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, own
 	}
 	u, err := s.store.GetUpload(r.Context(), slug)
 	if err != nil {
+		if cur, aerr := s.store.ResolveSlugAlias(r.Context(), slug); aerr == nil {
+			jsonError(w, http.StatusNotFound, "page was renamed; use slug "+cur)
+			return
+		}
 		jsonError(w, http.StatusNotFound, "not found")
 		return
 	}
