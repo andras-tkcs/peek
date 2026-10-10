@@ -53,7 +53,7 @@ func TestRecordVisitPersistsPrivacySafeAnalytics(t *testing.T) {
 	req.Header.Set("User-Agent", strings.Repeat("u", 350))
 	req.AddCookie(&http.Cookie{Name: nameCookie, Value: "Ada"})
 
-	s.recordVisit(req, upload, "visitor-1")
+	s.recordVisit(req, upload, "visitor-1", 1)
 	flushCtx, flushCancel := context.WithTimeout(context.Background(), time.Second)
 	defer flushCancel()
 	if err := s.FlushVisits(flushCtx); err != nil {

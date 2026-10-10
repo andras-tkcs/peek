@@ -31,7 +31,10 @@ func (s *Server) Handler() http.Handler {
 	// Pages & assets.
 	mux.HandleFunc("GET /p/{slug}", s.handlePage)
 	mux.HandleFunc("POST /p/{slug}", s.rateLimit(s.passwordLimiter, s.handlePagePassword))
+	mux.HandleFunc("GET /p/{slug}/v/{n}", s.handlePageVersion)
+	mux.HandleFunc("POST /p/{slug}/v/{n}", s.rateLimit(s.passwordLimiter, s.handlePagePassword))
 	mux.HandleFunc("GET /raw/{slug}", s.handleRaw)
+	mux.HandleFunc("GET /raw/{slug}/v/{n}", s.handleRawVersion)
 	mux.HandleFunc("GET /bridge.js", s.handleBridge)
 	mux.HandleFunc("GET /app.js", s.handleApp)
 	mux.HandleFunc("GET /dashboard-alpine.js", s.handleDashboardAlpine)
