@@ -131,10 +131,10 @@ func cmdVisibility(args []string) error {
 		}
 	}
 	if slug == "" || visibility == "" {
-		return fmt.Errorf("usage: peek visibility <slug> public|private|password [--password <pw>|--password-stdin]")
+		return fmt.Errorf("usage: peek visibility <slug> public|private|password|restricted [--password <pw>|--password-stdin]")
 	}
 	if !validVisibility(visibility) {
-		return fmt.Errorf("visibility must be public, password, or private")
+		return fmt.Errorf("visibility must be public, password, private, or restricted")
 	}
 	if password != "" && passwordStdin {
 		return fmt.Errorf("use only one of --password or --password-stdin")

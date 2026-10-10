@@ -389,3 +389,15 @@ func dashboardDeleteRequest(t *testing.T, s *Server, accountID int64, slug strin
 	req.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
 	return req
 }
+
+func TestDashboardOffersRestrictedVisibility(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	account, err := s.store.CreateAccount(context.Background(), "user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodGet, "/dashboard", nil, asSession(s, account.ID))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `value="restricted"`) {
+		t.Fatalf("status = %d, body lacks restricted radio", rec.Code)
+	}
+}
