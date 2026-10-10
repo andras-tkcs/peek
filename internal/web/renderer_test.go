@@ -591,3 +591,32 @@ func TestDashboardAccessDialogShowsGrantHintWhenNotRestricted(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardRendersRenameFormAndSafeDeleteConfirm(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplateDashboard, DashboardData{
+		CSRF:    "csrf",
+		User:    "Admin",
+		Uploads: []DashboardUpload{{Slug: "page", Name: "it's <b>", Visibility: "public"}},
+	})
+	if err != nil {
+		t.Fatalf("execute dashboard: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{
+		`action="/dashboard/rename/page"`,
+		`name="name" value="it&#39;s &lt;b&gt;"`,
+		`data-confirm="Delete it&#39;s &lt;b&gt;? This cannot be undone."`,
+		`x-on:submit="confirm($event, $el.dataset.confirm)"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("dashboard missing %q: %s", want, html)
+		}
+	}
+	if strings.Contains(html, `'Delete it`) {
+		t.Fatalf("dashboard embeds the name in an Alpine string: %s", html)
+	}
+}

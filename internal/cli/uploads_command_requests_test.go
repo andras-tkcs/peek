@@ -127,3 +127,42 @@ func TestCommentsVersionFlag(t *testing.T) {
 		t.Fatalf("expected positive integer error, got %v", err)
 	}
 }
+
+func TestCmdRenameSendsRenameRequest(t *testing.T) {
+	seen := make(chan string, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/uploads/page/name" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		seen <- body.Name
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"slug": "new-name", "url": "http://x/p/new-name", "name": "New Name"})
+	}))
+	defer ts.Close()
+	configureTestClient(t, ts.URL)
+
+	out, err := captureStdout(t, func() error {
+		return cmdRename([]string{"page", "New", "Name"})
+	})
+	if err != nil {
+		t.Fatalf("cmdRename: %v", err)
+	}
+	if got := <-seen; got != "New Name" {
+		t.Fatalf("name = %q", got)
+	}
+	for _, want := range []string{"slug: new-name", "url: http://x/p/new-name"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("stdout missing %q: %s", want, out)
+		}
+	}
+	if err := cmdRename([]string{"page"}); err == nil || !strings.Contains(err.Error(), "usage: peek rename") {
+		t.Fatalf("err = %v", err)
+	}
+}
