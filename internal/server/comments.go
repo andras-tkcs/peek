@@ -57,7 +57,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusUnauthorized, uploadAccessRequiredMessage(u))
 		return
 	}
-	list, err := s.store.ListComments(r.Context(), u.ID)
+	list, err := s.store.ListComments(r.Context(), u.ID, u.LatestVersion)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
@@ -128,12 +128,12 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	h := sha256.Sum256([]byte(s.secret + "|" + vid))
 	vidHash := hex.EncodeToString(h[:])[:16]
 
-	if err := s.store.AddComment(r.Context(), u.ID, in.Selector, in.Text, in.AnchorKind, in.Name, vidHash, in.Body); err != nil {
+	if err := s.store.AddComment(r.Context(), u.ID, u.LatestVersion, in.Selector, in.Text, in.AnchorKind, in.Name, vidHash, in.Body); err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
 
-	list, err := s.store.ListComments(r.Context(), u.ID)
+	list, err := s.store.ListComments(r.Context(), u.ID, u.LatestVersion)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return

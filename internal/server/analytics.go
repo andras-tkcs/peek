@@ -14,6 +14,7 @@ import (
 
 type visitEvent struct {
 	UploadID int64
+	Version  int
 	VID      string
 	Name     string
 	IPHash   string
@@ -59,7 +60,7 @@ func (s *Server) recordVisit(r *http.Request, u *models.Upload, vid string) {
 	if len(ua) > 300 {
 		ua = ua[:300]
 	}
-	ev := visitEvent{UploadID: u.ID, VID: vid, Name: name, IPHash: ipHash, UA: ua}
+	ev := visitEvent{UploadID: u.ID, Version: u.LatestVersion, VID: vid, Name: name, IPHash: ipHash, UA: ua}
 	select {
 	case s.visitQueue <- ev:
 	default:
@@ -77,7 +78,7 @@ func (s *Server) startVisitWorker(ctx context.Context) {
 				close(ev.done)
 				continue
 			}
-			if err := s.store.RecordVisit(ctx, ev.UploadID, ev.VID, ev.Name, ev.IPHash, ev.UA); err != nil {
+			if err := s.store.RecordVisit(ctx, ev.UploadID, ev.Version, ev.VID, ev.Name, ev.IPHash, ev.UA); err != nil {
 				slog.Warn("record visit failed", "upload_id", ev.UploadID, "err", err)
 				continue
 			}

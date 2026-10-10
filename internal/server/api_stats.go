@@ -76,7 +76,7 @@ func (s *Server) handleExportUpload(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
-	comments, err := s.store.ListComments(r.Context(), u.ID)
+	comments, err := s.store.ListComments(r.Context(), u.ID, 0)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
