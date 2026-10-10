@@ -27,6 +27,17 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);`
 	{5, "comment_anchor_kind", `-- ALTER TABLE handled idempotently below`},
 	{6, "upload_visibility", `-- ALTER TABLE handled idempotently below`},
 	{7, "upload_versions", ""}, // handled by migrateUploadVersions
+	{8, "upload_grants", `
+CREATE TABLE IF NOT EXISTS upload_grants (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL CHECK (kind IN ('user','group')),
+	email TEXT NOT NULL,
+	created_by_account_id INTEGER REFERENCES accounts(id),
+	created_at INTEGER NOT NULL,
+	UNIQUE(upload_id, kind, email)
+);
+CREATE INDEX IF NOT EXISTS idx_upload_grants_upload ON upload_grants(upload_id);`},
 }
 
 func (s *Store) runMigrations() error {

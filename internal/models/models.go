@@ -6,7 +6,23 @@ const (
 	UploadVisibilityPublic   = "public"
 	UploadVisibilityPassword = "password"
 	UploadVisibilityPrivate  = "private"
+
+	UploadVisibilityRestricted = "restricted"
 )
+
+const (
+	UploadGrantUser  = "user"
+	UploadGrantGroup = "group"
+)
+
+type UploadGrant struct {
+	ID                 int64
+	UploadID           int64
+	Kind               string // UploadGrantUser or UploadGrantGroup
+	Email              string // lowercased
+	CreatedByAccountID int64
+	CreatedAt          time.Time
+}
 
 type Token struct {
 	ID        int64
