@@ -62,7 +62,7 @@ func cmdUpload(args []string) error {
 		}
 	}
 	if file == "" {
-		return fmt.Errorf("usage: peek upload <file.html> [--visibility public|password|private] [--password <pw>] [--name <name>] [--slug <slug>]")
+		return fmt.Errorf("usage: peek upload <file.html> [--visibility public|password|private|restricted] [--password <pw>] [--name <name>] [--slug <slug>]")
 	}
 	if slug != "" {
 		if visibility != "" || password != "" || passwordStdin {
@@ -75,7 +75,7 @@ func cmdUpload(args []string) error {
 		visibility = "password"
 	}
 	if slug == "" && !validVisibility(visibility) {
-		return fmt.Errorf("visibility must be public, password, or private")
+		return fmt.Errorf("visibility must be public, password, private, or restricted")
 	}
 	if password != "" && passwordStdin {
 		return fmt.Errorf("use only one of --password or --password-stdin")
@@ -182,7 +182,7 @@ func writeMultipartUpload(mw *multipart.Writer, file io.Reader, filename, visibi
 }
 
 func validVisibility(visibility string) bool {
-	return visibility == "public" || visibility == "password" || visibility == "private"
+	return visibility == "public" || visibility == "password" || visibility == "private" || visibility == "restricted"
 }
 
 func fileNameWithoutExt(path string) string {

@@ -139,6 +139,21 @@ func (s *Server) handleExportUpload(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	export["visits"] = visits
+	grants, err := s.store.ListUploadGrants(r.Context(), u.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	type exportGrant struct {
+		Kind      string `json:"kind"`
+		Email     string `json:"email"`
+		CreatedAt int64  `json:"created_at"`
+	}
+	gr := make([]exportGrant, 0, len(grants))
+	for _, g := range grants {
+		gr = append(gr, exportGrant{Kind: g.Kind, Email: g.Email, CreatedAt: g.CreatedAt.Unix()})
+	}
+	export["grants"] = gr
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+slug+`-export.json"`)
