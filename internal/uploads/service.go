@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/puemos/peek/internal/models"
 	"github.com/puemos/peek/internal/objectstore"
 	"github.com/puemos/peek/internal/uploadquota"
@@ -121,29 +119,9 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 	if !looksLikeHTML(in.Data) {
 		return nil, newError(KindInvalidHTML, "file does not look like HTML")
 	}
-	switch in.Visibility {
-	case models.UploadVisibilityPublic, models.UploadVisibilityPrivate, models.UploadVisibilityRestricted:
-		if in.Password != "" {
-			return nil, newError(KindPasswordNotAllowed, "password is only allowed with password visibility")
-		}
-	case models.UploadVisibilityPassword:
-		if in.Password == "" {
-			return nil, newError(KindPasswordRequired, "password visibility requires a password")
-		}
-	default:
-		return nil, newError(KindInvalidVisibility, "visibility must be public, password, private, or restricted")
-	}
-
-	pwHash := ""
-	if in.Visibility == models.UploadVisibilityPassword {
-		if !ValidatePasswordLength(in.Password) {
-			return nil, newError(KindPasswordTooLong, "password must be 72 characters or fewer")
-		}
-		h, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
-		if err != nil {
-			return nil, newError(KindPasswordHash, "hash failed")
-		}
-		pwHash = string(h)
+	change, err := PrepareVisibility(in.Visibility, in.Password)
+	if err != nil {
+		return nil, err
 	}
 
 	slug, err := generateSlugFromName(ctx, in.Name, svc.Repository)
@@ -153,7 +131,7 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 	if err := svc.Storage.Save(ctx, slug, in.Data); err != nil {
 		return nil, newError(KindStorageWrite, "storage failed")
 	}
-	if err := svc.Repository.CreateUploadChecked(ctx, slug, in.OwnerAccountID, in.OwnerTokenID, in.Name, int64(len(in.Data)), in.Visibility, pwHash, in.Limits); err != nil {
+	if err := svc.Repository.CreateUploadChecked(ctx, slug, in.OwnerAccountID, in.OwnerTokenID, in.Name, int64(len(in.Data)), change.Visibility, change.PasswordHash, in.Limits); err != nil {
 		uploadErr := storeError(err)
 		if cleanupErr := svc.Storage.Delete(ctx, slug); cleanupErr != nil {
 			return nil, errors.Join(uploadErr, &CleanupError{Slug: slug, Err: cleanupErr})
@@ -166,7 +144,7 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 		URL:        svc.BaseURL + "/p/" + slug,
 		Name:       in.Name,
 		Size:       len(in.Data),
-		Visibility: in.Visibility,
+		Visibility: change.Visibility,
 		Version:    1,
 	}, nil
 }
