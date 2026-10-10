@@ -84,6 +84,7 @@ peek login --token <value>
 peek upload <file.html> [--visibility public|password|private|restricted] [--password <pw> | --password-stdin] [--name <filename>]
 peek upload <file.html> --slug <slug>
 peek visibility <slug> public|private|password|restricted [--password <pw> | --password-stdin]
+peek rename <slug> <new name>
 peek grant <slug> <email> [--group]
 peek revoke <slug> <email> [--group]
 peek grants <slug>
@@ -104,6 +105,7 @@ peek comments <slug> [--version <n>]
 | `GET /api/uploads/<slug>/grants` | List grants (owner or admin). |
 | `POST /api/uploads/<slug>/grants` | Add a grant. JSON body `{"kind":"user\|group","email":"..."}`. |
 | `DELETE /api/uploads/<slug>/grants` | Remove a grant. Same JSON body. |
+| `POST /api/uploads/<slug>/name` | Rename a page. JSON body `{"name":"..."}`; returns the new `slug`, `url` and `name`. The link follows the name; old links redirect. |
 | `GET /api/uploads/<slug>/comments?v=<n>` | Comments for version `n`; defaults to the latest. |
 
 ## Account Comment API

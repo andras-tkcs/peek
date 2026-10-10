@@ -48,11 +48,11 @@ For company usage, prefer OAuth/SSO with invite-only signup. Admins can configur
 
 ## Page Access
 
-Each page has one of four visibilities: `public` (anyone with the link), `password` (link plus upload password), `private` (any signed-in Peek account), and `restricted` (only the owner, admins, and signed-in viewers matching a grant). Grants are user emails or Google group emails, managed with `peek grant`, `peek revoke` and `peek grants`, or the grants API. Grants are stored for any visibility but only enforced while the page is `restricted`. They are read from the database on every view of `/p/...`, the comment API and the views API.
+Each page has one of four visibilities: `public` (anyone with the link), `password` (link plus upload password), `private` (any signed-in Peek account), and `restricted` (only the owner, admins, and signed-in viewers matching a grant). Grants are user emails or Google group emails, managed with `peek grant`, `peek revoke` and `peek grants`, or the grants API, or the dashboard's **Access** dialog. Grants are stored for any visibility but only enforced while the page is `restricted`. They are read from the database on every view of `/p/...`, the comment API and the views API.
 
 A signed-in viewer without a matching grant gets a 403 "Access denied" page naming the account they are signed in as, and the denial is written to the audit log as `page.access.denied`. Viewers who are not signed in are sent to the login page.
 
-The uploaded HTML is served to the sandboxed iframe through a view token that is minted only after the access check and is valid for 1 hour. Revoking a grant takes effect on the next page load, but an iframe that is already open can keep reading its page for up to 1 hour afterwards.
+The uploaded HTML is served to the sandboxed iframe through a view token that is minted only after the access check and is valid for 1 hour. Revoking a grant takes effect on the next page load, but an iframe that is already open can keep reading its page for up to 1 hour afterwards. Setting a new password revokes earlier password unlocks on the next request in the same way. Renaming a page redirects its old links (302) to the new one; password-page viewers unlock once more after a rename. Pages already open under the old link must be reloaded before comments work again.
 
 ## Google Group Grants
 
@@ -91,6 +91,8 @@ Peek logs structured JSON to stderr. Set `PEEK_LOG_LEVEL=debug`, `info`, or `war
 Before upgrading, take a SQLite backup and confirm you know where uploaded object bytes live. Run the new binary against a staging copy of the data directory when changing storage, auth, retention, or database-related code.
 
 This release adds migrations 7 (`upload_versions`, which also adds a `version` column to comments and visits and backfills one version per existing page) and 8 (`upload_grants`). Existing objects are not moved and existing `private` pages keep their meaning.
+
+Migration 9 (`upload_slug_aliases`) keeps the old links of renamed pages reserved. After upgrading, existing password-page unlock cookies stop working once; viewers re-enter the password. Do not roll back to an older binary once a page has been renamed: older binaries do not reserve old links, so a new upload could overwrite a renamed page's first version. Restore the pre-upgrade backup and object storage instead.
 
 Rollback is simplest when the database has not been migrated by a newer binary. If a release includes migrations, treat rollback as restoring the pre-upgrade backup plus object storage state.
 

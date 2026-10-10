@@ -115,6 +115,8 @@ Uploaded HTML itself remains sandboxed in all modes.
 
 A restricted page is opened up with grants. A user grant names one email address and matches the signed-in account with that email. A group grant names a Google Workspace group address and matches accounts that are direct or nested members of that group.
 
+Owners and admins can change a page's name, mode, password and grants later from the dashboard's **Access** dialog or with `peek rename`, `peek visibility` and `peek grant`. A new password revokes every earlier unlock of that page.
+
 ```sh
 peek upload report.html --visibility restricted
 peek grant <slug> alice@example.com

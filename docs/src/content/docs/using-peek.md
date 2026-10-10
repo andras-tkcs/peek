@@ -39,9 +39,12 @@ peek visibility <slug> public
 peek visibility <slug> password --password newpass
 peek visibility <slug> private
 peek visibility <slug> restricted
+peek rename <slug> "New name"
 ```
 
 Restricted pages are opened up with grants: `peek grant <slug> alice@example.com` for one person, `peek grant <slug> team@example.com --group` for a Google group, `peek grants <slug>` to list, and `peek revoke <slug> <email>` to remove. Someone signed in without a grant sees a 403 page.
+
+In the dashboard, the **Access** button on an upload's row renames the page, changes its visibility, sets a new password and, for restricted pages, adds or removes people and Google groups. Renaming changes the link to follow the new name; old links keep redirecting and are never given to another page. Setting a new password signs out everyone who unlocked the page with the previous one.
 
 ## Update A Page
 
@@ -125,6 +128,7 @@ peek stats <slug>
 peek comments <slug> [--version <n>]
 peek export <slug>
 peek visibility <slug> public|password|private|restricted
+peek rename <slug> <new name>
 peek delete <slug>
 peek delete-all
 ```
