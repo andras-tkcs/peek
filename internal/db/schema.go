@@ -135,4 +135,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS upload_grants (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL CHECK (kind IN ('user','group')),
+	email TEXT NOT NULL,
+	created_by_account_id INTEGER REFERENCES accounts(id),
+	created_at INTEGER NOT NULL,
+	UNIQUE(upload_id, kind, email)
+);
+CREATE INDEX IF NOT EXISTS idx_upload_grants_upload ON upload_grants(upload_id);
 `
