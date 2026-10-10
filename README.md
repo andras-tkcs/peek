@@ -37,6 +37,10 @@ Common follow-up commands:
 peek list
 peek stats PhiUs-lMbZE_Sw
 peek comments PhiUs-lMbZE_Sw
+peek comments PhiUs-lMbZE_Sw --version 2
+peek upload mypage.html --slug PhiUs-lMbZE_Sw   # new version at /p/PhiUs-lMbZE_Sw/v/2
+peek versions PhiUs-lMbZE_Sw
+peek grant PhiUs-lMbZE_Sw alice@example.com    # for --visibility restricted pages
 peek visibility PhiUs-lMbZE_Sw password --password newpass
 peek visibility PhiUs-lMbZE_Sw public
 peek delete PhiUs-lMbZE_Sw
@@ -78,7 +82,7 @@ docker compose --profile s3 up -d # with MinIO storage
 - **In-context review**: pinned, text-anchored, and page-level comments with numbered on-page markers. Click a comment to jump back to its anchor.
 - **Safe HTML previews**: uploaded pages render in a sandboxed iframe (`sandbox="allow-scripts"`, no `allow-same-origin`) so they cannot read Peek cookies, call the server as the user, or touch the parent page.
 - **Terminal and browser workflows**: upload, list, delete, change visibility, inspect comments, and view stats from the CLI or web dashboard.
-- **Access controls for internal teams**: public links, password-gated pages, private account-only pages, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, allowed login email domain, token expiry, and admin-managed users.
+- **Access controls for internal teams**: public links, password-gated pages, private account-only pages, restricted pages with per-user and Google group grants, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, allowed login email domain, token expiry, and admin-managed users.
 - **Operational basics included**: health/readiness checks, structured JSON logging, Prometheus metrics, audit log, quota and retention controls, consistent SQLite backup, file or S3-compatible storage, and S3 endpoint SSRF protection.
 - **Small deployment footprint**: one static Go binary, pure-Go SQLite, no runtime dependencies.
 
@@ -92,7 +96,7 @@ Open `/p/<slug>` and use the floating island at the bottom:
 2. Click Comment, then click any element to pin a comment to it.
 3. Or leave a page-level note not tied to anything.
 
-Comments live in a side panel. Your name is asked once and remembered. Public pages are open to anyone with the link, password pages gate commenting behind the same password session, and private pages require an active Peek account.
+Comments live in a side panel. Your name is asked once and remembered. Public pages are open to anyone with the link, password pages gate commenting behind the same password session, private pages require an active Peek account, and restricted pages require an account matching a grant. Comments belong to the version they were written on.
 
 ## CLI reference
 
@@ -104,6 +108,8 @@ peek config set --host <url>           set the configured server
 peek config show                       show current host + masked token
 peek upload <file.html> --visibility public [--name <filename>]
 peek upload <file.html> --visibility private [--name <filename>]
+peek upload <file.html> --visibility restricted [--name <filename>]
+peek upload <file.html> --slug <slug>   upload a new version of an existing page
 peek upload <file.html> --visibility password --password <pw> [--name <filename>]
 peek upload <file.html> --visibility password --password-stdin [--name <filename>]
 peek list
@@ -113,8 +119,13 @@ peek visibility <slug> public          make an upload link-accessible
 peek visibility <slug> private         require a Peek account
 peek visibility <slug> password --password <pw>
 peek visibility <slug> password --password-stdin
+peek visibility <slug> restricted      only the owner, admins and grantees
+peek grant <slug> <email> [--group]    give a user (or Google group) access
+peek revoke <slug> <email> [--group]   remove a grant
+peek grants <slug>                     list grants on a page
+peek versions <slug>                   list versions of a page
 peek stats <slug>
-peek comments <slug>                   list comments on one of your uploads
+peek comments <slug> [--version <n>]   list comments (latest version by default)
 peek export <slug>                     export all data for an upload
 peek token create --name <name>        create a user token (admin only)
 peek token list                        list tokens (admin only)
@@ -122,7 +133,7 @@ peek token revoke <id>                 revoke a token by id (admin only)
 peek version                           show version
 ```
 
-Upload visibility is set at creation time with `--visibility public|password|private`. Password uploads require `--password` or `--password-stdin`; `peek upload <file.html> --password <pw>` is also accepted as shorthand for password visibility. Use `peek visibility <slug> public` to remove the password gate and make the link public again, or `peek visibility <slug> private` to require a Peek account.
+Upload visibility is set at creation time with `--visibility public|password|private|restricted`. Password uploads require `--password` or `--password-stdin`; `peek upload <file.html> --password <pw>` is also accepted as shorthand for password visibility. Use `peek visibility <slug> public` to remove the password gate and make the link public again, or `peek visibility <slug> private` to require a Peek account. Restricted pages admit only the owner, admins and signed-in viewers matching a grant (`peek grant`); group grants need the `PEEK_GOOGLE_*` settings below. Re-uploading with `--slug` adds a version: `/p/<slug>` serves the latest and `/p/<slug>/v/<n>` any retained version.
 
 Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env override for CI, `peek login --token-stdin`, then `peek login --token-file <path>`. The `--token <value>` flag still works where token login is allowed but warns because it leaks into shell history and process lists.
 
@@ -147,6 +158,9 @@ Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env o
 | `--s3-access-key` | `PEEK_S3_ACCESS_KEY` | _(empty)_ | S3 access key |
 | `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | _(empty)_ | S3 secret key |
 | `--s3-allow-private-endpoint` | `PEEK_S3_ALLOW_PRIVATE_ENDPOINT` | `false` | Allow private/link-local S3 endpoints for dev |
+| `--google-sa-key-file` | `PEEK_GOOGLE_SA_KEY_FILE` | *(empty)* | Google service account JSON key for group grants (needs `--google-admin-email`) |
+| `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | *(empty)* | Workspace admin to impersonate for group lookups |
+| `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | Group membership cache lifetime |
 | `--oidc-allow-private-issuer` | `PEEK_OIDC_ALLOW_PRIVATE_ISSUER` | `false` | Allow HTTP/private OIDC issuers for local SSO testing |
 
 Admins can update runtime settings from the dashboard: max upload size, total storage limit, per-token quotas, retention days, and S3 credentials. Changing the storage backend requires a restart.
