@@ -695,7 +695,7 @@ Each risk below names what the worker would see if the plan is wrong. In every c
 - **Template parsing.** If `NewRenderer` fails to parse `dashboard.gohtml` after D8 or D13, stop and quote the error.
 - **Migration numbering.** If `migrations.go` already has an entry with id 9 when p4 starts, `main` moved: stop.
 - **Unrelated gate failures.** `check-full` fails in govulncheck or staticcheck on files the phase did not change.
-- **`/implement`'s own `verify.fast`.** The profile's `verify.fast` uses `mise run …`. If the orchestrator's container also lacks `mise`, those post-merge checks fail even though the phases are fine. Then run the D0 equivalents instead and report it. A SessionStart hook that installs `mise` would fix this repo-wide, but that is outside this plan.
+- **`/implement`'s own `verify.fast`.** The profile's `verify.fast` uses `mise run …`. This branch carries `.claude/hooks/session-start.sh`, which installs `mise` in cloud sessions (pinned GitHub release; the image's Go is registered with it), so `mise` should be present. If a container still lacks it, run the D0 equivalents and report it.
 
 ## Implementation manifest
 
