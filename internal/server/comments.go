@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,24 @@ type commentOut struct {
 	Author     string `json:"author"`
 	Body       string `json:"body"`
 	CreatedAt  int64  `json:"created_at"`
+	Version    int    `json:"version"`
+}
+
+// commentVersion resolves the ?v= query parameter to a retained version of u.
+// An empty value means the latest version.
+func (s *Server) commentVersion(r *http.Request, u *models.Upload) (int, bool) {
+	raw := r.URL.Query().Get("v")
+	if raw == "" {
+		return u.LatestVersion, true
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	if _, err := s.store.GetUploadVersion(r.Context(), u.ID, n); err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +76,12 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusUnauthorized, uploadAccessRequiredMessage(u))
 		return
 	}
-	list, err := s.store.ListComments(r.Context(), u.ID, u.LatestVersion)
+	version, ok := s.commentVersion(r, u)
+	if !ok {
+		jsonError(w, http.StatusNotFound, "version not found")
+		return
+	}
+	list, err := s.store.ListComments(r.Context(), u.ID, version)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
@@ -67,7 +91,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 		out = append(out, commentOut{
 			ID: c.ID, Selector: c.ElementSelector, Text: c.ElementText,
 			AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
-			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(),
+			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(), Version: c.Version,
 		})
 	}
 	jsonOK(w, out)
@@ -86,6 +110,11 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.viewerCanAccessUpload(r, u) {
 		jsonError(w, http.StatusUnauthorized, uploadAccessRequiredMessage(u))
+		return
+	}
+	version, ok := s.commentVersion(r, u)
+	if !ok {
+		jsonError(w, http.StatusNotFound, "version not found")
 		return
 	}
 
@@ -128,12 +157,12 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	h := sha256.Sum256([]byte(s.secret + "|" + vid))
 	vidHash := hex.EncodeToString(h[:])[:16]
 
-	if err := s.store.AddComment(r.Context(), u.ID, u.LatestVersion, in.Selector, in.Text, in.AnchorKind, in.Name, vidHash, in.Body); err != nil {
+	if err := s.store.AddComment(r.Context(), u.ID, version, in.Selector, in.Text, in.AnchorKind, in.Name, vidHash, in.Body); err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
 
-	list, err := s.store.ListComments(r.Context(), u.ID, u.LatestVersion)
+	list, err := s.store.ListComments(r.Context(), u.ID, version)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
@@ -143,7 +172,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		out = append(out, commentOut{
 			ID: c.ID, Selector: c.ElementSelector, Text: c.ElementText,
 			AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
-			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(),
+			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(), Version: c.Version,
 		})
 	}
 	jsonOK(w, out)
