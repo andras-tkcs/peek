@@ -28,6 +28,14 @@ func Run(args []string) int {
 		err = cmdDelete(rest)
 	case "visibility":
 		err = cmdVisibility(rest)
+	case "grant":
+		err = cmdGrant(rest)
+	case "revoke":
+		err = cmdRevoke(rest)
+	case "grants":
+		err = cmdGrants(rest)
+	case "versions":
+		err = cmdVersions(rest)
 	case "stats":
 		err = cmdStats(rest)
 	case "comments":
@@ -67,14 +75,21 @@ Usage:
   peek upload <file.html> --password <pw> [--name <filename>]
   peek upload <file.html> --password-stdin
   peek upload <file.html> --visibility public|private
+  peek upload <file.html> --visibility restricted
+  peek upload <file.html> --slug <slug>        upload a new version of an existing page
   peek list
   peek delete <slug>
   peek visibility <slug> public
   peek visibility <slug> private
+  peek visibility <slug> restricted
   peek visibility <slug> password --password <pw>
   peek visibility <slug> password --password-stdin
+  peek grant <slug> <email> [--group]  give a user (or Google group) access to a restricted page
+  peek revoke <slug> <email> [--group] remove a grant
+  peek grants <slug>                   list grants on a page
   peek stats <slug>
-  peek comments <slug>                 list comments on one of your uploads
+  peek versions <slug>                 list versions of one of your pages
+  peek comments <slug> [--version <n>]  list comments (latest version by default)
   peek export <slug>                   export all data for an upload
   peek delete-all                      delete all your uploads
   peek token create --name <name>      create a new user token (admin only)

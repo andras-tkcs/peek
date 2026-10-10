@@ -65,6 +65,10 @@ func verifyToken(secret, tok, slug string) bool {
 	return hmac.Equal([]byte(sig), []byte(want))
 }
 
+// viewSubject is the token subject for one version of a page. ":" cannot occur
+// in a slug and verifyViewToken splits on ".", so the subject is unambiguous.
+func viewSubject(slug string, version int) string { return slug + ":" + strconv.Itoa(version) }
+
 // makeViewToken returns a short-lived token authorizing /raw access for slug.
 // The vid (visitor id) is bound into the token so a raw URL shared with another
 // viewer cannot be used — the visitor cookie must match.

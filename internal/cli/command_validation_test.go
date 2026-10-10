@@ -74,3 +74,16 @@ func TestConfigSetRejectsConflictingTokenInputs(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestUploadAcceptsRestrictedVisibility(t *testing.T) {
+	if !validVisibility("restricted") {
+		t.Fatal("restricted should be a valid upload visibility")
+	}
+}
+
+func TestVisibilityAcceptsRestricted(t *testing.T) {
+	err := cmdVisibility([]string{"page", "restricted", "extra"})
+	if err == nil || strings.Contains(err.Error(), "visibility must be") {
+		t.Fatalf("restricted should pass visibility validation, got %v", err)
+	}
+}

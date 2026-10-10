@@ -180,3 +180,58 @@ func TestS3SignRequestHashesPayloadBytes(t *testing.T) {
 		t.Fatalf("request body = %q, want %q", gotBody, payload)
 	}
 }
+
+func TestObjectNameAcceptsVersionKeys(t *testing.T) {
+	got, err := objectName("versions/my-page/0123456789abcdef")
+	if err != nil {
+		t.Fatalf("objectName: %v", err)
+	}
+	if want := "versions/my-page/0123456789abcdef.html"; got != want {
+		t.Fatalf("objectName = %q, want %q", got, want)
+	}
+	for _, key := range []string{
+		"versions/my-page/0123456789ABCDEF",
+		"versions/../x/0123456789abcdef",
+		"versions/my-page/0123456789abcde",
+		"versions/my-page/0123456789abcdef/x",
+		"other/my-page/0123456789abcdef",
+	} {
+		if _, err := objectName(key); !errors.Is(err, ErrInvalidSlug) {
+			t.Errorf("objectName(%q) err = %v, want ErrInvalidSlug", key, err)
+		}
+	}
+}
+
+func TestFileStorageSavesVersionKeyInSubdirectory(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	fs := &FileStorage{Dir: dir}
+	key := "versions/my-page/0123456789abcdef"
+	data := []byte("<!doctype html><html></html>")
+
+	if err := fs.Save(ctx, key, data); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	path := filepath.Join(dir, "versions", "my-page", "0123456789abcdef.html")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected object at %s: %v", path, err)
+	}
+	rc, err := fs.Open(ctx, key)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	got, err := io.ReadAll(rc)
+	rc.Close()
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != string(data) {
+		t.Fatalf("data = %q, want %q", got, data)
+	}
+	if err := fs.Delete(ctx, key); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected object to be deleted, stat err=%v", err)
+	}
+}

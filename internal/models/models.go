@@ -6,7 +6,23 @@ const (
 	UploadVisibilityPublic   = "public"
 	UploadVisibilityPassword = "password"
 	UploadVisibilityPrivate  = "private"
+
+	UploadVisibilityRestricted = "restricted"
 )
+
+const (
+	UploadGrantUser  = "user"
+	UploadGrantGroup = "group"
+)
+
+type UploadGrant struct {
+	ID                 int64
+	UploadID           int64
+	Kind               string // UploadGrantUser or UploadGrantGroup
+	Email              string // lowercased
+	CreatedByAccountID int64
+	CreatedAt          time.Time
+}
 
 type Token struct {
 	ID        int64
@@ -74,6 +90,17 @@ type Upload struct {
 	Visibility     string
 	PasswordHash   string // "" => no password
 	CreatedAt      time.Time
+	LatestVersion  int
+}
+
+type UploadVersion struct {
+	ID                 int64
+	UploadID           int64
+	Version            int
+	ObjectKey          string
+	Size               int64
+	CreatedByAccountID int64 // 0 when unknown (backfilled rows)
+	CreatedAt          time.Time
 }
 
 type Comment struct {
@@ -85,6 +112,7 @@ type Comment struct {
 	AuthorName      string
 	AuthorCookie    string
 	Body            string
+	Version         int
 	CreatedAt       time.Time
 }
 
@@ -95,6 +123,7 @@ type Visit struct {
 	VisitorName   string
 	IP            string
 	UserAgent     string
+	Version       int
 	VisitedAt     time.Time
 }
 

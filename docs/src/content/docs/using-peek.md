@@ -30,6 +30,7 @@ Visibility is a review policy, not a storage location.
 | `public` | Anyone with the link | Fast internal sharing where the URL itself is enough control. |
 | `password` | Anyone with the link and upload password | Sharing outside the signed-in group without creating accounts. |
 | `private` | Signed-in Peek users | Internal reports that should stay behind the company login surface. |
+| `restricted` | Owner, admins, and signed-in users matching a grant | Reports for a named person or Google group. |
 
 Change visibility after upload when the audience changes:
 
@@ -37,7 +38,21 @@ Change visibility after upload when the audience changes:
 peek visibility <slug> public
 peek visibility <slug> password --password newpass
 peek visibility <slug> private
+peek visibility <slug> restricted
 ```
+
+Restricted pages are opened up with grants: `peek grant <slug> alice@example.com` for one person, `peek grant <slug> team@example.com --group` for a Google group, `peek grants <slug>` to list, and `peek revoke <slug> <email>` to remove. Someone signed in without a grant sees a 403 page.
+
+## Update A Page
+
+Upload a new version of an existing page by slug:
+
+```sh
+peek upload demo.html --slug <slug>
+peek versions <slug>
+```
+
+`/p/<slug>` always serves the latest version and `/p/<slug>/v/<n>` serves a specific one, with a banner linking to the latest. Visibility and name stay as they were. Comments belong to the version they were written on.
 
 ## Review In Context
 
@@ -72,6 +87,7 @@ Owners can read comments from the CLI:
 
 ```sh
 peek comments <slug>
+peek comments <slug> --version 2
 peek export <slug>
 ```
 
@@ -99,12 +115,16 @@ peek login --host https://peek.example.com
 Common user commands:
 
 ```text
-peek upload <file.html> --visibility public|password|private
+peek upload <file.html> --visibility public|password|private|restricted
+peek upload <file.html> --slug <slug>
+peek versions <slug>
+peek grant|revoke <slug> <email> [--group]
+peek grants <slug>
 peek list
 peek stats <slug>
-peek comments <slug>
+peek comments <slug> [--version <n>]
 peek export <slug>
-peek visibility <slug> public|password|private
+peek visibility <slug> public|password|private|restricted
 peek delete <slug>
 peek delete-all
 ```

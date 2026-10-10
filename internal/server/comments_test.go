@@ -157,7 +157,11 @@ func accountToken(t *testing.T, s *Server, account *models.Account, value string
 }
 
 func postAccountComment(s *Server, slug, token, body string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, "/api/uploads/"+slug+"/account-comments", strings.NewReader(body))
+	return postAccountCommentAt(s, "/api/uploads/"+slug+"/account-comments", slug, token, body)
+}
+
+func postAccountCommentAt(s *Server, target, slug, token, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
 	req.SetPathValue("slug", slug)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -233,13 +237,41 @@ func TestAccountCommentUsesAccountName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list, err := s.store.ListComments(context.Background(), u.ID)
+	list, err := s.store.ListComments(context.Background(), u.ID, 0)
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list: %v %+v", err, list)
 	}
 	want := s.commentVisitorHash("account:" + strconv.FormatInt(account.ID, 10))
 	if list[0].AuthorCookie != want || len(want) != 16 {
 		t.Fatalf("author cookie = %q, want %q", list[0].AuthorCookie, want)
+	}
+}
+
+func TestAccountCommentLandsOnRequestedOrLatestVersion(t *testing.T) {
+	s, _, token := accountCommentFixture(t)
+	ctx := context.Background()
+	u, err := s.store.GetUpload(ctx, "page")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.store.CreateVersionChecked(ctx, u.ID, "page-v2.html", 10, u.OwnerAccountID, uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	base := "/api/uploads/page/account-comments"
+	if rec := postAccountCommentAt(s, base, "page", token, `{"body":"latest"}`); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if rec := postAccountCommentAt(s, base+"?v=1", "page", token, `{"body":"first"}`); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if rec := postAccountCommentAt(s, base+"?v=9", "page", token, `{"body":"nope"}`); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "version not found") {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	for version, body := range map[int]string{2: "latest", 1: "first"} {
+		list, err := s.store.ListComments(ctx, u.ID, version)
+		if err != nil || len(list) != 1 || list[0].Body != body || list[0].Version != version {
+			t.Fatalf("version %d comments: %v %+v", version, err, list)
+		}
 	}
 }
 

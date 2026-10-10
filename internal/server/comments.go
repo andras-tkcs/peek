@@ -28,6 +28,24 @@ type commentOut struct {
 	Author     string `json:"author"`
 	Body       string `json:"body"`
 	CreatedAt  int64  `json:"created_at"`
+	Version    int    `json:"version"`
+}
+
+// commentVersion resolves the ?v= query parameter to a retained version of u.
+// An empty value means the latest version.
+func (s *Server) commentVersion(r *http.Request, u *models.Upload) (int, bool) {
+	raw := r.URL.Query().Get("v")
+	if raw == "" {
+		return u.LatestVersion, true
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	if _, err := s.store.GetUploadVersion(r.Context(), u.ID, n); err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
@@ -55,10 +73,15 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if !s.viewerCanAccessUpload(r, u) {
-		jsonError(w, http.StatusUnauthorized, uploadAccessRequiredMessage(u))
+		jsonError(w, s.uploadAccessStatus(r, u), uploadAccessRequiredMessage(u))
 		return
 	}
-	list, err := s.store.ListComments(r.Context(), u.ID)
+	version, ok := s.commentVersion(r, u)
+	if !ok {
+		jsonError(w, http.StatusNotFound, "version not found")
+		return
+	}
+	list, err := s.store.ListComments(r.Context(), u.ID, version)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
@@ -68,7 +91,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 		out = append(out, commentOut{
 			ID: c.ID, Selector: c.ElementSelector, Text: c.ElementText,
 			AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
-			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(),
+			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(), Version: c.Version,
 		})
 	}
 	jsonOK(w, out)
@@ -86,7 +109,12 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.viewerCanAccessUpload(r, u) {
-		jsonError(w, http.StatusUnauthorized, uploadAccessRequiredMessage(u))
+		jsonError(w, s.uploadAccessStatus(r, u), uploadAccessRequiredMessage(u))
+		return
+	}
+	version, ok := s.commentVersion(r, u)
+	if !ok {
+		jsonError(w, http.StatusNotFound, "version not found")
 		return
 	}
 
@@ -116,12 +144,12 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		s.setNameCookie(w, in.Name)
 	}
 
-	if _, err := s.store.AddComment(r.Context(), u.ID, in.Selector, in.Text, in.AnchorKind, in.Name, s.commentVisitorHash(vid), in.Body); err != nil {
+	if _, err := s.store.AddComment(r.Context(), u.ID, version, in.Selector, in.Text, in.AnchorKind, in.Name, s.commentVisitorHash(vid), in.Body); err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
 
-	list, err := s.store.ListComments(r.Context(), u.ID)
+	list, err := s.store.ListComments(r.Context(), u.ID, version)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
@@ -131,7 +159,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		out = append(out, commentOut{
 			ID: c.ID, Selector: c.ElementSelector, Text: c.ElementText,
 			AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
-			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(),
+			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(), Version: c.Version,
 		})
 	}
 	jsonOK(w, out)
@@ -185,6 +213,11 @@ func (s *Server) handleAddAccountComment(w http.ResponseWriter, r *http.Request)
 		jsonError(w, http.StatusForbidden, "not owner")
 		return
 	}
+	version, ok := s.commentVersion(r, u)
+	if !ok {
+		jsonError(w, http.StatusNotFound, "version not found")
+		return
+	}
 	var in commentIn
 	if err := decodeJSON(w, r, &in, defaultJSONBodyLimit); err != nil {
 		jsonError(w, http.StatusBadRequest, "bad json")
@@ -194,7 +227,7 @@ func (s *Server) handleAddAccountComment(w http.ResponseWriter, r *http.Request)
 		jsonError(w, status, msg)
 		return
 	}
-	c, err := s.store.AddComment(r.Context(), u.ID, in.Selector, in.Text, in.AnchorKind, owner.Name,
+	c, err := s.store.AddComment(r.Context(), u.ID, version, in.Selector, in.Text, in.AnchorKind, owner.Name,
 		s.commentVisitorHash("account:"+strconv.FormatInt(owner.AccountID, 10)), in.Body)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
@@ -250,16 +283,33 @@ func (s *Server) viewerCanAccessUpload(r *http.Request, u *models.Upload) bool {
 	case models.UploadVisibilityPrivate:
 		_, ok := s.webAuth(r)
 		return ok
+	case models.UploadVisibilityRestricted:
+		a, ok := s.webAuth(r)
+		return ok && s.accountCanViewRestricted(r.Context(), a, u)
 	default:
 		return false
 	}
 }
 
 func uploadAccessRequiredMessage(u *models.Upload) string {
-	if u.Visibility == models.UploadVisibilityPrivate {
+	switch u.Visibility {
+	case models.UploadVisibilityPrivate:
 		return "login required"
+	case models.UploadVisibilityRestricted:
+		return "access denied"
 	}
 	return "password required"
+}
+
+// uploadAccessStatus is the status for a failed viewerCanAccessUpload: 403 for a
+// signed-in viewer of a restricted upload, 401 otherwise.
+func (s *Server) uploadAccessStatus(r *http.Request, u *models.Upload) int {
+	if u.Visibility == models.UploadVisibilityRestricted {
+		if _, ok := s.webAuth(r); ok {
+			return http.StatusForbidden
+		}
+	}
+	return http.StatusUnauthorized
 }
 
 func authCookieName(slug string) string {

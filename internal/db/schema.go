@@ -34,6 +34,17 @@ CREATE TABLE IF NOT EXISTS uploads (
 	created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS upload_versions (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+	version INTEGER NOT NULL,
+	object_key TEXT NOT NULL,
+	size INTEGER NOT NULL,
+	created_by_account_id INTEGER REFERENCES accounts(id),
+	created_at INTEGER NOT NULL,
+	UNIQUE(upload_id, version)
+);
+
 CREATE TABLE IF NOT EXISTS comments (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
@@ -43,6 +54,7 @@ CREATE TABLE IF NOT EXISTS comments (
 	author_name TEXT NOT NULL,
 	author_cookie TEXT NOT NULL,
 	body TEXT NOT NULL,
+	version INTEGER NOT NULL DEFAULT 1,
 	created_at INTEGER NOT NULL
 );
 
@@ -55,6 +67,7 @@ CREATE TABLE IF NOT EXISTS visits (
 	visitor_name TEXT NOT NULL DEFAULT '',
 	ip TEXT NOT NULL DEFAULT '',
 	user_agent TEXT NOT NULL DEFAULT '',
+	version INTEGER NOT NULL DEFAULT 1,
 	visited_at INTEGER NOT NULL
 );
 
@@ -122,4 +135,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS upload_grants (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL CHECK (kind IN ('user','group')),
+	email TEXT NOT NULL,
+	created_by_account_id INTEGER REFERENCES accounts(id),
+	created_at INTEGER NOT NULL,
+	UNIQUE(upload_id, kind, email)
+);
+CREATE INDEX IF NOT EXISTS idx_upload_grants_upload ON upload_grants(upload_id);
 `

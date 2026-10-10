@@ -129,6 +129,7 @@
   document.addEventListener("alpine:init", () => {
     Alpine.data("pageApp", () => ({
       slug: "",
+      version: 0,
       visibility: "password",
 
       comments: [],
@@ -162,6 +163,7 @@
       init() {
         const dataset = document.body ? document.body.dataset : {};
         this.slug = dataset.slug || "";
+        this.version = Number(dataset.version) || 0;
         this.visibility = dataset.visibility || "password";
 
         const stored = localStorage.getItem(STORAGE_KEY);
@@ -181,7 +183,7 @@
       loadComments() {
         if (!this.slug) return;
         this.panelLoading = true;
-        fetch("/api/uploads/" + this.slug + "/comments", {
+        fetch("/api/uploads/" + this.slug + "/comments" + (this.version ? "?v=" + this.version : ""), {
           credentials: "same-origin",
         })
           .then((r) => r.json())
@@ -448,7 +450,7 @@
         }
 
         try {
-          const res = await fetch("/api/uploads/" + this.slug + "/comments", {
+          const res = await fetch("/api/uploads/" + this.slug + "/comments" + (this.version ? "?v=" + this.version : ""), {
             method: "POST",
             credentials: "same-origin",
             headers: { "Content-Type": "application/json" },

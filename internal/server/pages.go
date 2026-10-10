@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -19,28 +20,83 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 		s.renderWebError(w, http.StatusNotFound, "Page not found", "This shared page does not exist or is no longer available.")
 		return
 	}
+	s.servePage(w, r, u, u.LatestVersion, "/p/"+slug)
+}
+
+func (s *Server) handlePageVersion(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	u, err := s.store.GetUpload(r.Context(), slug)
+	if err != nil {
+		s.renderWebError(w, http.StatusNotFound, "Page not found", "This shared page does not exist or is no longer available.")
+		return
+	}
+	n, ok := s.parseExistingVersion(r, u)
+	if !ok {
+		s.renderVersionNotFound(w)
+		return
+	}
+	s.servePage(w, r, u, n, "/p/"+slug+"/v/"+strconv.Itoa(n))
+}
+
+func (s *Server) renderVersionNotFound(w http.ResponseWriter) {
+	s.renderWebError(w, http.StatusNotFound, "Version not found", "This version of the page does not exist or is no longer available.")
+}
+
+// parseExistingVersion parses the {n} path value and checks the version exists.
+func (s *Server) parseExistingVersion(r *http.Request, u *models.Upload) (int, bool) {
+	n, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	if _, err := s.store.GetUploadVersion(r.Context(), u.ID, n); err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upload, version int, pagePath string) {
+	slug := u.Slug
 	if u.Visibility == models.UploadVisibilityPassword && !s.viewerCanAccessUpload(r, u) {
-		s.renderHTML(w, http.StatusOK, webui.TemplateGate, webui.GateData{Slug: slug})
+		s.renderHTML(w, http.StatusOK, webui.TemplateGate, webui.GateData{Slug: slug, Action: pagePath})
 		return
 	}
 	if u.Visibility == models.UploadVisibilityPrivate && !s.viewerCanAccessUpload(r, u) {
-		s.setNextPath(w, "/p/"+slug)
+		s.setNextPath(w, pagePath)
 		if _, err := r.Cookie(sessionCookie); err == nil {
 			s.clearCookie(w, sessionCookie, "/")
 		}
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+	if u.Visibility == models.UploadVisibilityRestricted && !s.viewerCanAccessUpload(r, u) {
+		a, ok := s.webAuth(r)
+		if !ok {
+			s.setNextPath(w, pagePath)
+			if _, err := r.Cookie(sessionCookie); err == nil {
+				s.clearCookie(w, sessionCookie, "/")
+			}
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		who := a.Email
+		if who == "" {
+			who = a.Name
+		}
+		s.auditRequest(r, who, "page.access.denied", "slug="+slug)
+		s.renderWebError(w, http.StatusForbidden, "Access denied", "You are signed in as "+who+", which has not been given access to this page. Ask the page owner to share it with you.")
+		return
+	}
 	if u.Visibility == models.UploadVisibilityPassword {
 		s.setPageAuthCookie(w, slug)
 	}
 	vid := s.visitorID(w, r)
-	s.recordVisit(r, u, vid)
+	s.recordVisit(r, u, vid, version)
 
-	rawURL := "/raw/" + slug + "?t=" + makeViewToken(s.secret, slug, vid) + "&v=" + vid
+	rawURL := "/raw/" + slug + "/v/" + strconv.Itoa(version) + "?t=" + makeViewToken(s.secret, viewSubject(slug, version), vid) + "&v=" + vid
 	d := pageData{
 		Name: u.Name, Slug: slug,
 		RawURL: rawURL, Visibility: u.Visibility,
+		Version: version, LatestVersion: u.LatestVersion,
 	}
 	w.Header().Set("Content-Security-Policy", webui.PageCSP)
 	s.renderHTML(w, http.StatusOK, webui.TemplatePage, d)
@@ -53,8 +109,17 @@ func (s *Server) handlePagePassword(w http.ResponseWriter, r *http.Request) {
 		s.renderWebError(w, http.StatusNotFound, "Page not found", "This shared page does not exist or is no longer available.")
 		return
 	}
+	pagePath := "/p/" + slug
+	if r.PathValue("n") != "" {
+		n, ok := s.parseExistingVersion(r, u)
+		if !ok {
+			s.renderVersionNotFound(w)
+			return
+		}
+		pagePath += "/v/" + strconv.Itoa(n)
+	}
 	if u.Visibility != models.UploadVisibilityPassword {
-		http.Redirect(w, r, "/p/"+slug, http.StatusSeeOther)
+		http.Redirect(w, r, pagePath, http.StatusSeeOther)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -63,11 +128,11 @@ func (s *Server) handlePagePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	pw := r.FormValue("password")
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(pw)) != nil {
-		s.renderHTML(w, http.StatusUnauthorized, webui.TemplateGate, webui.GateData{Slug: slug, Error: true})
+		s.renderHTML(w, http.StatusUnauthorized, webui.TemplateGate, webui.GateData{Slug: slug, Action: pagePath, Error: true})
 		return
 	}
 	s.setPageAuthCookie(w, slug)
-	http.Redirect(w, r, "/p/"+slug, http.StatusSeeOther)
+	http.Redirect(w, r, pagePath, http.StatusSeeOther)
 }
 
 func (s *Server) setPageAuthCookie(w http.ResponseWriter, slug string) {
@@ -81,15 +146,8 @@ func (s *Server) setPageAuthCookie(w http.ResponseWriter, slug string) {
 	})
 }
 
-func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	if _, err := s.store.GetUpload(r.Context(), slug); err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	// Require a valid view token (issued by /p) so /raw cannot be hot-linked
-	// or used to bypass the password gate. The token is bound to the visitor
-	// id so a shared raw URL won't work for a different viewer.
+// rawViewerID resolves the visitor id a raw view token is bound to.
+func rawViewerID(r *http.Request) string {
 	vid := r.URL.Query().Get("v")
 	if vid == "" {
 		// Fall back to cookie-based vid for backward compat.
@@ -97,11 +155,61 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 			vid = c.Value
 		}
 	}
-	if !verifyViewToken(s.secret, r.URL.Query().Get("t"), slug, vid) {
+	return vid
+}
+
+// handleRaw serves the latest version for tokens minted before versioned raw
+// URLs existed; those tokens are bound to the bare slug.
+func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	u, err := s.store.GetUpload(r.Context(), slug)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	// Require a valid view token (issued by /p) so /raw cannot be hot-linked
+	// or used to bypass the password gate. The token is bound to the visitor
+	// id so a shared raw URL won't work for a different viewer.
+	if !verifyViewToken(s.secret, r.URL.Query().Get("t"), slug, rawViewerID(r)) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	rc, err := s.storage.Open(r.Context(), slug)
+	ver, err := s.store.GetUploadVersion(r.Context(), u.ID, u.LatestVersion)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	s.serveRawObject(w, r, slug, ver.ObjectKey)
+}
+
+func (s *Server) handleRawVersion(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	n, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || n < 1 {
+		http.NotFound(w, r)
+		return
+	}
+	// Verify the token before any DB lookup so the response does not reveal
+	// which versions exist.
+	if !verifyViewToken(s.secret, r.URL.Query().Get("t"), viewSubject(slug, n), rawViewerID(r)) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	u, err := s.store.GetUpload(r.Context(), slug)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ver, err := s.store.GetUploadVersion(r.Context(), u.ID, n)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	s.serveRawObject(w, r, slug, ver.ObjectKey)
+}
+
+func (s *Server) serveRawObject(w http.ResponseWriter, r *http.Request, slug, objectKey string) {
+	rc, err := s.storage.Open(r.Context(), objectKey)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -115,7 +223,7 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 	if closeErr != nil {
 		slog.Warn("close raw html scan", "slug", slug, "err", closeErr)
 	}
-	rc, err = s.storage.Open(r.Context(), slug)
+	rc, err = s.storage.Open(r.Context(), objectKey)
 	if err != nil {
 		http.NotFound(w, r)
 		return

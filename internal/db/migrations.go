@@ -26,6 +26,18 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);`
 	{4, "account_password_hash", `-- ALTER TABLE handled idempotently below`},
 	{5, "comment_anchor_kind", `-- ALTER TABLE handled idempotently below`},
 	{6, "upload_visibility", `-- ALTER TABLE handled idempotently below`},
+	{7, "upload_versions", ""}, // handled by migrateUploadVersions
+	{8, "upload_grants", `
+CREATE TABLE IF NOT EXISTS upload_grants (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL CHECK (kind IN ('user','group')),
+	email TEXT NOT NULL,
+	created_by_account_id INTEGER REFERENCES accounts(id),
+	created_at INTEGER NOT NULL,
+	UNIQUE(upload_id, kind, email)
+);
+CREATE INDEX IF NOT EXISTS idx_upload_grants_upload ON upload_grants(upload_id);`},
 }
 
 func (s *Store) runMigrations() error {
@@ -68,6 +80,10 @@ func (s *Store) runMigrations() error {
 			}
 		} else if m.id == 6 {
 			if err := s.migrateUploadVisibility(); err != nil {
+				return fmt.Errorf("migration %d (%s): %w", m.id, m.desc, err)
+			}
+		} else if m.id == 7 {
+			if err := s.migrateUploadVersions(); err != nil {
 				return fmt.Errorf("migration %d (%s): %w", m.id, m.desc, err)
 			}
 		} else if m.sql != "" {
@@ -145,6 +161,34 @@ func (s *Store) migrateUploadVisibility() error {
 		return err
 	}
 	_, err = s.Exec(`UPDATE uploads SET visibility=CASE WHEN password_hash <> '' THEN 'password' ELSE 'private' END`)
+	return err
+}
+
+// migrateUploadVersions adds per-page versions. Every existing upload gets a
+// version 1 whose object key is its slug, so existing objects need no move.
+// created_by_account_id stays NULL because uploads.owner_account_id may not
+// exist yet on very old databases (migrateUploadsOwner runs later).
+func (s *Store) migrateUploadVersions() error {
+	if _, err := s.Exec(`CREATE TABLE IF NOT EXISTS upload_versions (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+	version INTEGER NOT NULL,
+	object_key TEXT NOT NULL,
+	size INTEGER NOT NULL,
+	created_by_account_id INTEGER REFERENCES accounts(id),
+	created_at INTEGER NOT NULL,
+	UNIQUE(upload_id, version)
+)`); err != nil {
+		return err
+	}
+	for _, table := range []string{"comments", "visits"} {
+		_, err := s.Exec(`ALTER TABLE ` + table + ` ADD COLUMN version INTEGER NOT NULL DEFAULT 1`)
+		if err != nil && !isDuplicateColumnError(err) {
+			return err
+		}
+	}
+	_, err := s.Exec(`INSERT OR IGNORE INTO upload_versions(upload_id,version,object_key,size,created_by_account_id,created_at)
+		SELECT id,1,slug,size,NULL,created_at FROM uploads`)
 	return err
 }
 

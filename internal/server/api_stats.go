@@ -76,7 +76,7 @@ func (s *Server) handleExportUpload(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
-	comments, err := s.store.ListComments(r.Context(), u.ID)
+	comments, err := s.store.ListComments(r.Context(), u.ID, 0)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
@@ -89,12 +89,28 @@ func (s *Server) handleExportUpload(w http.ResponseWriter, r *http.Request) {
 		Text       string `json:"element_text"`
 		AnchorKind string `json:"anchor_kind"`
 		CreatedAt  int64  `json:"created_at"`
+		Version    int    `json:"version"`
 	}
 	type exportVisit struct {
 		Name      string `json:"name"`
 		IP        string `json:"ip"`
 		UA        string `json:"user_agent"`
 		Timestamp int64  `json:"visited_at"`
+		Version   int    `json:"version"`
+	}
+	type exportVersion struct {
+		Version   int   `json:"version"`
+		Size      int64 `json:"size"`
+		CreatedAt int64 `json:"created_at"`
+	}
+	versions, err := s.store.ListUploadVersions(r.Context(), u.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	vers := make([]exportVersion, 0, len(versions))
+	for _, v := range versions {
+		vers = append(vers, exportVersion{Version: v.Version, Size: v.Size, CreatedAt: v.CreatedAt.Unix()})
 	}
 	export := map[string]any{
 		"slug":            slug,
@@ -104,23 +120,40 @@ func (s *Server) handleExportUpload(w http.ResponseWriter, r *http.Request) {
 		"created_at":      u.CreatedAt.Unix(),
 		"total_visits":    total,
 		"unique_visitors": unique,
+		"latest_version":  u.LatestVersion,
+		"versions":        vers,
 	}
 	cmts := make([]exportComment, 0, len(comments))
 	for _, c := range comments {
 		cmts = append(cmts, exportComment{
 			Author: c.AuthorName, Body: c.Body, Selector: c.ElementSelector,
 			Text: c.ElementText, AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
-			CreatedAt: c.CreatedAt.Unix(),
+			CreatedAt: c.CreatedAt.Unix(), Version: c.Version,
 		})
 	}
 	export["comments"] = cmts
 	visits := make([]exportVisit, 0, len(recent))
 	for _, v := range recent {
 		visits = append(visits, exportVisit{
-			Name: v.VisitorName, IP: v.IP, UA: v.UserAgent, Timestamp: v.VisitedAt.Unix(),
+			Name: v.VisitorName, IP: v.IP, UA: v.UserAgent, Timestamp: v.VisitedAt.Unix(), Version: v.Version,
 		})
 	}
 	export["visits"] = visits
+	grants, err := s.store.ListUploadGrants(r.Context(), u.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	type exportGrant struct {
+		Kind      string `json:"kind"`
+		Email     string `json:"email"`
+		CreatedAt int64  `json:"created_at"`
+	}
+	gr := make([]exportGrant, 0, len(grants))
+	for _, g := range grants {
+		gr = append(gr, exportGrant{Kind: g.Kind, Email: g.Email, CreatedAt: g.CreatedAt.Unix()})
+	}
+	export["grants"] = gr
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+slug+`-export.json"`)
@@ -135,7 +168,7 @@ func (s *Server) handleViews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.viewerCanAccessUpload(r, u) {
-		jsonError(w, http.StatusUnauthorized, uploadAccessRequiredMessage(u))
+		jsonError(w, s.uploadAccessStatus(r, u), uploadAccessRequiredMessage(u))
 		return
 	}
 	total, unique, err := s.store.CountVisits(r.Context(), u.ID)

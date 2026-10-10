@@ -54,8 +54,8 @@ func TestRendererExecutesAllTemplates(t *testing.T) {
 		},
 		{
 			name: TemplateGate,
-			data: GateData{Slug: "abc123", Error: true},
-			want: "Incorrect password",
+			data: GateData{Slug: "abc123", Action: "/p/abc123/v/2", Error: true},
+			want: `action="/p/abc123/v/2"`,
 		},
 		{
 			name: TemplateIndex,
@@ -135,7 +135,7 @@ func TestPageTemplateUsesDatasetForViewerConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new renderer: %v", err)
 	}
-	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123?t=t&v=v", Visibility: "password"})
+	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123/v/1?t=t&v=v", Visibility: "password", Version: 1, LatestVersion: 3})
 	if err != nil {
 		t.Fatalf("execute page: %v", err)
 	}
@@ -147,10 +147,27 @@ func TestPageTemplateUsesDatasetForViewerConfig(t *testing.T) {
 		`x-data="pageApp"`,
 		`data-slug="abc123"`,
 		`data-visibility="password"`,
+		`data-version="1"`,
+		`id="hn-version-banner"`,
+		`Version 1 of 3`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("page template missing %q: %s", want, html)
 		}
+	}
+}
+
+func TestPageTemplateOmitsBannerOnLatestVersion(t *testing.T) {
+	renderer, err := newRenderer(func(name string) string { return "/" + name })
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplatePage, PageData{Name: "p", Slug: "abc123", RawURL: "/raw/abc123/v/3", Visibility: "public", Version: 3, LatestVersion: 3})
+	if err != nil {
+		t.Fatalf("execute page: %v", err)
+	}
+	if strings.Contains(string(body), "hn-version-banner") {
+		t.Fatalf("latest version should not render the banner")
 	}
 }
 

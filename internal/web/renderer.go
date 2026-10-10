@@ -222,15 +222,18 @@ type StatsData struct {
 }
 
 type PageData struct {
-	Name       string
-	Slug       string
-	RawURL     string
-	Visibility string
+	Name          string
+	Slug          string
+	RawURL        string
+	Visibility    string
+	Version       int
+	LatestVersion int
 }
 
 type GateData struct {
-	Slug  string
-	Error bool
+	Slug   string
+	Action string
+	Error  bool
 }
 
 type IndexData struct {

@@ -24,7 +24,7 @@ func (fs *FileStorage) Save(_ context.Context, slug string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(fs.Dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	tmp := path + ".tmp"

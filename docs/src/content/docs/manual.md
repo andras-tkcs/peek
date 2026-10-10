@@ -23,7 +23,9 @@ peek upload report.html --visibility public
 
 Or use the dashboard when you want to paste HTML, copy existing links, or inspect past uploads.
 
-Choose `public` for link-accessible internal pages, `password` for link sharing with a shared secret, and `private` for pages that require a Peek account.
+Choose `public` for link-accessible internal pages, `password` for link sharing with a shared secret, `private` for pages that require a Peek account, and `restricted` for pages only named people or Google groups can open (`peek grant <slug> <email> [--group]`).
+
+To update a page, run `peek upload report.html --slug <slug>`. The link keeps showing the latest version, and `/p/<slug>/v/<n>` opens an older one.
 
 ## Review And Comment
 
@@ -44,9 +46,12 @@ Useful CLI commands:
 ```text
 peek list
 peek stats <slug>
-peek comments <slug>
+peek comments <slug> [--version <n>]
+peek versions <slug>
+peek grant|revoke <slug> <email> [--group]
+peek grants <slug>
 peek export <slug>
-peek visibility <slug> public|password|private
+peek visibility <slug> public|password|private|restricted
 peek delete <slug>
 ```
 

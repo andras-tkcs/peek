@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+	"text/tabwriter"
+	"time"
 )
 
 // --- list ---
@@ -43,6 +45,36 @@ func cmdList(args []string) error {
 		fmt.Printf("%-12s  %-6s  %-10s  %-20s  %s\n", it.Slug, humanSize(it.Size), it.Visibility, truncate(it.Name, 20), it.URL)
 	}
 	return nil
+}
+
+// --- versions ---
+
+func cmdVersions(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: peek versions <slug>")
+	}
+	cfg, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+	c, err := newClient(cfg)
+	if err != nil {
+		return err
+	}
+	var items []struct {
+		Version   int    `json:"version"`
+		Size      int64  `json:"size"`
+		CreatedAt int64  `json:"created_at"`
+		URL       string `json:"url"`
+	}
+	if err := c.getJSON("/api/uploads/"+args[0]+"/versions", &items); err != nil {
+		return err
+	}
+	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	for _, it := range items {
+		fmt.Fprintf(tw, "v%d\t%d bytes\t%s\t%s\n", it.Version, it.Size, time.Unix(it.CreatedAt, 0).Format(time.RFC3339), it.URL)
+	}
+	return tw.Flush()
 }
 
 // --- delete ---
@@ -99,10 +131,10 @@ func cmdVisibility(args []string) error {
 		}
 	}
 	if slug == "" || visibility == "" {
-		return fmt.Errorf("usage: peek visibility <slug> public|private|password [--password <pw>|--password-stdin]")
+		return fmt.Errorf("usage: peek visibility <slug> public|private|password|restricted [--password <pw>|--password-stdin]")
 	}
 	if !validVisibility(visibility) {
-		return fmt.Errorf("visibility must be public, password, or private")
+		return fmt.Errorf("visibility must be public, password, private, or restricted")
 	}
 	if password != "" && passwordStdin {
 		return fmt.Errorf("use only one of --password or --password-stdin")

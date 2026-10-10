@@ -64,9 +64,13 @@ Limits protect the server from accidental growth and runaway automation.
 
 The dashboard shows byte-based limits in MB. The API stores the underlying runtime setting in bytes.
 
+## Versions
+
+Re-uploading with `peek upload <file.html> --slug <slug>` stores a new object per version. Version 1 is keyed `<slug>`; later versions are keyed `versions/<slug>/<hex>`. Every version counts toward the total storage limit and the page owner's storage limit, but not toward the per-owner upload count, which counts pages.
+
 ## Retention
 
-Retention deletes uploads older than the configured number of days. `0` disables automatic cleanup.
+Retention deletes a page when its newest version is older than the configured number of days. Older versions of a page that is kept are pruned individually, together with the comments written on them; the newest version is never pruned. `0` disables automatic cleanup. A version uploaded while its page is being deleted can leave one orphaned object.
 
 Use retention for policy, not as a substitute for backups. If your company treats generated reports as temporary review artifacts, set retention to match that expectation.
 

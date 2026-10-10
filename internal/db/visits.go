@@ -7,9 +7,9 @@ import (
 	"github.com/puemos/peek/internal/models"
 )
 
-func (s *Store) RecordVisit(ctx context.Context, uploadID int64, cookie, name, ip, ua string) error {
-	_, err := s.ExecContext(ctx, `INSERT INTO visits(upload_id,visitor_cookie,visitor_name,ip,user_agent,visited_at)
-		VALUES(?,?,?,?,?,?)`, uploadID, cookie, name, ip, ua, time.Now().Unix())
+func (s *Store) RecordVisit(ctx context.Context, uploadID int64, version int, cookie, name, ip, ua string) error {
+	_, err := s.ExecContext(ctx, `INSERT INTO visits(upload_id,version,visitor_cookie,visitor_name,ip,user_agent,visited_at)
+		VALUES(?,?,?,?,?,?,?)`, uploadID, version, cookie, name, ip, ua, time.Now().Unix())
 	return err
 }
 
@@ -43,7 +43,7 @@ func (s *Store) VisitBuckets(ctx context.Context, uploadID int64, since time.Tim
 }
 
 func (s *Store) RecentVisits(ctx context.Context, uploadID int64, limit int) ([]models.Visit, error) {
-	rows, err := s.QueryContext(ctx, `SELECT id,upload_id,visitor_cookie,visitor_name,ip,user_agent,visited_at
+	rows, err := s.QueryContext(ctx, `SELECT id,upload_id,version,visitor_cookie,visitor_name,ip,user_agent,visited_at
 		FROM visits WHERE upload_id=? ORDER BY visited_at DESC LIMIT ?`, uploadID, limit)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (s *Store) RecentVisits(ctx context.Context, uploadID int64, limit int) ([]
 	for rows.Next() {
 		var v models.Visit
 		var ts int64
-		if err := rows.Scan(&v.ID, &v.UploadID, &v.VisitorCookie, &v.VisitorName, &v.IP, &v.UserAgent, &ts); err != nil {
+		if err := rows.Scan(&v.ID, &v.UploadID, &v.Version, &v.VisitorCookie, &v.VisitorName, &v.IP, &v.UserAgent, &ts); err != nil {
 			return nil, err
 		}
 		v.VisitedAt = time.Unix(ts, 0)

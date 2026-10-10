@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -56,8 +59,29 @@ func cmdStats(args []string) error {
 // --- comments ---
 
 func cmdComments(args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: peek comments <slug>")
+	const commentsUsage = "usage: peek comments <slug> [--version <n>]"
+	var slug string
+	version := 0
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--version" {
+			if i+1 >= len(args) {
+				return fmt.Errorf("--version must be a positive integer")
+			}
+			n, err := strconv.Atoi(args[i+1])
+			if err != nil || n < 1 {
+				return fmt.Errorf("--version must be a positive integer")
+			}
+			version = n
+			i++
+			continue
+		}
+		if slug != "" || strings.HasPrefix(args[i], "-") {
+			return errors.New(commentsUsage)
+		}
+		slug = args[i]
+	}
+	if slug == "" {
+		return errors.New(commentsUsage)
 	}
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -75,8 +99,13 @@ func cmdComments(args []string) error {
 		Author     string `json:"author"`
 		Body       string `json:"body"`
 		CreatedAt  int64  `json:"created_at"`
+		Version    int    `json:"version"`
 	}
-	if err := c.getJSON("/api/uploads/"+args[0]+"/comments", &list); err != nil {
+	path := "/api/uploads/" + slug + "/comments"
+	if version > 0 {
+		path += "?v=" + strconv.Itoa(version)
+	}
+	if err := c.getJSON(path, &list); err != nil {
 		return err
 	}
 	if len(list) == 0 {
@@ -112,7 +141,7 @@ func cmdComments(args []string) error {
 		if i > 0 {
 			fmt.Println()
 		}
-		fmt.Printf("%s · %s\n", author, when)
+		fmt.Printf("%s · v%d · %s\n", author, cm.Version, when)
 		fmt.Printf("  on: %s\n", ctx)
 		fmt.Printf("  %s\n", cm.Body)
 	}

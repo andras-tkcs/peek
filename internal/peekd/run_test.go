@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/puemos/peek/internal/db"
 	"github.com/puemos/peek/internal/uploadquota"
@@ -267,5 +268,51 @@ func TestParseServeConfigRejectsInvalidOperationalConfig(t *testing.T) {
 				t.Fatalf("error = %v, want %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseServeConfigGoogleFlagsMustBeSetTogether(t *testing.T) {
+	for _, args := range [][]string{
+		{"--google-sa-key-file", "/tmp/key.json"},
+		{"--google-admin-email", "admin@example.com"},
+	} {
+		_, _, err := parseServeConfig(args)
+		if err == nil || err.Error() != "PEEK_GOOGLE_SA_KEY_FILE and PEEK_GOOGLE_ADMIN_EMAIL must be set together" {
+			t.Fatalf("args %v: err = %v", args, err)
+		}
+	}
+	cfg, _, err := parseServeConfig([]string{"--google-sa-key-file", "/tmp/key.json", "--google-admin-email", "admin@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GoogleSAKeyFile != "/tmp/key.json" || cfg.GoogleAdminEmail != "admin@example.com" {
+		t.Fatalf("cfg = %+v", cfg)
+	}
+}
+
+func TestParseServeConfigGoogleCacheTTLBounds(t *testing.T) {
+	for _, ttl := range []string{"500ms", "2h"} {
+		_, _, err := parseServeConfig([]string{"--google-group-cache-ttl", ttl})
+		if err == nil || err.Error() != "google group cache ttl must be between 1s and 1h" {
+			t.Fatalf("ttl %s: err = %v", ttl, err)
+		}
+	}
+	if _, _, err := parseServeConfig([]string{"--google-group-cache-ttl", "1s"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PEEK_GOOGLE_GROUP_CACHE_TTL", "nonsense")
+	_, _, err := parseServeConfig(nil)
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid PEEK_GOOGLE_GROUP_CACHE_TTL: ") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestParseServeConfigGoogleDefaults(t *testing.T) {
+	cfg, _, err := parseServeConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GoogleSAKeyFile != "" || cfg.GoogleAdminEmail != "" || cfg.GoogleGroupCacheTTL != 5*time.Minute {
+		t.Fatalf("cfg = %+v", cfg)
 	}
 }

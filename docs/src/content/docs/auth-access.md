@@ -100,15 +100,30 @@ Tokens are stored hashed and the plaintext token is shown only at creation time.
 
 ## Upload Visibility
 
-Each upload chooses one of three access modes:
+Each upload chooses one of four access modes:
 
 | Mode | Access |
 | --- | --- |
 | `public` | Anyone with the link can open and comment. |
 | `password` | Visitors must pass the upload password gate before opening and commenting. |
 | `private` | Visitors must have an active Peek account session. |
+| `restricted` | Only the owner, admins, and signed-in visitors matching a grant. Others see a 403 page. |
 
 Uploaded HTML itself remains sandboxed in all modes.
+
+### Grants
+
+A restricted page is opened up with grants. A user grant names one email address and matches the signed-in account with that email. A group grant names a Google Workspace group address and matches accounts that are direct or nested members of that group.
+
+```sh
+peek upload report.html --visibility restricted
+peek grant <slug> alice@example.com
+peek grant <slug> team@example.com --group
+peek grants <slug>
+peek revoke <slug> alice@example.com
+```
+
+Grants apply to page views, comments, and view stats. Revoking a grant takes effect on the next page load; an iframe that is already open can keep working for up to 1 hour. Group grants need the Google service account described in [Server setup](/peek/docs/server-setup/), and membership changes take up to the cache TTL (5 minutes by default) to apply.
 
 ## Parameters
 

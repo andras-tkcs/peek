@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -78,5 +79,51 @@ func TestCmdVisibilityRejectsConflictingOptions(t *testing.T) {
 	err := cmdVisibility([]string{"page", "password", "--password", "secret", "--password-stdin"})
 	if err == nil {
 		t.Fatal("expected conflict error")
+	}
+}
+
+func TestVersionsCommandRequestsVersions(t *testing.T) {
+	seen := make(chan string, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.Method + " " + r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"version": 1, "size": 10, "created_at": 1700000000, "url": "http://x/p/page/v/1"},
+			{"version": 2, "size": 20, "created_at": 1700000100, "url": "http://x/p/page/v/2"},
+		})
+	}))
+	defer ts.Close()
+	configureTestClient(t, ts.URL)
+
+	out, err := captureStdout(t, func() error { return cmdVersions([]string{"page"}) })
+	if err != nil {
+		t.Fatalf("cmdVersions: %v", err)
+	}
+	if got := <-seen; got != "GET /api/uploads/page/versions" {
+		t.Fatalf("request = %q", got)
+	}
+	if !strings.Contains(out, "v2") || !strings.Contains(out, "20 bytes") || !strings.Contains(out, "http://x/p/page/v/2") {
+		t.Fatalf("output = %q", out)
+	}
+}
+
+func TestCommentsVersionFlag(t *testing.T) {
+	seen := make(chan string, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.URL.RequestURI()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	}))
+	defer ts.Close()
+	configureTestClient(t, ts.URL)
+
+	if _, err := captureStdout(t, func() error { return cmdComments([]string{"page", "--version", "2"}) }); err != nil {
+		t.Fatalf("cmdComments: %v", err)
+	}
+	if got := <-seen; !strings.HasSuffix(got, "/comments?v=2") {
+		t.Fatalf("request = %q", got)
+	}
+	if err := cmdComments([]string{"page", "--version", "0"}); err == nil || !strings.Contains(err.Error(), "positive integer") {
+		t.Fatalf("expected positive integer error, got %v", err)
 	}
 }
