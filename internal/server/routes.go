@@ -11,6 +11,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/uploads/{slug}", s.authToken(s.handleDeleteUpload))
 	mux.HandleFunc("POST /api/uploads/{slug}/visibility", s.authToken(s.handleSetVisibility))
 	mux.HandleFunc("GET /api/uploads/{slug}/stats", s.authToken(s.handleStats))
+	mux.HandleFunc("POST /api/uploads/{slug}/account-comments", s.authToken(s.handleAddAccountComment))
 	mux.HandleFunc("POST /api/tokens", s.authAdmin(s.handleCreateToken))
 	mux.HandleFunc("GET /api/tokens", s.authAdmin(s.handleListTokens))
 	mux.HandleFunc("DELETE /api/tokens/{id}", s.authAdmin(s.handleDeleteToken))
