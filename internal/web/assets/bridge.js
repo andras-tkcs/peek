@@ -5,6 +5,7 @@
 //  - send the anchor (element selector + text quote) to the parent on pick
 //  - draw numbered pins + highlight commented text, anchored to the page
 //  - scroll-to + flash an anchor when the parent requests "locate"
+//  - forward the Shift+H toolbar shortcut to the parent
 // It does NOT call the server directly (the iframe is opaque-origin); all
 // comments traffic goes through the trusted parent page via postMessage.
 (function () {
@@ -348,6 +349,17 @@
     }
   }
 
+  function isEditableTarget(t) {
+    return !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ""));
+  }
+
+  function onKeyDown(e) {
+    if (e.defaultPrevented) return;
+    if ((e.key === "H" || e.key === "h" || e.code === "KeyH") && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && !isEditableTarget(e.target)) {
+      parent.postMessage({ hn: "togglebar" }, "*");
+    }
+  }
+
   function notifyReady() {
     parent.postMessage({ hn: "ready" }, "*");
   }
@@ -358,6 +370,7 @@
   window.addEventListener("scroll", function () { scheduleReposition(); hideSelButton(); }, true);
   window.addEventListener("resize", scheduleReposition);
   document.addEventListener("selectionchange", onSelectionChange);
+  window.addEventListener("keydown", onKeyDown);
   window.addEventListener("load", function () {
     notifyReady();
     positionPins();

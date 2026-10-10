@@ -23,6 +23,14 @@
     }
   }
 
+  function isEditableTarget(t) {
+    return !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ""));
+  }
+
+  function isToggleBarKey(e) {
+    return (e.key === "H" || e.key === "h" || e.code === "KeyH") && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && !isEditableTarget(e.target);
+  }
+
   function colorizeComments(comments) {
     const byAuthor = new Map();
     let colorIndex = 0;
@@ -132,6 +140,8 @@
 
       viewCount: 0,
       showSparkline: false,
+      barHidden: false,
+      barHintShown: false,
       sparklineTotal: "",
       sparklineUnique: "",
 
@@ -264,6 +274,10 @@
             this.syncFrame();
             return;
           }
+          if (data.hn === "togglebar") {
+            this.toggleBar();
+            return;
+          }
           if (data.hn === "pick") {
             this.openComposer(data);
             return;
@@ -294,6 +308,11 @@
 
       bindKeyboard() {
         document.addEventListener("keydown", (e) => {
+          if (isToggleBarKey(e)) {
+            e.preventDefault();
+            this.toggleBar();
+            return;
+          }
           if (e.key === "Escape") {
             if (this.nameModalOpen) {
               this.closeNameModal();
@@ -544,6 +563,29 @@
 
       toggleSparkline() {
         this.showSparkline = !this.showSparkline;
+      },
+
+      hideBar() {
+        if (this.barHidden) return;
+        this.showSparkline = false;
+        if (this.commentMode) this.toggleCommentMode();
+        this.barHidden = true;
+        if (!this.barHintShown) {
+          this.barHintShown = true;
+          window.peekToast("Toolbar hidden", { type: "info", description: "Press Shift+H to show it again." });
+        }
+      },
+
+      showBar() {
+        this.barHidden = false;
+      },
+
+      toggleBar() {
+        if (this.barHidden) {
+          this.showBar();
+        } else {
+          this.hideBar();
+        }
       },
     }));
   });
