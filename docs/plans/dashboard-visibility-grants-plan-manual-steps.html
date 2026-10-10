@@ -1,0 +1,179 @@
+<title>Peek Access Dialog Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow reading column; each check is a numbered section with a checklist of single actions. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1b2230;
+  --muted: #5d6779;
+  --line: #dde2ea;
+  --accent: #2f5bd3;
+  --ok: #1f7a4d;
+  --code-bg: #eef1f6;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #1a1f28; --fg: #e4e8ef; --muted: #9aa4b5; --line: #2c3442;
+    --accent: #8aa8ff; --ok: #5fcf95; --code-bg: #232a36; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a1f28; --fg: #e4e8ef; --muted: #9aa4b5; --line: #2c3442;
+  --accent: #8aa8ff; --ok: #5fcf95; --code-bg: #232a36; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 720px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 64px; display: flex; flex-direction: column; gap: 28px; }
+header { display: flex; flex-direction: column; gap: 8px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { font-size: 26px; line-height: 1.25; margin: 0; text-wrap: balance; font-weight: 600; }
+h2 { font-size: 18px; margin: 0; font-weight: 600; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+code { font-family: var(--font-mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { font-family: var(--font-mono); font-size: 13px; background: var(--code-bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 6px 0 0; }
+a { color: var(--accent); }
+.part { display: flex; flex-direction: column; gap: 14px; }
+.part-title { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.item-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+ol.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+ol.steps li > label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+ol.steps input[type="checkbox"] { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); flex: none; }
+ol.steps .n { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; min-width: 1.6em; margin-top: 2px; }
+ol.steps .body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+ol.steps li.done .text { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+.expect { font-size: 13.5px; color: var(--muted); }
+.expect::before { content: "You should see: "; font-weight: 600; color: var(--ok); }
+.report { border-left: 3px solid var(--accent); padding: 8px 12px; background: var(--code-bg); border-radius: 0 6px 6px 0; display: flex; flex-direction: column; gap: 6px; }
+.none { color: var(--muted); font-style: italic; }
+.progress { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+button.reset { font: inherit; font-size: 13px; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; align-self: flex-start; }
+button.reset:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Peek · plan dashboard-visibility-grants</span>
+    <h1>Access dialog browser check</h1>
+    <p class="muted">The Go tests cover the server side of renaming, visibility, passwords and grants. This one check confirms the dashboard dialog really behaves in a browser. Do it once the feature PR is ready, before merging it.</p>
+    <span class="progress" id="hn-progress">0 of 0 steps done</span>
+  </header>
+
+  <section class="part" aria-labelledby="hn-before">
+    <h2 class="part-title" id="hn-before">Before implementation</h2>
+    <p class="none">Nothing to do. You can run <code>/implement</code> straight away.</p>
+  </section>
+
+  <section class="part" aria-labelledby="hn-after">
+    <h2 class="part-title" id="hn-after">After implementation</h2>
+
+    <article class="item" id="ma1">
+      <div class="item-head">
+        <h2>1. Access dialog in a real browser</h2>
+        <span class="time">about 15 min</span>
+      </div>
+      <p class="muted">You need the feature branch on your machine with Go 1.26 (or <code>mise</code>). Use two browser windows: your normal one for the dashboard, and a private window as the "viewer".</p>
+
+      <ol class="steps" data-group="ma1">
+        <li><label><input type="checkbox" id="ma1-s1"><span class="n">1</span><span class="body"><span class="text">Check out the feature branch and start a fresh dev server:</span>
+          <pre>git fetch origin feat/dashboard-visibility-grants
+git checkout feat/dashboard-visibility-grants
+mkdir -p bin
+mise run run</pre>
+          <span class="muted">Without mise: <code>go build -o bin/peekd ./cmd/peekd &amp;&amp; rm -rf data &amp;&amp; ./bin/peekd --addr :7700 --data ./data --base-url http://localhost:7700</code>. Setup instructions: <a href="https://github.com/andras-tkcs/peek/blob/plan/dashboard-visibility-grants/README.md" target="_blank" rel="noopener">README</a>.</span>
+          <span class="expect">a log line with a one-time <code>/setup</code> URL.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s2"><span class="n">2</span><span class="body"><span class="text">Open the setup URL, create the admin account, and sign in to <code>http://localhost:7700/dashboard</code>.</span>
+          <span class="expect">the dashboard with an empty "Your uploads" list.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s3"><span class="n">3</span><span class="body"><span class="text">Upload a page: pick <strong>Paste HTML</strong>, paste <code>&lt;h1&gt;Smoke&lt;/h1&gt;</code>, name it <code>Smoke Report</code>, choose <strong>Password</strong> with password <code>one</code>, and click <strong>Upload &amp; get link</strong>.</span>
+          <span class="expect">a row with link <code>/p/smoke-report</code>, with the name "Smoke Report" next to it.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s4"><span class="n">4</span><span class="body"><span class="text">In the private window, open <code>http://localhost:7700/p/smoke-report</code> and unlock it with <code>one</code>.</span>
+          <span class="expect">the page with the comments panel.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s5"><span class="n">5</span><span class="body"><span class="text">In the dashboard, click <strong>Access</strong> on that row.</span>
+          <span class="expect">a centred dialog over a dimmed page, with a Name field, the four visibility options (Password selected) and a password field. Escape closes it.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s6"><span class="n">6</span><span class="body"><span class="text">With <strong>Password</strong> still selected, enter <code>two</code> and click <strong>Save</strong>.</span>
+          <span class="expect">a success toast "Password updated for /p/smoke-report".</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s7"><span class="n">7</span><span class="body"><span class="text">Reload the page in the private window. Try <code>one</code>, then <code>two</code>.</span>
+          <span class="expect">the password gate again. <code>one</code> is rejected and <code>two</code> opens the page.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s8"><span class="n">8</span><span class="body"><span class="text">In the dashboard, open <strong>Access</strong>, change the name to <code>Quarterly Smoke</code> and click <strong>Rename</strong>.</span>
+          <span class="expect">a toast "Renamed to /p/quarterly-smoke", and the dialog opens again by itself. The row now links to <code>/p/quarterly-smoke</code>.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s9"><span class="n">9</span><span class="body"><span class="text">In the private window, open the old link <code>http://localhost:7700/p/smoke-report</code>.</span>
+          <span class="expect">the address bar changes to <code>/p/quarterly-smoke</code>, and the password gate asks for <code>two</code> once more.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s10"><span class="n">10</span><span class="body"><span class="text">In the dialog, choose <strong>Restricted</strong> and click <strong>Save</strong>.</span>
+          <span class="expect">a toast "/p/quarterly-smoke is now restricted". The dialog reopens with a "People and groups with access" section saying only you and admins can open the page.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s11"><span class="n">11</span><span class="body"><span class="text">Type <code>alice@example.com</code> and click <strong>Share</strong>. Then click <strong>Remove</strong> next to it.</span>
+          <span class="expect">"Shared /p/quarterly-smoke with alice@example.com" with Alice listed, then "Removed alice@example.com from /p/quarterly-smoke" with the list empty. The dialog stays open each time.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s12"><span class="n">12</span><span class="body"><span class="text">Rename the page to <code>it's "quoted"</code>, close the dialog, and click <strong>Delete</strong> on the row. Then click <strong>Cancel</strong> in the browser prompt.</span>
+          <span class="expect">the prompt reads exactly: Delete it's "quoted"? This cannot be undone. No console errors, and the page is still there.</span></span></label></li>
+
+        <li><label><input type="checkbox" id="ma1-s13"><span class="n">13</span><span class="body"><span class="text">Stop the server with Ctrl+C.</span></span></label></li>
+      </ol>
+
+      <div class="report">
+        <strong>Report back</strong>
+        <p>Paste one line into the PR's "ma1-dashboard-access-dialog" item, for example:</p>
+        <pre>ma1: PASS (browser + version), or FAIL at step N: what you saw</pre>
+      </div>
+    </article>
+  </section>
+
+  <button type="button" class="reset" id="hn-reset">Clear all checkboxes</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var KEY = "peek-access-dialog-check-v1";
+  var els = {
+    boxes: Array.prototype.slice.call(document.querySelectorAll('ol.steps input[type="checkbox"]')),
+    progress: document.getElementById("hn-progress"),
+    reset: document.getElementById("hn-reset")
+  };
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable: keep working without it */ }
+  }
+  function render() {
+    var done = 0;
+    els.boxes.forEach(function (b) {
+      b.closest("li").classList.toggle("done", b.checked);
+      if (b.checked) { done++; }
+    });
+    els.progress.textContent = done + " of " + els.boxes.length + " steps done";
+  }
+  var state = load();
+  els.boxes.forEach(function (b) {
+    b.checked = !!state[b.id];
+    b.addEventListener("change", function () {
+      state[b.id] = b.checked;
+      save(state);
+      render();
+    });
+  });
+  els.reset.addEventListener("click", function () {
+    state = {};
+    save(state);
+    els.boxes.forEach(function (b) { b.checked = false; });
+    render();
+  });
+  render();
+})();
+</script>
