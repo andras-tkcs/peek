@@ -183,6 +183,43 @@ func (s *Server) handleDashboardDelete(w http.ResponseWriter, r *http.Request) {
 	dashboardHome(w, r)
 }
 
+func (s *Server) handleDashboardVisibility(w http.ResponseWriter, r *http.Request) {
+	owner, ok := s.webAuth(r)
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	slug := r.PathValue("slug")
+	if !s.parseDashboardForm(w, r) {
+		return
+	}
+	u, err := s.store.GetUpload(r.Context(), slug)
+	if err != nil {
+		dashboardError(w, r, "not found")
+		return
+	}
+	if u.OwnerAccountID != owner.ID && !owner.IsAdmin {
+		dashboardError(w, r, "not owner")
+		return
+	}
+	change, err := uploads.PrepareVisibility(r.FormValue("visibility"), r.FormValue("password"))
+	if err != nil {
+		dashboardError(w, r, uploadErrorMessage(err))
+		return
+	}
+	if err := s.store.SetUploadVisibility(r.Context(), u.ID, change.Visibility, change.PasswordHash); err != nil {
+		slog.Error("dashboard visibility update failed", "slug", slug, "err", err)
+		dashboardError(w, r, "visibility update failed")
+		return
+	}
+	s.auditRequest(r, owner.Name, "upload.visibility.set", visibilityAuditDetail(slug, change.Visibility))
+	if change.Visibility == models.UploadVisibilityPassword {
+		dashboardOK(w, r, "Password updated for /p/"+slug)
+		return
+	}
+	dashboardOK(w, r, "/p/"+slug+" is now "+change.Visibility)
+}
+
 func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	noCache(w)
 	w.Header().Set("Content-Security-Policy", webui.DashboardCSP)
