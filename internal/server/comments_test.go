@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/puemos/peek/internal/models"
-	"github.com/puemos/peek/internal/uploadquota"
+	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/uploadquota"
 )
 
 func TestAddCommentLogsVisitorUpsertFailure(t *testing.T) {

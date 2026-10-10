@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	"github.com/puemos/peek/internal/uploads"
+	"github.com/andras-tkcs/peek/internal/uploads"
 )
 
 func (s *Server) handleDashboardRename(w http.ResponseWriter, r *http.Request) {

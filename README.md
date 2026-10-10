@@ -59,8 +59,8 @@ Override with `PEEK_VERSION` / `PEEK_INSTALL_DIR`.
 
 **Go install:**
 ```sh
-go install github.com/puemos/peek/cmd/peekd@latest   # server
-go install github.com/puemos/peek/cmd/peek@latest    # CLI
+go install github.com/andras-tkcs/peek/cmd/peekd@latest   # server
+go install github.com/andras-tkcs/peek/cmd/peek@latest    # CLI
 ```
 
 **Docker:**

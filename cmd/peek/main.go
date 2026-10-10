@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/puemos/peek/internal/cli"
+	"github.com/andras-tkcs/peek/internal/cli"
 )
 
 func main() {

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 type contextKey string

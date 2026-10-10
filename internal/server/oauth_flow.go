@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/oauth2"
 
-	webui "github.com/puemos/peek/internal/web"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {

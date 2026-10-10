@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/puemos/peek/internal/version"
+	"github.com/andras-tkcs/peek/internal/version"
 )
 
 // Run dispatches a command. args is argv without the program name.

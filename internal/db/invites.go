@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 func (s *Store) CreateInvite(ctx context.Context, rawToken, tokenCipher, email string, createdByAccountID int64, expiresAt time.Time) (*models.Invite, error) {

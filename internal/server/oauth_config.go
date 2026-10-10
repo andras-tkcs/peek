@@ -12,7 +12,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	webui "github.com/puemos/peek/internal/web"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 type authProvider = webui.AuthProvider

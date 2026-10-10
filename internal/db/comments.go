@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 func (s *Store) AddComment(ctx context.Context, uploadID int64, version int, selector, text, anchorKind, author, cookie, body string) (models.Comment, error) {

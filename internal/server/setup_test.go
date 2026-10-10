@@ -13,8 +13,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/puemos/peek/internal/db"
-	"github.com/puemos/peek/internal/server"
+	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/server"
 )
 
 func TestFreshInstallSetupCreatesAdminPassword(t *testing.T) {

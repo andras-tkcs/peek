@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/puemos/peek/internal/uploadquota"
+	"github.com/andras-tkcs/peek/internal/uploadquota"
 )
 
 func seedVersionUpload(t *testing.T, s *Store, email, slug string, size int64) (accountID, uploadID int64) {

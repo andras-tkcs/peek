@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/puemos/peek/internal/db"
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {

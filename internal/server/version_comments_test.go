@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 func postVersionComment(t *testing.T, s *Server, path, body string) *http.Response {

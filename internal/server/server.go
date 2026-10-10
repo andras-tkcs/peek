@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/puemos/peek/internal/db"
-	"github.com/puemos/peek/internal/objectstore"
-	webui "github.com/puemos/peek/internal/web"
+	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/objectstore"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 const (

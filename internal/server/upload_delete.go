@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 func (s *Server) deleteUpload(ctx context.Context, u models.Upload) error {

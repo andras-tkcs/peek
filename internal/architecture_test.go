@@ -42,75 +42,75 @@ func TestInternalPackageDependencyDirection(t *testing.T) {
 		forbiddenImport []string
 	}{
 		{
-			pkg: "github.com/puemos/peek/internal/cli",
+			pkg: "github.com/andras-tkcs/peek/internal/cli",
 			forbiddenImport: []string{
-				"github.com/puemos/peek/internal/db",
-				"github.com/puemos/peek/internal/objectstore",
-				"github.com/puemos/peek/internal/server",
-				"github.com/puemos/peek/internal/uploads",
-				"github.com/puemos/peek/internal/web",
+				"github.com/andras-tkcs/peek/internal/db",
+				"github.com/andras-tkcs/peek/internal/objectstore",
+				"github.com/andras-tkcs/peek/internal/server",
+				"github.com/andras-tkcs/peek/internal/uploads",
+				"github.com/andras-tkcs/peek/internal/web",
 			},
 		},
 		{
-			pkg: "github.com/puemos/peek/internal/db",
+			pkg: "github.com/andras-tkcs/peek/internal/db",
 			forbiddenImport: []string{
 				"net/http",
-				"github.com/puemos/peek/internal/cli",
-				"github.com/puemos/peek/internal/objectstore",
-				"github.com/puemos/peek/internal/server",
-				"github.com/puemos/peek/internal/uploads",
-				"github.com/puemos/peek/internal/web",
+				"github.com/andras-tkcs/peek/internal/cli",
+				"github.com/andras-tkcs/peek/internal/objectstore",
+				"github.com/andras-tkcs/peek/internal/server",
+				"github.com/andras-tkcs/peek/internal/uploads",
+				"github.com/andras-tkcs/peek/internal/web",
 			},
 		},
 		{
-			pkg: "github.com/puemos/peek/internal/groups",
+			pkg: "github.com/andras-tkcs/peek/internal/groups",
 			forbiddenImport: []string{
-				"github.com/puemos/peek/internal/cli",
-				"github.com/puemos/peek/internal/db",
-				"github.com/puemos/peek/internal/objectstore",
-				"github.com/puemos/peek/internal/server",
-				"github.com/puemos/peek/internal/uploads",
-				"github.com/puemos/peek/internal/web",
+				"github.com/andras-tkcs/peek/internal/cli",
+				"github.com/andras-tkcs/peek/internal/db",
+				"github.com/andras-tkcs/peek/internal/objectstore",
+				"github.com/andras-tkcs/peek/internal/server",
+				"github.com/andras-tkcs/peek/internal/uploads",
+				"github.com/andras-tkcs/peek/internal/web",
 			},
 		},
 		{
-			pkg: "github.com/puemos/peek/internal/server",
+			pkg: "github.com/andras-tkcs/peek/internal/server",
 			forbiddenImport: []string{
-				"github.com/puemos/peek/internal/groups",
+				"github.com/andras-tkcs/peek/internal/groups",
 			},
 		},
 		{
-			pkg: "github.com/puemos/peek/internal/objectstore",
+			pkg: "github.com/andras-tkcs/peek/internal/objectstore",
 			forbiddenImport: []string{
-				"github.com/puemos/peek/internal/db",
-				"github.com/puemos/peek/internal/server",
-				"github.com/puemos/peek/internal/uploads",
-				"github.com/puemos/peek/internal/web",
+				"github.com/andras-tkcs/peek/internal/db",
+				"github.com/andras-tkcs/peek/internal/server",
+				"github.com/andras-tkcs/peek/internal/uploads",
+				"github.com/andras-tkcs/peek/internal/web",
 			},
 		},
 		{
-			pkg: "github.com/puemos/peek/internal/uploads",
+			pkg: "github.com/andras-tkcs/peek/internal/uploads",
 			forbiddenImport: []string{
 				"net/http",
-				"github.com/puemos/peek/internal/db",
-				"github.com/puemos/peek/internal/server",
-				"github.com/puemos/peek/internal/web",
+				"github.com/andras-tkcs/peek/internal/db",
+				"github.com/andras-tkcs/peek/internal/server",
+				"github.com/andras-tkcs/peek/internal/web",
 			},
 		},
 		{
-			pkg: "github.com/puemos/peek/internal/web",
+			pkg: "github.com/andras-tkcs/peek/internal/web",
 			forbiddenImport: []string{
-				"github.com/puemos/peek/internal/cli",
-				"github.com/puemos/peek/internal/db",
-				"github.com/puemos/peek/internal/objectstore",
-				"github.com/puemos/peek/internal/server",
-				"github.com/puemos/peek/internal/uploads",
+				"github.com/andras-tkcs/peek/internal/cli",
+				"github.com/andras-tkcs/peek/internal/db",
+				"github.com/andras-tkcs/peek/internal/objectstore",
+				"github.com/andras-tkcs/peek/internal/server",
+				"github.com/andras-tkcs/peek/internal/uploads",
 			},
 		},
 	}
 
 	for _, rule := range rules {
-		t.Run(strings.TrimPrefix(rule.pkg, "github.com/puemos/peek/internal/"), func(t *testing.T) {
+		t.Run(strings.TrimPrefix(rule.pkg, "github.com/andras-tkcs/peek/internal/"), func(t *testing.T) {
 			pkg, ok := findPackage(packages, rule.pkg)
 			if !ok {
 				t.Fatalf("package %s not found", rule.pkg)

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/puemos/peek/internal/models"
-	"github.com/puemos/peek/internal/uploads"
+	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/uploads"
 )
 
 type uploadResp struct {

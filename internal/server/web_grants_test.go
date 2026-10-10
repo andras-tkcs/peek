@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 func grantPost(t *testing.T, s *Server, account int64, path, kind, email string, csrf bool) string {

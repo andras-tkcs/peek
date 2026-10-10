@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/puemos/peek/internal/models"
-	"github.com/puemos/peek/internal/uploadquota"
+	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/uploadquota"
 )
 
 const (

@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/puemos/peek/internal/db"
-	"github.com/puemos/peek/internal/uploadquota"
-	webui "github.com/puemos/peek/internal/web"
+	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/uploadquota"
+	webui "github.com/andras-tkcs/peek/internal/web"
 	"golang.org/x/crypto/bcrypt"
 )
 

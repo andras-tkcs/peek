@@ -1,4 +1,4 @@
-module github.com/puemos/peek
+module github.com/andras-tkcs/peek
 
 go 1.26.9
 

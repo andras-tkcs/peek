@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/puemos/peek/internal/db"
-	webui "github.com/puemos/peek/internal/web"
+	"github.com/andras-tkcs/peek/internal/db"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 func TestLoginRejectsMalformedForm(t *testing.T) {

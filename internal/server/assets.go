@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	webui "github.com/puemos/peek/internal/web"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 func (s *Server) handleBridge(w http.ResponseWriter, r *http.Request) {
