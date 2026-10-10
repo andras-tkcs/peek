@@ -75,6 +75,23 @@ peek login --token-file <path>
 peek login --token <value>
 ```
 
+## Account Comment API
+
+`POST /api/uploads/{slug}/account-comments` posts a comment under the account name of the bearer token, so API clients do not appear as "anonymous". It is separate from the browser comment route, so a server without it answers 404 or 405 instead of silently posting as "anonymous".
+
+Authenticate with `Authorization: Bearer <token>`. The token's account must own the upload or be an admin, otherwise the answer is 403 `not owner`.
+
+The request body is JSON. `body` is required and may be up to 4000 characters. Optional fields are `selector` (up to 500 characters), `element_text` (up to 200 characters) and `anchor_kind`. `anchor_kind` `text` needs both `selector` and `element_text`, `element` needs a `selector`, `page` needs no `selector`, and an empty value is inferred from the other fields. Any other value or an inconsistent combination gives 400 `invalid anchor kind`. A `name` field is accepted but ignored: the author is always the token's account name.
+
+A successful call answers 200 with a single comment object with `id`, `selector`, `element_text`, `anchor_kind`, `author`, `body` and `created_at` (Unix seconds). Errors are 400 (bad JSON, missing body or invalid anchor), 401 (missing or invalid token), 403 (not the owner, or account disabled), 404 (unknown slug), 413 (a field is too long) and 429 (too many comments).
+
+```sh
+curl -s -X POST -H "Authorization: Bearer $PEEK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Looks good","selector":"#hero","element_text":"Hero copy"}' \
+  "$PEEK_HOST/api/uploads/<slug>/account-comments"
+```
+
 ## Operational Endpoints
 
 | Endpoint | Purpose |

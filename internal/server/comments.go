@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,22 +95,12 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	in.Selector = strings.TrimSpace(in.Selector)
-	in.Body = strings.TrimSpace(in.Body)
+	if status, msg := in.normalize(); status != 0 {
+		jsonError(w, status, msg)
+		return
+	}
 	in.Name = strings.TrimSpace(in.Name)
-	in.Text = strings.TrimSpace(in.Text)
-	in.AnchorKind = strings.TrimSpace(in.AnchorKind)
-	anchorKind, ok := normalizeCommentAnchorKind(in.Selector, in.Text, in.AnchorKind)
-	if !ok {
-		jsonError(w, http.StatusBadRequest, "invalid anchor kind")
-		return
-	}
-	in.AnchorKind = anchorKind
-	if in.Body == "" {
-		jsonError(w, http.StatusBadRequest, "comment body required")
-		return
-	}
-	if len(in.Body) > 4000 || len(in.Name) > 100 || len(in.Selector) > 500 || len(in.Text) > 200 || len(in.AnchorKind) > 20 {
+	if len(in.Name) > 100 {
 		jsonError(w, http.StatusRequestEntityTooLarge, "field too long")
 		return
 	}
@@ -125,10 +116,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		s.setNameCookie(w, in.Name)
 	}
 
-	h := sha256.Sum256([]byte(s.secret + "|" + vid))
-	vidHash := hex.EncodeToString(h[:])[:16]
-
-	if err := s.store.AddComment(r.Context(), u.ID, in.Selector, in.Text, in.AnchorKind, in.Name, vidHash, in.Body); err != nil {
+	if _, err := s.store.AddComment(r.Context(), u.ID, in.Selector, in.Text, in.AnchorKind, in.Name, s.commentVisitorHash(vid), in.Body); err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
@@ -147,6 +135,77 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	jsonOK(w, out)
+}
+
+// normalize trims and validates the fields shared by the browser and account
+// comment routes. It returns (0, "") when the input is valid.
+func (in *commentIn) normalize() (int, string) {
+	in.Selector = strings.TrimSpace(in.Selector)
+	in.Body = strings.TrimSpace(in.Body)
+	in.Text = strings.TrimSpace(in.Text)
+	in.AnchorKind = strings.TrimSpace(in.AnchorKind)
+	anchorKind, ok := normalizeCommentAnchorKind(in.Selector, in.Text, in.AnchorKind)
+	if !ok {
+		return http.StatusBadRequest, "invalid anchor kind"
+	}
+	in.AnchorKind = anchorKind
+	if in.Body == "" {
+		return http.StatusBadRequest, "comment body required"
+	}
+	if len(in.Body) > 4000 || len(in.Selector) > 500 || len(in.Text) > 200 || len(in.AnchorKind) > 20 {
+		return http.StatusRequestEntityTooLarge, "field too long"
+	}
+	return 0, ""
+}
+
+func (s *Server) commentVisitorHash(key string) string {
+	h := sha256.Sum256([]byte(s.secret + "|" + key))
+	return hex.EncodeToString(h[:])[:16]
+}
+
+// handleAddAccountComment posts a comment as the token's account. It is a
+// separate route from handleAddComment so a server without it answers 404/405
+// instead of silently posting as "anonymous".
+func (s *Server) handleAddAccountComment(w http.ResponseWriter, r *http.Request) {
+	owner, ok := requireAPIToken(w, r)
+	if !ok {
+		return
+	}
+	if !s.commentLimiter.allow(s.clientIP(r)) {
+		jsonError(w, http.StatusTooManyRequests, "too many comments, slow down")
+		return
+	}
+	slug := r.PathValue("slug")
+	u, err := s.store.GetUpload(r.Context(), slug)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if u.OwnerAccountID != owner.AccountID && !owner.IsAdmin {
+		jsonError(w, http.StatusForbidden, "not owner")
+		return
+	}
+	var in commentIn
+	if err := decodeJSON(w, r, &in, defaultJSONBodyLimit); err != nil {
+		jsonError(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	if status, msg := in.normalize(); status != 0 {
+		jsonError(w, status, msg)
+		return
+	}
+	c, err := s.store.AddComment(r.Context(), u.ID, in.Selector, in.Text, in.AnchorKind, owner.Name,
+		s.commentVisitorHash("account:"+strconv.FormatInt(owner.AccountID, 10)), in.Body)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	s.auditRequest(r, owner.Name, "comment.create", "slug="+slug)
+	jsonOK(w, commentOut{
+		ID: c.ID, Selector: c.ElementSelector, Text: c.ElementText,
+		AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
+		Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(),
+	})
 }
 
 func normalizeCommentAnchorKind(selector, text, kind string) (string, bool) {

@@ -111,6 +111,17 @@ peek comments <slug>
 Prints every comment with its author, the on-page element/text it's anchored to,
 and the body. You can only read comments for **your own** uploads.
 
+### Post a comment as your account
+
+```sh
+curl -s -X POST -H "Authorization: Bearer $PEEK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Looks good"}' \
+  "$PEEK_HOST/api/uploads/<slug>/account-comments"
+```
+
+Posts under your token's account name (any `name` in the body is ignored). It works only for **your own** uploads (admins: any). Optional fields: `selector`, `element_text`, `anchor_kind`.
+
 ### List your uploads
 
 ```sh
