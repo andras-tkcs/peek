@@ -63,6 +63,23 @@ func TestInternalPackageDependencyDirection(t *testing.T) {
 			},
 		},
 		{
+			pkg: "github.com/puemos/peek/internal/groups",
+			forbiddenImport: []string{
+				"github.com/puemos/peek/internal/cli",
+				"github.com/puemos/peek/internal/db",
+				"github.com/puemos/peek/internal/objectstore",
+				"github.com/puemos/peek/internal/server",
+				"github.com/puemos/peek/internal/uploads",
+				"github.com/puemos/peek/internal/web",
+			},
+		},
+		{
+			pkg: "github.com/puemos/peek/internal/server",
+			forbiddenImport: []string{
+				"github.com/puemos/peek/internal/groups",
+			},
+		},
+		{
 			pkg: "github.com/puemos/peek/internal/objectstore",
 			forbiddenImport: []string{
 				"github.com/puemos/peek/internal/db",
