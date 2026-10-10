@@ -15,6 +15,8 @@ The product has two surfaces:
 | Web dashboard | Upload HTML, manage links, inspect stats, invite users, configure auth, tune limits, and change storage settings. |
 | CLI | Upload from local scripts, CI, or agents; list uploads; read comments; export an upload; create automation tokens. |
 
+Pages can be public, password-gated, private to signed-in users, or restricted to named users and Google groups with `peek grant`. Uploading again with `--slug` adds a version served at `/p/<slug>/v/<n>`, with comments kept per version.
+
 Uploaded pages render in a sandboxed iframe. Reviewers can leave page comments, text-selection comments, or element-pinned comments without giving the uploaded HTML access to Peek sessions.
 
 ## First Useful Setup

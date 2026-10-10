@@ -23,6 +23,9 @@ kicker: peekd reference
 | `--s3-access-key` | `PEEK_S3_ACCESS_KEY` | empty | S3 access key ID. |
 | `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | empty | S3 secret access key. |
 | `--s3-allow-private-endpoint` | `PEEK_S3_ALLOW_PRIVATE_ENDPOINT` | `false` | Allows HTTP/private/link-local endpoints for controlled private deployments. |
+| `--google-sa-key-file` | `PEEK_GOOGLE_SA_KEY_FILE` | empty | Path to a Google service account JSON key with domain-wide delegation, for Google group grants. Requires `--google-admin-email`. |
+| `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | empty | Workspace admin user the service account impersonates. Requires `--google-sa-key-file`. |
+| `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | How long group membership answers are cached. Between `1s` and `1h`. |
 | `--oidc-allow-private-issuer` | `PEEK_OIDC_ALLOW_PRIVATE_ISSUER` | `false` | Allows HTTP/private OIDC issuers for local SSO testing. |
 
 `PEEK_LOG_LEVEL` accepts `debug`, `info`, or `warn`. Any other value falls back to info.
@@ -74,6 +77,34 @@ peek login --token-stdin
 peek login --token-file <path>
 peek login --token <value>
 ```
+
+## CLI Commands
+
+```text
+peek upload <file.html> [--visibility public|password|private|restricted] [--password <pw> | --password-stdin] [--name <filename>]
+peek upload <file.html> --slug <slug>
+peek visibility <slug> public|private|password|restricted [--password <pw> | --password-stdin]
+peek grant <slug> <email> [--group]
+peek revoke <slug> <email> [--group]
+peek grants <slug>
+peek versions <slug>
+peek comments <slug> [--version <n>]
+```
+
+`--slug` uploads a new version of an existing page you own (admins can target any page). It cannot be combined with `--visibility`, `--password`, `--password-stdin` or `--name`. `grant` and `revoke` take a user email by default and a Google group email with `--group`; group grants need the `PEEK_GOOGLE_*` server settings. `grants` lists a page's grants. `versions` lists a page's versions with size, time and URL. `comments` shows the latest version's comments unless `--version` is given.
+
+## Page And API Routes
+
+| Route | Purpose |
+| --- | --- |
+| `/p/<slug>` | Latest version of a page. |
+| `/p/<slug>/v/<n>` | Version `n` of a page, with a banner when it is not the latest. |
+| `POST /api/upload` | Upload a page. Add `slug=<slug>` (form field, or query parameter for raw HTML) to add a version. |
+| `GET /api/uploads/<slug>/versions` | List versions (owner or admin). |
+| `GET /api/uploads/<slug>/grants` | List grants (owner or admin). |
+| `POST /api/uploads/<slug>/grants` | Add a grant. JSON body `{"kind":"user\|group","email":"..."}`. |
+| `DELETE /api/uploads/<slug>/grants` | Remove a grant. Same JSON body. |
+| `GET /api/uploads/<slug>/comments?v=<n>` | Comments for version `n`; defaults to the latest. |
 
 ## Operational Endpoints
 

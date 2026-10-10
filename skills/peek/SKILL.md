@@ -102,11 +102,40 @@ echo '<!doctype html><html><body><h1>Hello</h1></body></html>' | \
   --data-binary @- "$PEEK_HOST/api/upload?filename=preview.html&visibility=public" | jq -r .url
 ```
 
+### Restrict a page to named people
+
+```sh
+peek upload page.html --visibility restricted
+peek grant <slug> alice@example.com          # one user
+peek grant <slug> team@example.com --group   # a Google group
+peek grants <slug>                           # list grants
+peek revoke <slug> alice@example.com         # remove (add --group for groups)
+```
+
+Restricted pages admit only the owner, admins, and signed-in viewers matching a
+grant. Group grants need Google group lookup configured on the server. You can
+also switch an existing page with `peek visibility <slug> restricted`.
+
+### Upload a new version of a page
+
+```sh
+peek upload page.html --slug <slug>
+peek versions <slug>
+```
+
+The link stays the same and serves the latest version; `/p/<slug>/v/<n>` serves
+version `n`. `--slug` cannot be combined with `--visibility`, `--password` or
+`--name`.
+
 ### Read the comments on a page
 
 ```sh
 peek comments <slug>
+peek comments <slug> --version <n>
 ```
+
+Comments belong to the version they were written on; the latest version is
+shown unless `--version` is given.
 
 Prints every comment with its author, the on-page element/text it's anchored to,
 and the body. You can only read comments for **your own** uploads.

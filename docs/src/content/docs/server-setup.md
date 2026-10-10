@@ -54,6 +54,23 @@ Use `https://` for production `--base-url`. Peek uses the base URL for generated
 
 Horizontal scaling is not the default model. Peek stores mutable state in SQLite plus uploaded objects, so replication should be an explicit architecture project rather than a process-manager setting.
 
+## Google Group Grants
+
+To let page owners grant access to Google Workspace groups, give `peekd` a service account with domain-wide delegation:
+
+1. Create a service account in a Google Cloud project, enable the Admin SDK API, and download a JSON key.
+2. In the Workspace admin console, under domain-wide delegation, authorize the service account's client ID for the scope `https://www.googleapis.com/auth/admin.directory.group.member.readonly`.
+3. Start `peekd` with the key file and a Workspace admin user to impersonate:
+
+```sh
+PEEK_GOOGLE_SA_KEY_FILE=/etc/peek/google-sa.json \
+PEEK_GOOGLE_ADMIN_EMAIL=admin@example.com \
+PEEK_GOOGLE_GROUP_CACHE_TTL=5m \
+peekd --data /var/lib/peek --base-url https://peek.example.com
+```
+
+The key file and admin email must be set together. The cache TTL defaults to `5m`. The key file is not part of the SQLite backup; back it up and rotate it separately.
+
 ## Docker
 
 Run the published image with a persistent `/data` volume:

@@ -12,6 +12,7 @@ Peek is an internal company tool, not a SaaS product. Architecture choices shoul
 - `cmd/peek` is only the CLI executable entrypoint. CLI commands, formatting, config files, and HTTP client behavior live in `internal/cli`.
 - `internal/peekd` owns daemon process concerns: flag and environment parsing, structured logging setup, graceful shutdown, healthcheck command behavior, and SQLite backup command behavior.
 - `internal/server` owns HTTP routing, request authentication, handler orchestration, browser workflows, API responses, comments, analytics, metrics, OAuth flow coordination, setup bootstrap, and runtime settings.
+- `internal/groups` owns Google Workspace group membership lookups through the Admin SDK Directory API and their in-memory cache; it knows nothing about uploads or HTTP routing.
 - `internal/uploads` owns upload creation behavior: HTML sniffing, bcrypt password limit enforcement for upload passwords, slug generation, object-store writes, database insert coordination, domain-level quota errors, and storage cleanup after failed persistence. It returns upload error kinds, not HTTP status codes.
 - `internal/uploadquota` owns the transport- and database-neutral upload quota contract shared by the upload service, HTTP server, and SQLite store.
 - `internal/db` owns SQLite schema, migrations, persistence rules, transactional constraints, and database-level invariants such as quota checks and last-admin protection.
@@ -22,7 +23,7 @@ Peek is an internal company tool, not a SaaS product. Architecture choices shoul
 
 ## Dependency Direction
 
-The intended direction is executable packages to internal orchestration packages, orchestration packages to domain/runtime packages, and concrete infrastructure hidden behind small interfaces. `internal/server` may depend on `internal/uploads`, `internal/uploadquota`, `internal/db`, `internal/objectstore`, `internal/models`, and `internal/web`; `internal/uploads` may depend on `internal/uploadquota` and `internal/objectstore` but not `internal/db` or `net/http`; `internal/db` may depend on `internal/uploadquota`; `internal/objectstore` must not depend on `internal/server`; `internal/db` must not depend on HTTP, CLI, or template packages.
+The intended direction is executable packages to internal orchestration packages, orchestration packages to domain/runtime packages, and concrete infrastructure hidden behind small interfaces. `internal/server` may depend on `internal/uploads`, `internal/uploadquota`, `internal/db`, `internal/objectstore`, `internal/models`, and `internal/web`; `internal/uploads` may depend on `internal/uploadquota` and `internal/objectstore` but not `internal/db` or `net/http`; `internal/db` may depend on `internal/uploadquota`; `internal/objectstore` must not depend on `internal/server`; `internal/db` must not depend on HTTP, CLI, or template packages. `internal/peekd` builds `internal/groups` and passes it to `internal/server` through the `server.GroupChecker` interface; `internal/server` must not import `internal/groups`.
 
 ## Rendering
 
@@ -30,7 +31,7 @@ Server-side rendering goes through `internal/web.Renderer` and `.gohtml` templat
 
 ## Storage
 
-Uploads are created through `internal/uploads.Service`, which coordinates HTML validation, password hashing, slug generation, object storage writes, and database inserts through a narrow upload repository interface. `internal/objectstore.Storage` is intentionally small: `Save`, `Open`, and `Delete`. S3 endpoint validation lives with S3 transport code, while the server remains responsible for decrypting secret settings before passing them into the storage package.
+Uploads are created through `internal/uploads.Service`, which coordinates HTML validation, password hashing, slug generation, object storage writes, and database inserts through a narrow upload repository interface. `internal/objectstore.Storage` is intentionally small: `Save`, `Open`, and `Delete`. S3 endpoint validation lives with S3 transport code, while the server remains responsible for decrypting secret settings before passing them into the storage package. Each page has one object per version: version 1 is keyed `<slug>`, later versions `versions/<slug>/<hex>`.
 
 ## Quality Gates
 
