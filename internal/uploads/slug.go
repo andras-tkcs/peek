@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -100,4 +101,12 @@ func randID(nBytes int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func versionObjectKey(slug string) (string, error) {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "versions/" + slug + "/" + hex.EncodeToString(b), nil
 }

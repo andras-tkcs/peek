@@ -3,6 +3,7 @@ package uploads
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -21,6 +22,7 @@ type Service struct {
 type Repository interface {
 	UploadSlugExists(ctx context.Context, slug string) (bool, error)
 	CreateUploadChecked(ctx context.Context, slug string, ownerAccountID, ownerTokenID int64, name string, size int64, visibility, passwordHash string, limits uploadquota.Limits) error
+	CreateVersionChecked(ctx context.Context, uploadID int64, objectKey string, size int64, actorAccountID int64, limits uploadquota.Limits) (int, error)
 }
 
 type CreateInput struct {
@@ -39,6 +41,23 @@ type CreateResult struct {
 	Name       string
 	Size       int
 	Visibility string
+	Version    int
+}
+
+type AddVersionInput struct {
+	UploadID       int64
+	Slug           string
+	ActorAccountID int64
+	Data           []byte
+	Limits         uploadquota.Limits
+}
+
+type AddVersionResult struct {
+	Slug       string
+	URL        string // BaseURL + "/p/" + slug
+	VersionURL string // BaseURL + "/p/" + slug + "/v/" + version
+	Version    int
+	Size       int
 }
 
 type ErrorKind string
@@ -148,6 +167,39 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 		Name:       in.Name,
 		Size:       len(in.Data),
 		Visibility: in.Visibility,
+		Version:    1,
+	}, nil
+}
+
+func (svc Service) AddVersion(ctx context.Context, in AddVersionInput) (*AddVersionResult, error) {
+	if len(in.Data) == 0 {
+		return nil, newError(KindEmptyFile, "empty file")
+	}
+	if !looksLikeHTML(in.Data) {
+		return nil, newError(KindInvalidHTML, "file does not look like HTML")
+	}
+	key, err := versionObjectKey(in.Slug)
+	if err != nil {
+		return nil, newError(KindStorageWrite, "storage failed")
+	}
+	if err := svc.Storage.Save(ctx, key, in.Data); err != nil {
+		return nil, newError(KindStorageWrite, "storage failed")
+	}
+	version, err := svc.Repository.CreateVersionChecked(ctx, in.UploadID, key, int64(len(in.Data)), in.ActorAccountID, in.Limits)
+	if err != nil {
+		uploadErr := storeError(err)
+		if cleanupErr := svc.Storage.Delete(ctx, key); cleanupErr != nil {
+			return nil, errors.Join(uploadErr, &CleanupError{Slug: key, Err: cleanupErr})
+		}
+		return nil, uploadErr
+	}
+	url := svc.BaseURL + "/p/" + in.Slug
+	return &AddVersionResult{
+		Slug:       in.Slug,
+		URL:        url,
+		VersionURL: url + "/v/" + strconv.Itoa(version),
+		Version:    version,
+		Size:       len(in.Data),
 	}, nil
 }
 

@@ -18,6 +18,8 @@ type uploadResp struct {
 	Slug       string `json:"slug"`
 	URL        string `json:"url"`
 	Visibility string `json:"visibility"`
+	Version    int    `json:"version"`
+	VersionURL string `json:"version_url"`
 }
 
 type uploadBodyKind int
@@ -48,6 +50,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		name       string
 		visibility string
 		password   string
+		slug       string
 	)
 
 	if bodyKind == uploadBodyMultipart {
@@ -57,6 +60,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		visibility = strings.TrimSpace(r.FormValue("visibility"))
 		password = strings.TrimSpace(r.FormValue("password"))
+		slug = strings.TrimSpace(r.FormValue("slug"))
 		file, header, err := r.FormFile("file")
 		if err != nil {
 			jsonError(w, http.StatusBadRequest, "missing 'file'")
@@ -75,6 +79,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusBadRequest, "password visibility requires multipart upload")
 			return
 		}
+		slug = strings.TrimSpace(r.URL.Query().Get("slug"))
 		name = r.URL.Query().Get("filename")
 		if name == "" {
 			name = "page"
@@ -85,6 +90,11 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusRequestEntityTooLarge, "file too large")
 			return
 		}
+	}
+
+	if slug != "" {
+		s.handleUploadVersion(w, r, owner, slug, visibility, password, data)
+		return
 	}
 
 	up, err := s.uploadService().Create(r.Context(), uploads.CreateInput{
@@ -104,7 +114,38 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditRequest(r, owner.Name, "upload.create", "slug="+up.Slug+" name="+up.Name+" size="+strconv.Itoa(up.Size))
 
-	jsonOK(w, uploadResp{Slug: up.Slug, URL: up.URL, Visibility: up.Visibility})
+	jsonOK(w, uploadResp{Slug: up.Slug, URL: up.URL, Visibility: up.Visibility, Version: up.Version, VersionURL: up.URL + "/v/" + strconv.Itoa(up.Version)})
+}
+
+func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, owner *models.Token, slug, visibility, password string, data []byte) {
+	if visibility != "" || password != "" {
+		jsonError(w, http.StatusBadRequest, "visibility and password cannot be set when uploading a new version; use the visibility endpoint")
+		return
+	}
+	u, err := s.store.GetUpload(r.Context(), slug)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if u.OwnerAccountID != owner.AccountID && !owner.IsAdmin {
+		jsonError(w, http.StatusForbidden, "not owner")
+		return
+	}
+	res, err := s.uploadService().AddVersion(r.Context(), uploads.AddVersionInput{
+		UploadID:       u.ID,
+		Slug:           slug,
+		ActorAccountID: owner.AccountID,
+		Data:           data,
+		Limits:         s.uploadLimits(r.Context()),
+	})
+	if err != nil {
+		logUploadError(err)
+		status, msg := uploadHTTPError(err)
+		jsonError(w, status, msg)
+		return
+	}
+	s.auditRequest(r, owner.Name, "upload.version.create", "slug="+slug+" version="+strconv.Itoa(res.Version)+" size="+strconv.Itoa(res.Size))
+	jsonOK(w, uploadResp{Slug: slug, URL: res.URL, Visibility: u.Visibility, Version: res.Version, VersionURL: res.VersionURL})
 }
 
 func uploadBodyKindFromContentType(contentType string) (uploadBodyKind, bool) {
@@ -148,6 +189,7 @@ func (s *Server) handleListUploads(w http.ResponseWriter, r *http.Request) {
 		Visibility string `json:"visibility"`
 		URL        string `json:"url"`
 		CreatedAt  int64  `json:"created_at"`
+		Version    int    `json:"version"`
 	}
 	out := make([]item, 0, len(list))
 	for _, u := range list {
@@ -155,6 +197,7 @@ func (s *Server) handleListUploads(w http.ResponseWriter, r *http.Request) {
 			Slug: u.Slug, Name: u.Name, Owner: u.OwnerName,
 			Size: u.Size, Visibility: u.Visibility,
 			URL: s.baseURL + "/p/" + u.Slug, CreatedAt: u.CreatedAt.Unix(),
+			Version: u.LatestVersion,
 		})
 	}
 	jsonOK(w, out)
