@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/puemos/peek/internal/models"
 	"github.com/puemos/peek/internal/uploadquota"
 
 	_ "modernc.org/sqlite"
@@ -170,13 +171,13 @@ func TestAddListComments(t *testing.T) {
 		t.Fatalf("create upload: %v", err)
 	}
 	up, _ := s.GetUpload(context.Background(), "slug2")
-	if err := s.AddComment(context.Background(), up.ID, "#id", "text", "text", "Alice", "cookie-a", "comment body"); err != nil {
+	if err := s.AddComment(context.Background(), up.ID, 1, "#id", "text", "text", "Alice", "cookie-a", "comment body"); err != nil {
 		t.Fatalf("add comment: %v", err)
 	}
-	if err := s.AddComment(context.Background(), up.ID, "#id2", "text2", "element", "Bob", "cookie-b", "second"); err != nil {
+	if err := s.AddComment(context.Background(), up.ID, 1, "#id2", "text2", "element", "Bob", "cookie-b", "second"); err != nil {
 		t.Fatalf("add comment: %v", err)
 	}
-	comments, err := s.ListComments(context.Background(), up.ID)
+	comments, err := s.ListComments(context.Background(), up.ID, 0)
 	if err != nil {
 		t.Fatalf("list comments: %v", err)
 	}
@@ -365,7 +366,7 @@ INSERT INTO comments(upload_id,element_selector,element_text,author_name,author_
 	if up.OwnerAccountID != tok.AccountID || up.OwnerTokenID != tok.ID {
 		t.Fatalf("upload ownership not migrated: upload=%+v token=%+v", up, tok)
 	}
-	comments, err := store.ListComments(context.Background(), up.ID)
+	comments, err := store.ListComments(context.Background(), up.ID, 0)
 	if err != nil {
 		t.Fatalf("list migrated comments: %v", err)
 	}
@@ -612,5 +613,69 @@ func TestDeleteTokenCheckedPreservesLastAdminAndAllowsExpiredDelete(t *testing.T
 	}
 	if _, err := s.DeleteTokenChecked(context.Background(), admin.ID); err != nil {
 		t.Fatalf("delete expired admin token with another admin present: %v", err)
+	}
+}
+
+func seedVersionTestUpload(t *testing.T, s *Store, slug string) *models.Upload {
+	t.Helper()
+	ctx := context.Background()
+	if err := s.CreateToken(ctx, "owner-"+slug, "owner", false, 0); err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	tok, err := s.GetToken(ctx, "owner-"+slug)
+	if err != nil {
+		t.Fatalf("get token: %v", err)
+	}
+	if err := s.CreateUploadChecked(ctx, slug, tok.AccountID, tok.ID, "page.html", 1, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatalf("create upload: %v", err)
+	}
+	up, err := s.GetUpload(ctx, slug)
+	if err != nil {
+		t.Fatalf("get upload: %v", err)
+	}
+	return up
+}
+
+func TestListCommentsFiltersByVersion(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	up := seedVersionTestUpload(t, s, "verc")
+	if err := s.AddComment(ctx, up.ID, 1, "#a", "a", "text", "Alice", "ca", "on v1"); err != nil {
+		t.Fatalf("add v1 comment: %v", err)
+	}
+	if err := s.AddComment(ctx, up.ID, 2, "#b", "b", "text", "Bob", "cb", "on v2"); err != nil {
+		t.Fatalf("add v2 comment: %v", err)
+	}
+	all, err := s.ListComments(ctx, up.ID, 0)
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("version 0 returned %d comments, want 2", len(all))
+	}
+	v2, err := s.ListComments(ctx, up.ID, 2)
+	if err != nil {
+		t.Fatalf("list v2: %v", err)
+	}
+	if len(v2) != 1 || v2[0].Body != "on v2" || v2[0].Version != 2 {
+		t.Fatalf("version 2 comments = %+v", v2)
+	}
+}
+
+func TestRecordVisitStoresVersion(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	up := seedVersionTestUpload(t, s, "verv")
+	if err := s.RecordVisit(ctx, up.ID, 3, "cookie", "Alice", "iphash", "ua"); err != nil {
+		t.Fatalf("record visit: %v", err)
+	}
+	visits, err := s.RecentVisits(ctx, up.ID, 10)
+	if err != nil {
+		t.Fatalf("recent visits: %v", err)
+	}
+	if len(visits) != 1 || visits[0].Version != 3 {
+		t.Fatalf("visits = %+v, want one with Version 3", visits)
 	}
 }

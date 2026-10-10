@@ -98,7 +98,7 @@ func TestDisabledTokenCannotReadOwnedComments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get upload: %v", err)
 	}
-	if err := store.AddComment(context.Background(), upload.ID, "", "", "page", "Ada", "visitor", "Looks good"); err != nil {
+	if err := store.AddComment(context.Background(), upload.ID, 1, "", "", "page", "Ada", "visitor", "Looks good"); err != nil {
 		t.Fatalf("seed comment: %v", err)
 	}
 	if err := store.SetAccountDisabled(context.Background(), owner.AccountID, true); err != nil {
