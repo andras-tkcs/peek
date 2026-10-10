@@ -68,6 +68,24 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+	if u.Visibility == models.UploadVisibilityRestricted && !s.viewerCanAccessUpload(r, u) {
+		a, ok := s.webAuth(r)
+		if !ok {
+			s.setNextPath(w, pagePath)
+			if _, err := r.Cookie(sessionCookie); err == nil {
+				s.clearCookie(w, sessionCookie, "/")
+			}
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		who := a.Email
+		if who == "" {
+			who = a.Name
+		}
+		s.auditRequest(r, who, "page.access.denied", "slug="+slug)
+		s.renderWebError(w, http.StatusForbidden, "Access denied", "You are signed in as "+who+", which has not been given access to this page. Ask the page owner to share it with you.")
+		return
+	}
 	if u.Visibility == models.UploadVisibilityPassword {
 		s.setPageAuthCookie(w, slug)
 	}

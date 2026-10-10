@@ -96,6 +96,30 @@ func TestUploadVisibilityE2E(t *testing.T) {
 	})
 }
 
+func TestRestrictedVisibilityE2E(t *testing.T) {
+	app := newTestApp(t)
+	app.client = noRedirectClient()
+	up := uploadRawHTML(t, app, "restricted-page", "restricted")
+
+	anon := app.request(t, http.MethodGet, "/p/"+up.Slug, nil)
+	assertStatus(t, anon, http.StatusSeeOther)
+	if got := anon.Header.Get("Location"); got != "/login" {
+		t.Fatalf("anonymous redirect = %q", got)
+	}
+	nextCookie := findCookie(anon.Cookies, "hn_next")
+	if nextCookie == nil {
+		t.Fatalf("anonymous redirect did not set next cookie: %+v", anon.Cookies)
+	}
+
+	adminSession := loginWithToken(t, app, app.AdminToken, nextCookie)
+	page := app.request(t, http.MethodGet, "/p/"+up.Slug, nil, withCookies(adminSession))
+	assertStatus(t, page, http.StatusOK)
+
+	public := uploadRawHTML(t, app, "to-restrict", "public")
+	resp := app.requestJSON(t, http.MethodPost, "/api/uploads/"+public.Slug+"/visibility", map[string]string{"visibility": "restricted"}, withAuth(app.AdminToken))
+	assertStatus(t, resp, http.StatusOK)
+}
+
 func TestRawHTMLE2ERequiresIssuedViewToken(t *testing.T) {
 	app := newTestApp(t)
 	app.client = noRedirectClient()

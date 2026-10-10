@@ -308,3 +308,44 @@ func TestAddVersionCleansUpObjectOnRepositoryError(t *testing.T) {
 		t.Fatalf("deleted=%+v saved=%+v, want object cleaned up", st.deleted, st.saved)
 	}
 }
+
+func TestCreateAcceptsRestrictedWithoutPassword(t *testing.T) {
+	store, owner := serviceTestStore(t)
+	defer store.Close()
+	svc := Service{Repository: store, Storage: newMemoryStorage(), BaseURL: "http://localhost:7700"}
+	up, err := svc.Create(context.Background(), CreateInput{
+		OwnerAccountID: owner.AccountID,
+		OwnerTokenID:   owner.ID,
+		Name:           "page.html",
+		Visibility:     "restricted",
+		Data:           []byte("<!doctype html><html></html>"),
+	})
+	if err != nil {
+		t.Fatalf("create restricted upload: %v", err)
+	}
+	if up.Visibility != "restricted" {
+		t.Fatalf("result visibility = %q", up.Visibility)
+	}
+	got, err := store.GetUpload(context.Background(), up.Slug)
+	if err != nil || got.Visibility != "restricted" || got.PasswordHash != "" {
+		t.Fatalf("stored upload = %+v, err = %v", got, err)
+	}
+}
+
+func TestCreateRejectsRestrictedWithPassword(t *testing.T) {
+	store, owner := serviceTestStore(t)
+	defer store.Close()
+	svc := Service{Repository: store, Storage: newMemoryStorage(), BaseURL: "http://localhost:7700"}
+	_, err := svc.Create(context.Background(), CreateInput{
+		OwnerAccountID: owner.AccountID,
+		OwnerTokenID:   owner.ID,
+		Name:           "page.html",
+		Visibility:     "restricted",
+		Password:       "secret",
+		Data:           []byte("<!doctype html><html></html>"),
+	})
+	var uploadErr *Error
+	if !errors.As(err, &uploadErr) || uploadErr.Kind != KindPasswordNotAllowed {
+		t.Fatalf("error = %T %[1]v, want %q", err, KindPasswordNotAllowed)
+	}
+}

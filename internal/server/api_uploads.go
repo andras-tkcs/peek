@@ -254,7 +254,7 @@ func (s *Server) handleSetVisibility(w http.ResponseWriter, r *http.Request) {
 	password := strings.TrimSpace(body.Password)
 	hash := ""
 	switch visibility {
-	case models.UploadVisibilityPublic, models.UploadVisibilityPrivate:
+	case models.UploadVisibilityPublic, models.UploadVisibilityPrivate, models.UploadVisibilityRestricted:
 		if password != "" {
 			jsonError(w, http.StatusBadRequest, "password is only allowed with password visibility")
 			return
@@ -275,7 +275,7 @@ func (s *Server) handleSetVisibility(w http.ResponseWriter, r *http.Request) {
 		}
 		hash = string(h)
 	default:
-		jsonError(w, http.StatusBadRequest, "visibility must be public, password, or private")
+		jsonError(w, http.StatusBadRequest, "visibility must be public, password, private, or restricted")
 		return
 	}
 	if err := s.store.SetUploadVisibility(r.Context(), u.ID, visibility, hash); err != nil {
