@@ -146,4 +146,11 @@ CREATE TABLE IF NOT EXISTS upload_grants (
 	UNIQUE(upload_id, kind, email)
 );
 CREATE INDEX IF NOT EXISTS idx_upload_grants_upload ON upload_grants(upload_id);
+
+CREATE TABLE IF NOT EXISTS upload_slug_aliases (
+	slug TEXT PRIMARY KEY,
+	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_upload_slug_aliases_upload ON upload_slug_aliases(upload_id);
 `
