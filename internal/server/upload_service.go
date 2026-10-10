@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/puemos/peek/internal/uploadquota"
-	"github.com/puemos/peek/internal/uploads"
+	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/andras-tkcs/peek/internal/uploads"
 )
 
 func (s *Server) uploadService() uploads.Service {

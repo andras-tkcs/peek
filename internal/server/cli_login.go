@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	webui "github.com/puemos/peek/internal/web"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 const (

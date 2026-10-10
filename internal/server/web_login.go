@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	webui "github.com/puemos/peek/internal/web"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {

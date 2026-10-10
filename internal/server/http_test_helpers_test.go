@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/puemos/peek/internal/server"
+	"github.com/andras-tkcs/peek/internal/server"
 )
 
 type testApp struct {

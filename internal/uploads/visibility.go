@@ -5,7 +5,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 // VisibilityChange is a validated visibility plus the bcrypt hash to store with it

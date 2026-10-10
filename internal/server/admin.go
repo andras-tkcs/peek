@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/puemos/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/db"
 )
 
 const inviteTTL = 7 * 24 * time.Hour

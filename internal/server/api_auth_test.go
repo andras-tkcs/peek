@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/puemos/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/db"
 )
 
 func TestAuthTokenStoresVerifiedAPIToken(t *testing.T) {

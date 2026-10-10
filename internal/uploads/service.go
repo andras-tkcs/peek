@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/puemos/peek/internal/models"
-	"github.com/puemos/peek/internal/objectstore"
-	"github.com/puemos/peek/internal/uploadquota"
+	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/objectstore"
+	"github.com/andras-tkcs/peek/internal/uploadquota"
 )
 
 type Service struct {

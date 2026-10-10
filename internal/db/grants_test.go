@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 func TestAddUploadGrantIsIdempotentAndLowercases(t *testing.T) {

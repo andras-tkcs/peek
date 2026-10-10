@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/puemos/peek/internal/db"
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 func TestSettingKeysAreSorted(t *testing.T) {

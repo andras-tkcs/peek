@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/puemos/peek/internal/db"
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 // newHandlerTestServer builds a full Server through New (file storage under t.TempDir(),

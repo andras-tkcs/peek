@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/puemos/peek/internal/db"
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/models"
 	"golang.org/x/crypto/bcrypt"
 )
 

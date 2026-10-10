@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/puemos/peek/internal/objectstore"
-	webui "github.com/puemos/peek/internal/web"
+	"github.com/andras-tkcs/peek/internal/objectstore"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 type settingsRow = webui.SettingRow

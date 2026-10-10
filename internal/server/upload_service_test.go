@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/puemos/peek/internal/uploads"
+	"github.com/andras-tkcs/peek/internal/uploads"
 )
 
 func TestUploadHTTPErrorMapsDomainKinds(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"net/mail"
 	"strings"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 type grantBody struct {

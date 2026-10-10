@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/puemos/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 // fakeGroups is a GroupChecker keyed by "group|user".

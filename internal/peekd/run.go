@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/puemos/peek/internal/groups"
-	"github.com/puemos/peek/internal/server"
-	"github.com/puemos/peek/internal/version"
+	"github.com/andras-tkcs/peek/internal/groups"
+	"github.com/andras-tkcs/peek/internal/server"
+	"github.com/andras-tkcs/peek/internal/version"
 )
 
 type serveConfig struct {

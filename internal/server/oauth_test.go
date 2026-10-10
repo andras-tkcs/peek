@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/andras-tkcs/peek/internal/db"
+	webui "github.com/andras-tkcs/peek/internal/web"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 	jose "github.com/go-jose/go-jose/v4"
-	"github.com/puemos/peek/internal/db"
-	webui "github.com/puemos/peek/internal/web"
 	"golang.org/x/oauth2"
 )
 

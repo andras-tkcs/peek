@@ -22,8 +22,8 @@ The release ships two binaries:
 Go installs are also supported:
 
 ```sh
-go install github.com/puemos/peek/cmd/peekd@latest
-go install github.com/puemos/peek/cmd/peek@latest
+go install github.com/andras-tkcs/peek/cmd/peekd@latest
+go install github.com/andras-tkcs/peek/cmd/peek@latest
 ```
 
 ## First Run

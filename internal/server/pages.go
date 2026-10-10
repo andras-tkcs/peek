@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/puemos/peek/internal/models"
-	webui "github.com/puemos/peek/internal/web"
+	"github.com/andras-tkcs/peek/internal/models"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {

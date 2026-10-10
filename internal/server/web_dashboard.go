@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/puemos/peek/internal/models"
-	"github.com/puemos/peek/internal/uploads"
-	webui "github.com/puemos/peek/internal/web"
+	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/andras-tkcs/peek/internal/uploads"
+	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
