@@ -142,6 +142,8 @@ peek visibility <slug> password --password newpass   # protect a page
 peek visibility <slug> public                        # remove protection
 ```
 
+Setting a new password revokes every earlier unlock of the page. Owners and admins can also do this, manage grants and rename pages from the dashboard's **Access** row action; `peek rename <slug> <new name>` renames from the CLI (old links redirect).
+
 ### Data export and deletion
 
 ```sh

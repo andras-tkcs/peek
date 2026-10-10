@@ -120,6 +120,7 @@ peek visibility <slug> private         require a Peek account
 peek visibility <slug> password --password <pw>
 peek visibility <slug> password --password-stdin
 peek visibility <slug> restricted      only the owner, admins and grantees
+peek rename <slug> <new name>         rename; old links redirect
 peek grant <slug> <email> [--group]    give a user (or Google group) access
 peek revoke <slug> <email> [--group]   remove a grant
 peek grants <slug>                     list grants on a page
@@ -133,7 +134,7 @@ peek token revoke <id>                 revoke a token by id (admin only)
 peek version                           show version
 ```
 
-Upload visibility is set at creation time with `--visibility public|password|private|restricted`. Password uploads require `--password` or `--password-stdin`; `peek upload <file.html> --password <pw>` is also accepted as shorthand for password visibility. Use `peek visibility <slug> public` to remove the password gate and make the link public again, or `peek visibility <slug> private` to require a Peek account. Restricted pages admit only the owner, admins and signed-in viewers matching a grant (`peek grant`); group grants need the `PEEK_GOOGLE_*` settings below. Re-uploading with `--slug` adds a version: `/p/<slug>` serves the latest and `/p/<slug>/v/<n>` any retained version.
+Upload visibility is set at creation time with `--visibility public|password|private|restricted`. Password uploads require `--password` or `--password-stdin`; `peek upload <file.html> --password <pw>` is also accepted as shorthand for password visibility. Use `peek visibility <slug> public` to remove the password gate and make the link public again, or `peek visibility <slug> private` to require a Peek account. Restricted pages admit only the owner, admins and signed-in viewers matching a grant (`peek grant`); group grants need the `PEEK_GOOGLE_*` settings below. Re-uploading with `--slug` adds a version: `/p/<slug>` serves the latest and `/p/<slug>/v/<n>` any retained version. Setting a new password signs out viewers who unlocked the page with the old one. `peek rename <slug> <new name>` renames a page; its link follows the name and old links redirect. The dashboard's **Access** row action does all of this from the browser.
 
 Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env override for CI, `peek login --token-stdin`, then `peek login --token-file <path>`. The `--token <value>` flag still works where token login is allowed but warns because it leaks into shell history and process lists.
 
@@ -186,7 +187,7 @@ Config saved to `<user-config-dir>/peek/config.json`. Override per-command with 
 | Uploaded HTML harms host | Server never executes HTML, only streams bytes. |
 | Uploaded HTML steals data | Rendered in `<iframe sandbox="allow-scripts">` with opaque origin. |
 | Cross-origin attacks | Parent and iframe communicate only via `postMessage`. |
-| Bypassing password gate | `/raw` requires a short-lived HMAC-signed view token bound to visitor cookie. |
+| Bypassing password gate | `/raw` requires a short-lived HMAC-signed view token bound to visitor cookie. Changing the password revokes earlier unlocks. |
 | Brute force / spam | Per-IP rate limits on login, password gate, and comment posting. |
 | Malicious content | HTML sniffed, binaries rejected, configurable `MaxBytesReader`. |
 | SSRF via S3 | Endpoints must be HTTP(S); private/link-local IPs blocked unless explicitly allowed. |
@@ -219,7 +220,7 @@ Protect `/metrics` at your proxy. Full deployment checklist: [docs/operations.md
 
 ## Web dashboard
 
-A browser dashboard at `/login` lets users upload, list, delete, password-protect, and view stats. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from Settings and optionally restrict human login to one exact email domain. OAuth signups are invite-only: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
+A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, and view stats. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from Settings and optionally restrict human login to one exact email domain. OAuth signups are invite-only: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
 
 OAuth callback URLs:
 ```
