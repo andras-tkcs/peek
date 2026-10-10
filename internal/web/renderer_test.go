@@ -268,6 +268,34 @@ func TestDashboardUploadFormShowsSelectedFileAndDisablesEmptySubmit(t *testing.T
 	}
 }
 
+func TestDashboardRendersAccessDialogPerUpload(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplateDashboard, DashboardData{
+		CSRF:    "csrf",
+		User:    "Admin",
+		Uploads: []DashboardUpload{{Slug: "page", Name: "page.html", Visibility: "password"}},
+	})
+	if err != nil {
+		t.Fatalf("execute dashboard: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{
+		`action="/dashboard/visibility/page"`,
+		`x-data="{ vis: 'password' }"`,
+		`x-ref="visibilityDialog"`,
+		`value="restricted" x-model="vis"`,
+		`autocomplete="new-password"`,
+		`:disabled="vis !== 'password'"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("dashboard access dialog missing %q: %s", want, html)
+		}
+	}
+}
+
 func TestLoginRendersTabsWithMultipleMethods(t *testing.T) {
 	renderer, err := newRenderer(func(name string) string {
 		return "/" + name + "?v=test"
@@ -537,5 +565,58 @@ func TestPageTemplateToolbarCanBeHidden(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Fatalf("page template missing %q", want)
 		}
+	}
+}
+
+func TestDashboardAccessDialogShowsGrantHintWhenNotRestricted(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplateDashboard, DashboardData{
+		CSRF:    "csrf",
+		User:    "Admin",
+		Uploads: []DashboardUpload{{Slug: "page", Visibility: "public"}},
+	})
+	if err != nil {
+		t.Fatalf("execute dashboard: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{
+		"Grants apply once you save Restricted above.",
+		"Only you and admins can open this page until you share it.",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("dashboard missing %q", want)
+		}
+	}
+}
+
+func TestDashboardRendersRenameFormAndSafeDeleteConfirm(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplateDashboard, DashboardData{
+		CSRF:    "csrf",
+		User:    "Admin",
+		Uploads: []DashboardUpload{{Slug: "page", Name: "it's <b>", Visibility: "public"}},
+	})
+	if err != nil {
+		t.Fatalf("execute dashboard: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{
+		`action="/dashboard/rename/page"`,
+		`name="name" value="it&#39;s &lt;b&gt;"`,
+		`data-confirm="Delete it&#39;s &lt;b&gt;? This cannot be undone."`,
+		`x-on:submit="confirm($event, $el.dataset.confirm)"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("dashboard missing %q: %s", want, html)
+		}
+	}
+	if strings.Contains(html, `'Delete it`) {
+		t.Fatalf("dashboard embeds the name in an Alpine string: %s", html)
 	}
 }

@@ -63,6 +63,11 @@ func (s *Store) ListUploadGrants(ctx context.Context, uploadID int64) ([]models.
 	if err != nil {
 		return nil, err
 	}
+	return scanUploadGrants(rows)
+}
+
+// scanUploadGrants reads every grant row and closes rows.
+func scanUploadGrants(rows *sql.Rows) ([]models.UploadGrant, error) {
 	defer rows.Close()
 	var out []models.UploadGrant
 	for rows.Next() {
@@ -77,4 +82,30 @@ func (s *Store) ListUploadGrants(ctx context.Context, uploadID int64) ([]models.
 		out = append(out, g)
 	}
 	return out, rows.Err()
+}
+
+// ListUploadGrantsForUploads returns the grants of several uploads keyed by upload
+// id, each list ordered by kind, then email. Uploads without grants are absent.
+func (s *Store) ListUploadGrantsForUploads(ctx context.Context, uploadIDs []int64) (map[int64][]models.UploadGrant, error) {
+	out := map[int64][]models.UploadGrant{}
+	if len(uploadIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(uploadIDs))
+	for i, id := range uploadIDs {
+		args[i] = id
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(uploadIDs)), ",")
+	rows, err := s.QueryContext(ctx, `SELECT id,upload_id,kind,email,created_by_account_id,created_at FROM upload_grants WHERE upload_id IN (`+placeholders+`) ORDER BY upload_id, kind, email`, args...)
+	if err != nil {
+		return nil, err
+	}
+	grants, err := scanUploadGrants(rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range grants {
+		out[g.UploadID] = append(out[g.UploadID], g)
+	}
+	return out, nil
 }

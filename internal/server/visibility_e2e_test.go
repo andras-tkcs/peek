@@ -69,6 +69,39 @@ func TestUploadVisibilityE2E(t *testing.T) {
 		assertStatus(t, views, http.StatusOK)
 	})
 
+	t.Run("password change revokes earlier unlocks", func(t *testing.T) {
+		up := uploadMultipartHTML(t, app, "rotate-page", "password", "old")
+		setVisibility := func(body string) {
+			t.Helper()
+			resp := app.requestString(t, http.MethodPost, "/api/uploads/"+up.Slug+"/visibility", body, withAuth(app.AdminToken), withContentType("application/json"))
+			assertStatus(t, resp, http.StatusOK)
+		}
+
+		resp := postPagePassword(t, app, up.Slug, "old")
+		assertStatus(t, resp, http.StatusSeeOther)
+		oldCookie := findCookie(resp.Cookies, "hn_auth_"+up.Slug)
+		if oldCookie == nil {
+			t.Fatalf("password response did not set page auth cookie: %+v", resp.Cookies)
+		}
+		addComment(t, app, up.Slug, []*http.Cookie{oldCookie}, http.StatusOK)
+
+		setVisibility(`{"visibility":"password","password":"new"}`)
+		addComment(t, app, up.Slug, []*http.Cookie{oldCookie}, http.StatusUnauthorized)
+
+		assertStatus(t, postPagePassword(t, app, up.Slug, "old"), http.StatusUnauthorized)
+		resp = postPagePassword(t, app, up.Slug, "new")
+		assertStatus(t, resp, http.StatusSeeOther)
+		newCookie := findCookie(resp.Cookies, "hn_auth_"+up.Slug)
+		if newCookie == nil {
+			t.Fatalf("password response did not set page auth cookie: %+v", resp.Cookies)
+		}
+		addComment(t, app, up.Slug, []*http.Cookie{newCookie}, http.StatusOK)
+
+		setVisibility(`{"visibility":"public"}`)
+		setVisibility(`{"visibility":"password","password":"new"}`)
+		addComment(t, app, up.Slug, []*http.Cookie{newCookie}, http.StatusUnauthorized)
+	})
+
 	t.Run("private requires active non-owner account", func(t *testing.T) {
 		up := uploadRawHTML(t, app, "private-page", "private")
 		viewerToken := createAPIToken(t, app, "private-viewer")

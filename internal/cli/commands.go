@@ -28,6 +28,8 @@ func Run(args []string) int {
 		err = cmdDelete(rest)
 	case "visibility":
 		err = cmdVisibility(rest)
+	case "rename":
+		err = cmdRename(rest)
 	case "grant":
 		err = cmdGrant(rest)
 	case "revoke":
@@ -84,6 +86,7 @@ Usage:
   peek visibility <slug> restricted
   peek visibility <slug> password --password <pw>
   peek visibility <slug> password --password-stdin
+  peek rename <slug> <new name>        rename a page; its link follows the name and old links redirect
   peek grant <slug> <email> [--group]  give a user (or Google group) access to a restricted page
   peek revoke <slug> <email> [--group] remove a grant
   peek grants <slug>                   list grants on a page

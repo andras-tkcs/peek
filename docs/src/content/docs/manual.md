@@ -52,8 +52,11 @@ peek grant|revoke <slug> <email> [--group]
 peek grants <slug>
 peek export <slug>
 peek visibility <slug> public|password|private|restricted
+peek rename <slug> <new name>
 peek delete <slug>
 ```
+
+The dashboard's **Access** row action does the same, and manages grants on restricted pages, without the CLI.
 
 Use `peek export <slug>` when you need to hand the review record to an issue, an agent, or an internal audit trail.
 

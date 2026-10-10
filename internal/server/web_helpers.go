@@ -33,6 +33,13 @@ func dashboardFlash(w http.ResponseWriter, r *http.Request, key, msg string) {
 	http.Redirect(w, r, dashboardPath+"?"+q.Encode(), http.StatusSeeOther)
 }
 
+// dashboardFlashManage redirects to the dashboard with a flash and reopens the
+// access dialog of slug.
+func dashboardFlashManage(w http.ResponseWriter, r *http.Request, key, msg, slug string) {
+	q := url.Values{key: {msg}, "manage": {slug}}
+	http.Redirect(w, r, dashboardPath+"?"+q.Encode(), http.StatusSeeOther)
+}
+
 func (s *Server) parseDashboardForm(w http.ResponseWriter, r *http.Request) bool {
 	if err := r.ParseForm(); err != nil {
 		dashboardError(w, r, "invalid session")

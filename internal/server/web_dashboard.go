@@ -44,6 +44,19 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			CreatedHuman: u.CreatedAt.Format("2006-01-02 15:04"),
 		})
 	}
+	ids := make([]int64, 0, len(list))
+	for _, u := range list {
+		ids = append(ids, u.ID)
+	}
+	grantsByUpload, err := s.store.ListUploadGrantsForUploads(r.Context(), ids)
+	if err != nil {
+		slog.Error("dashboard grant list failed", "account_id", owner.ID, "err", err)
+	}
+	for i, u := range list {
+		for _, g := range grantsByUpload[u.ID] {
+			uploads[i].Grants = append(uploads[i].Grants, dashGrant{Kind: g.Kind, Email: g.Email})
+		}
+	}
 	csrf, ok := s.csrfToken(w)
 	if !ok {
 		return
@@ -59,6 +72,9 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		SettingsMeta:  sortedMeta,
 		SettingsPanel: settingsPanel,
 		Uploads:       uploads,
+
+		GroupGrantsEnabled: s.groups != nil,
+		ManageSlug:         r.URL.Query().Get("manage"),
 	}
 	if listErr != nil {
 		dashData_.UploadError = "uploads could not be loaded"
@@ -181,6 +197,47 @@ func (s *Server) handleDashboardDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditRequest(r, owner.Name, "upload.delete", "slug="+slug+" name="+u.Name)
 	dashboardHome(w, r)
+}
+
+func (s *Server) handleDashboardVisibility(w http.ResponseWriter, r *http.Request) {
+	owner, ok := s.webAuth(r)
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	slug := r.PathValue("slug")
+	if !s.parseDashboardForm(w, r) {
+		return
+	}
+	u, err := s.store.GetUpload(r.Context(), slug)
+	if err != nil {
+		dashboardError(w, r, "not found")
+		return
+	}
+	if u.OwnerAccountID != owner.ID && !owner.IsAdmin {
+		dashboardError(w, r, "not owner")
+		return
+	}
+	change, err := uploads.PrepareVisibility(r.FormValue("visibility"), r.FormValue("password"))
+	if err != nil {
+		dashboardError(w, r, uploadErrorMessage(err))
+		return
+	}
+	if err := s.store.SetUploadVisibility(r.Context(), u.ID, change.Visibility, change.PasswordHash); err != nil {
+		slog.Error("dashboard visibility update failed", "slug", slug, "err", err)
+		dashboardError(w, r, "visibility update failed")
+		return
+	}
+	s.auditRequest(r, owner.Name, "upload.visibility.set", visibilityAuditDetail(slug, change.Visibility))
+	if change.Visibility == models.UploadVisibilityPassword {
+		dashboardOK(w, r, "Password updated for /p/"+slug)
+		return
+	}
+	if change.Visibility == models.UploadVisibilityRestricted {
+		dashboardFlashManage(w, r, "ok", "/p/"+slug+" is now restricted", slug)
+		return
+	}
+	dashboardOK(w, r, "/p/"+slug+" is now "+change.Visibility)
 }
 
 func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {

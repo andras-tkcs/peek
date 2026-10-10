@@ -115,6 +115,7 @@ peek revoke <slug> alice@example.com         # remove (add --group for groups)
 Restricted pages admit only the owner, admins, and signed-in viewers matching a
 grant. Group grants need Google group lookup configured on the server. You can
 also switch an existing page with `peek visibility <slug> restricted`.
+Owners can manage grants in the dashboard's **Access** dialog, and rename a page with `peek rename <slug> <new name>` (old links redirect).
 
 ### Upload a new version of a page
 

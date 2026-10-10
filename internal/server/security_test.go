@@ -117,3 +117,17 @@ func TestEncryptRequires32ByteKey(t *testing.T) {
 		t.Fatalf("expected error for short key")
 	}
 }
+
+func TestPageAuthCookieBoundToPasswordHash(t *testing.T) {
+	secret := strings.Repeat("0", 64)
+	v := makePageAuthCookieValue(secret, "page", "hashA", time.Hour)
+	if !verifyPageAuthCookie(secret, v, "page", "hashA") {
+		t.Fatal("cookie should verify for the same slug and password hash")
+	}
+	if verifyPageAuthCookie(secret, v, "page", "hashB") {
+		t.Fatal("cookie must not verify after the password hash changes")
+	}
+	if verifyPageAuthCookie(secret, v, "other", "hashA") {
+		t.Fatal("cookie must not verify for another slug")
+	}
+}

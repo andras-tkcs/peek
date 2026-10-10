@@ -279,7 +279,7 @@ func (s *Server) viewerCanAccessUpload(r *http.Request, u *models.Upload) bool {
 		if err != nil {
 			return false
 		}
-		return verifySessionCookie(s.secret, c.Value, u.Slug)
+		return verifyPageAuthCookie(s.secret, c.Value, u.Slug, u.PasswordHash)
 	case models.UploadVisibilityPrivate:
 		_, ok := s.webAuth(r)
 		return ok

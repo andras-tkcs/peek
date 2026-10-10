@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -171,5 +172,36 @@ func cmdVisibility(args []string) error {
 		return err
 	}
 	fmt.Printf("visibility: %s\n", out.Visibility)
+	return nil
+}
+
+func cmdRename(args []string) error {
+	if len(args) < 2 {
+		return fmt.Errorf("usage: peek rename <slug> <new name>")
+	}
+	slug := args[0]
+	name := strings.TrimSpace(strings.Join(args[1:], " "))
+	if name == "" {
+		return fmt.Errorf("usage: peek rename <slug> <new name>")
+	}
+	cfg, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+	c, err := newClient(cfg)
+	if err != nil {
+		return err
+	}
+	var out struct {
+		Slug string `json:"slug"`
+		URL  string `json:"url"`
+		Name string `json:"name"`
+	}
+	if err := c.postJSON("/api/uploads/"+url.PathEscape(slug)+"/name", map[string]any{"name": name}, &out); err != nil {
+		return err
+	}
+	fmt.Printf("slug: %s\n", out.Slug)
+	fmt.Printf("url: %s\n", out.URL)
+	fmt.Printf("name: %s\n", out.Name)
 	return nil
 }

@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/puemos/peek/internal/models"
 	"github.com/puemos/peek/internal/uploads"
 )
@@ -124,6 +122,10 @@ func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, own
 	}
 	u, err := s.store.GetUpload(r.Context(), slug)
 	if err != nil {
+		if cur, aerr := s.store.ResolveSlugAlias(r.Context(), slug); aerr == nil {
+			jsonError(w, http.StatusNotFound, "page was renamed; use slug "+cur)
+			return
+		}
 		jsonError(w, http.StatusNotFound, "not found")
 		return
 	}
@@ -250,40 +252,26 @@ func (s *Server) handleSetVisibility(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	visibility := strings.TrimSpace(body.Visibility)
-	password := strings.TrimSpace(body.Password)
-	hash := ""
-	switch visibility {
-	case models.UploadVisibilityPublic, models.UploadVisibilityPrivate, models.UploadVisibilityRestricted:
-		if password != "" {
-			jsonError(w, http.StatusBadRequest, "password is only allowed with password visibility")
-			return
-		}
-	case models.UploadVisibilityPassword:
-		if password == "" {
-			jsonError(w, http.StatusBadRequest, "password visibility requires a password")
-			return
-		}
-		if !uploads.ValidatePasswordLength(body.Password) {
-			jsonError(w, http.StatusBadRequest, "password must be 72 characters or fewer")
-			return
-		}
-		h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			jsonError(w, http.StatusInternalServerError, "hash failed")
-			return
-		}
-		hash = string(h)
-	default:
-		jsonError(w, http.StatusBadRequest, "visibility must be public, password, private, or restricted")
+	change, err := uploads.PrepareVisibility(body.Visibility, body.Password)
+	if err != nil {
+		status, msg := uploadHTTPError(err)
+		jsonError(w, status, msg)
 		return
 	}
-	if err := s.store.SetUploadVisibility(r.Context(), u.ID, visibility, hash); err != nil {
+	if err := s.store.SetUploadVisibility(r.Context(), u.ID, change.Visibility, change.PasswordHash); err != nil {
 		jsonError(w, http.StatusInternalServerError, "db failed")
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.visibility.set", "slug="+slug+" visibility="+visibility)
-	jsonOK(w, map[string]any{"visibility": visibility})
+	s.auditRequest(r, owner.Name, "upload.visibility.set", visibilityAuditDetail(slug, change.Visibility))
+	jsonOK(w, map[string]any{"visibility": change.Visibility})
+}
+
+func visibilityAuditDetail(slug, visibility string) string {
+	detail := "slug=" + slug + " visibility=" + visibility
+	if visibility == models.UploadVisibilityPassword {
+		detail += " password=updated"
+	}
+	return detail
 }
 
 func (s *Server) handleDeleteAllByOwner(w http.ResponseWriter, r *http.Request) {

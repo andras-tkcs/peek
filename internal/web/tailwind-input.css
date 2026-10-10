@@ -102,6 +102,24 @@
   color: hsl(142 72% 36%);
 }
 
+.peek-visibility-dialog {
+  margin: auto;
+  width: min(400px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  box-shadow: 0 16px 48px hsl(0 0% 0% / 0.18);
+  white-space: normal;
+}
+
+.peek-visibility-dialog::backdrop {
+  background: hsl(0 0% 0% / 0.35);
+}
+
 .peek-link-copy-button {
   display: inline-flex;
   align-items: center;
