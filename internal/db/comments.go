@@ -7,10 +7,22 @@ import (
 	"github.com/puemos/peek/internal/models"
 )
 
-func (s *Store) AddComment(ctx context.Context, uploadID int64, selector, text, anchorKind, author, cookie, body string) error {
-	_, err := s.ExecContext(ctx, `INSERT INTO comments(upload_id,element_selector,element_text,anchor_kind,author_name,author_cookie,body,created_at)
-		VALUES(?,?,?,?,?,?,?,?)`, uploadID, selector, text, anchorKind, author, cookie, body, time.Now().Unix())
-	return err
+func (s *Store) AddComment(ctx context.Context, uploadID int64, selector, text, anchorKind, author, cookie, body string) (models.Comment, error) {
+	now := time.Now()
+	res, err := s.ExecContext(ctx, `INSERT INTO comments(upload_id,element_selector,element_text,anchor_kind,author_name,author_cookie,body,created_at)
+		VALUES(?,?,?,?,?,?,?,?)`, uploadID, selector, text, anchorKind, author, cookie, body, now.Unix())
+	if err != nil {
+		return models.Comment{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return models.Comment{}, err
+	}
+	return models.Comment{
+		ID: id, UploadID: uploadID, ElementSelector: selector, ElementText: text,
+		AnchorKind: anchorKind, AuthorName: author, AuthorCookie: cookie, Body: body,
+		CreatedAt: time.Unix(now.Unix(), 0),
+	}, nil
 }
 
 func (s *Store) ListComments(ctx context.Context, uploadID int64) ([]models.Comment, error) {

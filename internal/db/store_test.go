@@ -170,10 +170,10 @@ func TestAddListComments(t *testing.T) {
 		t.Fatalf("create upload: %v", err)
 	}
 	up, _ := s.GetUpload(context.Background(), "slug2")
-	if err := s.AddComment(context.Background(), up.ID, "#id", "text", "text", "Alice", "cookie-a", "comment body"); err != nil {
+	if _, err := s.AddComment(context.Background(), up.ID, "#id", "text", "text", "Alice", "cookie-a", "comment body"); err != nil {
 		t.Fatalf("add comment: %v", err)
 	}
-	if err := s.AddComment(context.Background(), up.ID, "#id2", "text2", "element", "Bob", "cookie-b", "second"); err != nil {
+	if _, err := s.AddComment(context.Background(), up.ID, "#id2", "text2", "element", "Bob", "cookie-b", "second"); err != nil {
 		t.Fatalf("add comment: %v", err)
 	}
 	comments, err := s.ListComments(context.Background(), up.ID)
@@ -188,6 +188,34 @@ func TestAddListComments(t *testing.T) {
 	}
 	if comments[0].AnchorKind != "text" || comments[1].AnchorKind != "element" {
 		t.Fatalf("comment anchor kinds mismatch: %+v", comments)
+	}
+}
+
+func TestAddCommentReturnsStoredComment(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	if err := s.CreateToken(ctx, "owner", "owner", false, 0); err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	tok, _ := s.GetToken(ctx, "owner")
+	if err := s.CreateUploadChecked(ctx, "slug3", tok.AccountID, tok.ID, "page.html", 0, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatalf("create upload: %v", err)
+	}
+	up, _ := s.GetUpload(ctx, "slug3")
+	c, err := s.AddComment(ctx, up.ID, "#id", "text", "text", "Alice", "cookie-a", "comment body")
+	if err != nil {
+		t.Fatalf("add comment: %v", err)
+	}
+	comments, err := s.ListComments(ctx, up.ID)
+	if err != nil || len(comments) != 1 {
+		t.Fatalf("list comments: %v %+v", err, comments)
+	}
+	if c.ID == 0 || c.ID != comments[0].ID {
+		t.Fatalf("returned id %d, listed id %d", c.ID, comments[0].ID)
+	}
+	if c.CreatedAt.IsZero() || c.CreatedAt.Unix() != comments[0].CreatedAt.Unix() {
+		t.Fatalf("returned created_at %v, listed %v", c.CreatedAt, comments[0].CreatedAt)
 	}
 }
 
