@@ -43,26 +43,37 @@ func (s *Server) grantUpload(w http.ResponseWriter, r *http.Request) (*models.To
 	return owner, u, true
 }
 
+// normalizeGrantInput validates a grant kind and email address and returns the
+// lowercased, trimmed email, or a non-empty user-facing error message. Group grants
+// need Google group lookup only when requireGroupLookup is true, so a stored group
+// grant can always be removed.
+func (s *Server) normalizeGrantInput(kind, email string, requireGroupLookup bool) (string, string) {
+	if kind != models.UploadGrantUser && kind != models.UploadGrantGroup {
+		return "", "kind must be user or group"
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	addr, err := mail.ParseAddress(email)
+	if err != nil || addr.Address != email || len(email) > 254 {
+		return "", "invalid email address"
+	}
+	if requireGroupLookup && kind == models.UploadGrantGroup && s.groups == nil {
+		return "", "group grants need Google group lookup; set PEEK_GOOGLE_SA_KEY_FILE and PEEK_GOOGLE_ADMIN_EMAIL on the server"
+	}
+	return email, ""
+}
+
 // decodeGrantBody reads and validates {"kind","email"}, writing the 400 itself on failure.
 func (s *Server) decodeGrantBody(w http.ResponseWriter, r *http.Request) (grantBody, bool) {
 	var body grantBody
 	if err := decodeJSON(w, r, &body, smallJSONBodyLimit); err != nil {
 		return body, false
 	}
-	if body.Kind != models.UploadGrantUser && body.Kind != models.UploadGrantGroup {
-		jsonError(w, http.StatusBadRequest, "kind must be user or group")
+	email, msg := s.normalizeGrantInput(body.Kind, body.Email, true)
+	if msg != "" {
+		jsonError(w, http.StatusBadRequest, msg)
 		return body, false
 	}
-	body.Email = strings.ToLower(strings.TrimSpace(body.Email))
-	addr, err := mail.ParseAddress(body.Email)
-	if err != nil || addr.Address != body.Email || len(body.Email) > 254 {
-		jsonError(w, http.StatusBadRequest, "invalid email address")
-		return body, false
-	}
-	if body.Kind == models.UploadGrantGroup && s.groups == nil {
-		jsonError(w, http.StatusBadRequest, "group grants need Google group lookup; set PEEK_GOOGLE_SA_KEY_FILE and PEEK_GOOGLE_ADMIN_EMAIL on the server")
-		return body, false
-	}
+	body.Email = email
 	return body, true
 }
 

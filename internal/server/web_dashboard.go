@@ -44,6 +44,19 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			CreatedHuman: u.CreatedAt.Format("2006-01-02 15:04"),
 		})
 	}
+	ids := make([]int64, 0, len(list))
+	for _, u := range list {
+		ids = append(ids, u.ID)
+	}
+	grantsByUpload, err := s.store.ListUploadGrantsForUploads(r.Context(), ids)
+	if err != nil {
+		slog.Error("dashboard grant list failed", "account_id", owner.ID, "err", err)
+	}
+	for i, u := range list {
+		for _, g := range grantsByUpload[u.ID] {
+			uploads[i].Grants = append(uploads[i].Grants, dashGrant{Kind: g.Kind, Email: g.Email})
+		}
+	}
 	csrf, ok := s.csrfToken(w)
 	if !ok {
 		return
@@ -59,6 +72,9 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		SettingsMeta:  sortedMeta,
 		SettingsPanel: settingsPanel,
 		Uploads:       uploads,
+
+		GroupGrantsEnabled: s.groups != nil,
+		ManageSlug:         r.URL.Query().Get("manage"),
 	}
 	if listErr != nil {
 		dashData_.UploadError = "uploads could not be loaded"
@@ -215,6 +231,10 @@ func (s *Server) handleDashboardVisibility(w http.ResponseWriter, r *http.Reques
 	s.auditRequest(r, owner.Name, "upload.visibility.set", visibilityAuditDetail(slug, change.Visibility))
 	if change.Visibility == models.UploadVisibilityPassword {
 		dashboardOK(w, r, "Password updated for /p/"+slug)
+		return
+	}
+	if change.Visibility == models.UploadVisibilityRestricted {
+		dashboardFlashManage(w, r, "ok", "/p/"+slug+" is now restricted", slug)
 		return
 	}
 	dashboardOK(w, r, "/p/"+slug+" is now "+change.Visibility)

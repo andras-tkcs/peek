@@ -101,3 +101,46 @@ func TestGrantKindCheckConstraint(t *testing.T) {
 		t.Fatal("expected error for kind team")
 	}
 }
+
+func TestListUploadGrantsForUploads(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	_, id1 := seedVersionUpload(t, s, "o1@example.test", "grant-m1", 1)
+	_, id2 := seedVersionUpload(t, s, "o2@example.test", "grant-m2", 1)
+	for _, g := range []struct {
+		id          int64
+		kind, email string
+	}{
+		{id1, models.UploadGrantUser, "zed@example.com"},
+		{id1, models.UploadGrantGroup, "team@example.com"},
+		{id1, models.UploadGrantUser, "amy@example.com"},
+		{id2, models.UploadGrantUser, "bob@example.com"},
+	} {
+		if _, err := s.AddUploadGrant(ctx, g.id, g.kind, g.email, 0); err != nil {
+			t.Fatalf("add grant: %v", err)
+		}
+	}
+	got, err := s.ListUploadGrantsForUploads(ctx, []int64{id1, id2})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("keys = %d, want 2", len(got))
+	}
+	want := [][2]string{{"group", "team@example.com"}, {"user", "amy@example.com"}, {"user", "zed@example.com"}}
+	if len(got[id1]) != len(want) {
+		t.Fatalf("id1 grants = %+v", got[id1])
+	}
+	for i, w := range want {
+		if got[id1][i].Kind != w[0] || got[id1][i].Email != w[1] {
+			t.Fatalf("id1[%d] = %s %s, want %v", i, got[id1][i].Kind, got[id1][i].Email, w)
+		}
+	}
+	if len(got[id2]) != 1 {
+		t.Fatalf("id2 grants = %+v", got[id2])
+	}
+	empty, err := s.ListUploadGrantsForUploads(ctx, nil)
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf("nil ids = %v, %v; want non-nil empty map", empty, err)
+	}
+}

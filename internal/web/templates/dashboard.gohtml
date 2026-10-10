@@ -95,7 +95,7 @@
           <td class="px-3 text-muted-foreground">{{.CreatedHuman}}</td>
           <td class="px-3">
             <div class="peek-row-actions">
-              <div x-data="{ vis: '{{.Visibility}}' }" class="m-0">
+              <div x-data="{ vis: '{{.Visibility}}' }" x-init="{{if eq $.ManageSlug .Slug}}$nextTick(() => $refs.visibilityDialog.showModal()){{end}}" class="m-0">
                 <button type="button" class="peek-row-button" x-on:click="$refs.visibilityDialog.showModal()">Access</button>
                 <dialog x-ref="visibilityDialog" class="peek-visibility-dialog" aria-labelledby="hn-visibility-title-{{.Slug}}">
                   <form method="POST" action="/dashboard/visibility/{{.Slug}}" class="flex flex-col gap-3.5">
@@ -122,6 +122,41 @@
                       <button type="submit" class="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Save</button>
                     </div>
                   </form>
+                  {{$slug := .Slug}}
+                  <section x-show="vis === 'restricted' || {{if .Grants}}true{{else}}false{{end}}" class="mt-4 flex flex-col gap-2.5 border-t border-border pt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">People and groups with access</h4>
+                    {{if ne .Visibility "restricted"}}<p class="text-xs text-muted-foreground">Grants apply once you save Restricted above.</p>{{end}}
+                    {{if .Grants}}
+                    <ul class="flex flex-col gap-1">
+                      {{range .Grants}}
+                      <li class="flex items-center justify-between gap-2 text-sm">
+                        <span class="truncate">{{.Email}}{{if eq .Kind "group"}} <span class="text-xs text-muted-foreground">(group)</span>{{end}}</span>
+                        <form method="POST" action="/dashboard/grants/{{$slug}}/remove" class="m-0">
+                          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                          <input type="hidden" name="kind" value="{{.Kind}}">
+                          <input type="hidden" name="email" value="{{.Email}}">
+                          <button type="submit" class="peek-row-button peek-row-button-danger">Remove</button>
+                        </form>
+                      </li>
+                      {{end}}
+                    </ul>
+                    {{else}}
+                    <p class="text-xs text-muted-foreground">Only you and admins can open this page until you share it.</p>
+                    {{end}}
+                    <form method="POST" action="/dashboard/grants/{{.Slug}}" class="flex gap-2">
+                      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                      {{if $.GroupGrantsEnabled}}
+                      <select name="kind" aria-label="Grant type" class="h-9 rounded-lg border border-input bg-secondary px-2 text-sm text-foreground">
+                        <option value="user">Person</option>
+                        <option value="group">Google group</option>
+                      </select>
+                      {{else}}
+                      <input type="hidden" name="kind" value="user">
+                      {{end}}
+                      <input type="email" name="email" required maxlength="254" placeholder="name@example.com" aria-label="Email address" class="h-9 min-w-0 flex-1 rounded-lg border border-input bg-secondary px-3 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+                      <button type="submit" class="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Share</button>
+                    </form>
+                  </section>
                 </dialog>
               </div>
               <a href="/dashboard/stats/{{.Slug}}" class="peek-row-button">Stats</a>

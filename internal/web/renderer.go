@@ -106,6 +106,12 @@ type DashboardUpload struct {
 	SizeHuman    string
 	Visibility   string
 	CreatedHuman string
+	Grants       []DashboardGrant
+}
+
+type DashboardGrant struct {
+	Kind  string
+	Email string
 }
 
 type InviteDashboardRow struct {
@@ -194,6 +200,9 @@ type DashboardData struct {
 	UploadError      string
 	FlashSuccess     string
 	UploadSuccessURL string
+
+	GroupGrantsEnabled bool
+	ManageSlug         string
 }
 
 type StatsVisit struct {
