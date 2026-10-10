@@ -45,7 +45,7 @@ func (s *Server) visitorID(w http.ResponseWriter, r *http.Request) string {
 
 // recordVisit logs a page view, hashing the IP for privacy. vid is the visitor
 // id already resolved (and cookie set) by the page handler.
-func (s *Server) recordVisit(r *http.Request, u *models.Upload, vid string) {
+func (s *Server) recordVisit(r *http.Request, u *models.Upload, vid string, version int) {
 	name := ""
 	if c, err := r.Cookie(nameCookie); err == nil {
 		name = strings.TrimSpace(c.Value)
@@ -60,7 +60,7 @@ func (s *Server) recordVisit(r *http.Request, u *models.Upload, vid string) {
 	if len(ua) > 300 {
 		ua = ua[:300]
 	}
-	ev := visitEvent{UploadID: u.ID, Version: u.LatestVersion, VID: vid, Name: name, IPHash: ipHash, UA: ua}
+	ev := visitEvent{UploadID: u.ID, Version: version, VID: vid, Name: name, IPHash: ipHash, UA: ua}
 	select {
 	case s.visitQueue <- ev:
 	default:

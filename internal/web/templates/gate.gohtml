@@ -11,7 +11,7 @@
 <body class="grid min-h-screen place-items-center p-6">
 {{if .Error}}<div hidden data-peek-toast data-toast-type="danger" data-toast-message="Incorrect password." data-toast-duration="6500"></div>{{end}}
 <div class="w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-sm">
-<form method="POST" action="/p/{{.Slug}}" class="flex flex-col gap-4">
+<form method="POST" action="{{.Action}}" class="flex flex-col gap-4">
   <h2 class="text-lg font-semibold tracking-tight text-card-foreground">This page is protected</h2>
   <p class="text-sm text-muted-foreground">Enter the password to view this page.</p>
   <input type="password" name="password" placeholder="Password" required autofocus class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
