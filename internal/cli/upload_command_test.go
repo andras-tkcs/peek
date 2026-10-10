@@ -14,7 +14,7 @@ import (
 )
 
 func TestStreamMultipartUploadEncodesFileVisibilityAndPassword(t *testing.T) {
-	body, contentType := streamMultipartUpload(strings.NewReader("<html></html>"), "page.html", "password", "secret")
+	body, contentType := streamMultipartUpload(strings.NewReader("<html></html>"), "page.html", "password", "secret", "")
 	defer body.Close()
 
 	mediaType, params, err := mime.ParseMediaType(contentType)
@@ -132,5 +132,67 @@ func TestCmdUploadStreamsPasswordMultipart(t *testing.T) {
 	}
 	if got.Body != "<!doctype html><html></html>" {
 		t.Fatalf("body = %q", got.Body)
+	}
+}
+
+func TestUploadWithSlugSendsSlugAndNoVisibility(t *testing.T) {
+	type observed struct {
+		Slug          string
+		HasVisibility bool
+		HasPassword   bool
+		Filename      string
+	}
+	got := make(chan observed, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			got <- observed{}
+			return
+		}
+		_, header, _ := r.FormFile("file")
+		o := observed{Slug: r.FormValue("slug")}
+		_, o.HasVisibility = r.MultipartForm.Value["visibility"]
+		_, o.HasPassword = r.MultipartForm.Value["password"]
+		if header != nil {
+			o.Filename = header.Filename
+		}
+		got <- o
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"slug": "page", "url": "http://example.test/p/page", "visibility": "public",
+			"version": 2, "version_url": "http://example.test/p/page/v/2",
+		})
+	}))
+	defer ts.Close()
+
+	setTestConfigHome(t)
+	t.Setenv("PEEK_HOST", ts.URL)
+	t.Setenv("PEEK_TOKEN", "token")
+	file := filepath.Join(t.TempDir(), "page.html")
+	if err := os.WriteFile(file, []byte("<!doctype html><html></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdUpload([]string{file, "--slug", "page"}); err != nil {
+		t.Fatalf("cmdUpload: %v", err)
+	}
+	o := <-got
+	if o.Slug != "page" || o.HasVisibility || o.HasPassword || o.Filename != "page" {
+		t.Fatalf("observed = %+v", o)
+	}
+}
+
+func TestUploadWithSlugRejectsVisibilityFlag(t *testing.T) {
+	err := cmdUpload([]string{"page.html", "--slug", "page", "--visibility", "public"})
+	want := "--slug adds a new version to an existing page; change visibility with 'peek visibility'"
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
+	}
+}
+
+func TestUploadWithSlugRejectsNameFlag(t *testing.T) {
+	err := cmdUpload([]string{"page.html", "--slug", "page", "--name", "x"})
+	want := "--name cannot be used with --slug; the page keeps its name"
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
 	}
 }

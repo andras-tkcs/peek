@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/puemos/peek/internal/db"
@@ -224,4 +225,86 @@ func serviceTestStore(t *testing.T) (*db.Store, *models.Token) {
 		t.Fatal(err)
 	}
 	return store, owner
+}
+
+type failingVersionRepo struct {
+	Repository
+	err error
+}
+
+func (f failingVersionRepo) CreateVersionChecked(context.Context, int64, string, int64, int64, uploadquota.Limits) (int, error) {
+	return 0, f.err
+}
+
+func TestAddVersionStoresUnderVersionKey(t *testing.T) {
+	store, owner := serviceTestStore(t)
+	defer store.Close()
+	st := newMemoryStorage()
+	svc := Service{Repository: store, Storage: st, BaseURL: "http://localhost:7700"}
+	created, err := svc.Create(context.Background(), CreateInput{
+		OwnerAccountID: owner.AccountID,
+		OwnerTokenID:   owner.ID,
+		Name:           "page",
+		Visibility:     "public",
+		Data:           []byte("<!doctype html><html></html>"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Version != 1 {
+		t.Fatalf("create version = %d, want 1", created.Version)
+	}
+	u, err := store.GetUpload(context.Background(), created.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := svc.AddVersion(context.Background(), AddVersionInput{
+		UploadID:       u.ID,
+		Slug:           created.Slug,
+		ActorAccountID: owner.AccountID,
+		Data:           []byte("<!doctype html><html>v2</html>"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Version != 2 {
+		t.Fatalf("version = %d, want 2", res.Version)
+	}
+	if want := "http://localhost:7700/p/" + created.Slug + "/v/2"; res.VersionURL != want {
+		t.Fatalf("version url = %q, want %q", res.VersionURL, want)
+	}
+	pattern := regexp.MustCompile(`^versions/` + regexp.QuoteMeta(created.Slug) + `/[0-9a-f]{16}$`)
+	found := 0
+	for key := range st.saved {
+		if pattern.MatchString(key) {
+			found++
+		}
+	}
+	if found != 1 {
+		t.Fatalf("saved keys = %+v, want one matching %s", st.saved, pattern)
+	}
+}
+
+func TestAddVersionCleansUpObjectOnRepositoryError(t *testing.T) {
+	store, _ := serviceTestStore(t)
+	defer store.Close()
+	st := newMemoryStorage()
+	svc := Service{
+		Repository: failingVersionRepo{Repository: store, err: uploadquota.ErrTotalExceeded},
+		Storage:    st,
+		BaseURL:    "http://localhost:7700",
+	}
+	_, err := svc.AddVersion(context.Background(), AddVersionInput{
+		UploadID: 1,
+		Slug:     "page",
+		Data:     []byte("<!doctype html><html></html>"),
+	})
+	var uploadErr *Error
+	if !errors.As(err, &uploadErr) || uploadErr.Kind != KindTotalQuotaExceeded {
+		t.Fatalf("error = %v, want total quota error", err)
+	}
+	if len(st.deleted) != 1 || len(st.saved) != 0 {
+		t.Fatalf("deleted=%+v saved=%+v, want object cleaned up", st.deleted, st.saved)
+	}
 }

@@ -179,3 +179,44 @@ func seedExpiredRetentionUpload(t *testing.T, store *db.Store, ownerID int64, sl
 		t.Fatal(err)
 	}
 }
+
+func TestRetentionPrunesOldVersionsButKeepsLatest(t *testing.T) {
+	ctx := context.Background()
+	s, store, storage, ownerID := newRetentionCleanupTestServer(t)
+	if err := store.CreateUploadChecked(ctx, "versioned", ownerID, 0, "versioned", 42, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	u, err := store.GetUpload(ctx, "versioned")
+	if err != nil {
+		t.Fatal(err)
+	}
+	k2 := "versions/versioned/0000000000000002"
+	k3 := "versions/versioned/0000000000000003"
+	if _, err := store.CreateVersionChecked(ctx, u.ID, k2, 10, ownerID, uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateVersionChecked(ctx, u.ID, k3, 11, ownerID, uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour).Unix()
+	if _, err := store.Exec(`UPDATE upload_versions SET created_at=? WHERE upload_id=? AND version IN (1,2)`, old, u.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	s.cleanupExpired(ctx)
+
+	versions, err := store.ListUploadVersions(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 1 || versions[0].Version != 3 {
+		t.Fatalf("versions after cleanup = %+v, want only v3", versions)
+	}
+	deleted := strings.Join(storage.deletedSlugs(), ",")
+	if !strings.Contains(deleted, "versioned") || !strings.Contains(deleted, k2) || strings.Contains(deleted, k3) {
+		t.Fatalf("deleted keys = %q, want slug and %s but not %s", deleted, k2, k3)
+	}
+	if _, err := store.GetUpload(ctx, "versioned"); err != nil {
+		t.Fatalf("page should survive: %v", err)
+	}
+}
