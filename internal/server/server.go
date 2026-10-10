@@ -42,6 +42,8 @@ type Config struct {
 	RetentionDays int
 
 	TrustedProxy bool
+
+	Groups GroupChecker
 }
 
 type Server struct {
@@ -176,6 +178,10 @@ func New(cfg Config) (*Server, error) {
 		s3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		oidcAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
 		visitQueue:             make(chan visitEvent, 256),
+	}
+
+	if cfg.Groups != nil {
+		srv.groups = cfg.Groups
 	}
 
 	if !cfg.TrustedProxy && !isLocalBaseURL(baseURL) {

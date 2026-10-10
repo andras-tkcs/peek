@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/puemos/peek/internal/groups"
 	"github.com/puemos/peek/internal/server"
 	"github.com/puemos/peek/internal/version"
 )
@@ -36,6 +37,10 @@ type serveConfig struct {
 	MaxTotalSize  int64
 	RetentionDays int
 	TrustedProxy  bool
+
+	GoogleSAKeyFile     string
+	GoogleAdminEmail    string
+	GoogleGroupCacheTTL time.Duration
 }
 
 func Run(args []string) int {
@@ -88,6 +93,10 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	if err != nil {
 		return serveConfig{}, false, err
 	}
+	googleTTLDefault, err := time.ParseDuration(getenv("PEEK_GOOGLE_GROUP_CACHE_TTL", "5m"))
+	if err != nil {
+		return serveConfig{}, false, fmt.Errorf("invalid PEEK_GOOGLE_GROUP_CACHE_TTL: %w", err)
+	}
 
 	addr := fs.String("addr", getenv("PEEK_ADDR", ":7700"), "listen address")
 	dataDir := fs.String("data", getenv("PEEK_DATA", "./data"), "data directory")
@@ -107,6 +116,9 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	maxTotalSize := fs.Int64("max-total-size", maxTotalSizeDefault, "max total storage bytes across all uploads (0 = unlimited)")
 	retentionDays := fs.Int("retention-days", retentionDaysDefault, "auto-delete uploads older than N days (0 = off)")
 	trustedProxy := fs.Bool("trusted-proxy", trustedProxyDefault, "trust X-Forwarded-For header (set when behind a reverse proxy)")
+	googleSAKeyFile := fs.String("google-sa-key-file", getenv("PEEK_GOOGLE_SA_KEY_FILE", ""), "path to Google service account JSON key for group lookups")
+	googleAdminEmail := fs.String("google-admin-email", getenv("PEEK_GOOGLE_ADMIN_EMAIL", ""), "Google Workspace admin user to impersonate for group lookups")
+	googleGroupCacheTTL := fs.Duration("google-group-cache-ttl", googleTTLDefault, "how long Google group membership answers are cached")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return serveConfig{}, false, err
@@ -116,6 +128,12 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	}
 	if err := validateServeConfig(*baseURL, *maxUpload, *storageFlag, *maxTotalSize, *retentionDays); err != nil {
 		return serveConfig{}, false, err
+	}
+	if (*googleSAKeyFile == "") != (*googleAdminEmail == "") {
+		return serveConfig{}, false, fmt.Errorf("PEEK_GOOGLE_SA_KEY_FILE and PEEK_GOOGLE_ADMIN_EMAIL must be set together")
+	}
+	if *googleGroupCacheTTL < time.Second || *googleGroupCacheTTL > time.Hour {
+		return serveConfig{}, false, fmt.Errorf("google group cache ttl must be between 1s and 1h")
 	}
 
 	abs, err := filepath.Abs(*dataDir)
@@ -141,6 +159,10 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		MaxTotalSize:  *maxTotalSize,
 		RetentionDays: *retentionDays,
 		TrustedProxy:  *trustedProxy,
+
+		GoogleSAKeyFile:     *googleSAKeyFile,
+		GoogleAdminEmail:    *googleAdminEmail,
+		GoogleGroupCacheTTL: *googleGroupCacheTTL,
 	}, false, nil
 }
 
@@ -170,6 +192,22 @@ func validateServeConfig(baseURL string, maxUpload int64, storage string, maxTot
 func runServe(cfg serveConfig) int {
 	configureLogging()
 
+	var groupChecker server.GroupChecker
+	if cfg.GoogleSAKeyFile != "" {
+		keyJSON, err := os.ReadFile(cfg.GoogleSAKeyFile)
+		if err != nil {
+			slog.Error("init", "err", fmt.Errorf("read google service account key: %w", err))
+			return 1
+		}
+		dir, err := groups.NewDirectory(keyJSON, cfg.GoogleAdminEmail, cfg.GoogleGroupCacheTTL)
+		if err != nil {
+			slog.Error("init", "err", err)
+			return 1
+		}
+		groupChecker = dir
+		slog.Info("google group lookup enabled", "admin_email", cfg.GoogleAdminEmail, "cache_ttl", cfg.GoogleGroupCacheTTL)
+	}
+
 	srv, err := server.New(server.Config{
 		Addr:      cfg.Addr,
 		DataDir:   cfg.DataDir,
@@ -189,6 +227,7 @@ func runServe(cfg serveConfig) int {
 		MaxTotalSize:  cfg.MaxTotalSize,
 		RetentionDays: cfg.RetentionDays,
 		TrustedProxy:  cfg.TrustedProxy,
+		Groups:        groupChecker,
 	})
 	if err != nil {
 		slog.Error("init", "err", err)
