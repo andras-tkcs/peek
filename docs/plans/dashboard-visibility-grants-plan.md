@@ -99,10 +99,13 @@ mkdir -p bin
 command -v mise && mise install
 ```
 
+If this exits 1, `mise` is absent; continue with the equivalents below.
+
 If `mise` exists, run `mise run check` / `mise run check-full` / `mise run tailwind` as the briefs say. If `command -v mise` fails, do not try to install it; run these exact equivalents (from `mise.toml`) instead.
 
 **`check`:**
 ```sh
+git add -A   # stage (do not commit) so new files are included in the format check
 test -z "$(gofmt -l $(git ls-files '*.go'))"
 go vet ./...
 go test ./...
@@ -120,9 +123,11 @@ go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 go run honnef.co/go/tools/cmd/staticcheck@latest ./...
 ```
 
-**`fmt`:** `gofmt -w $(git ls-files '*.go')`.
+**`fmt`:** `git add -A && gofmt -w $(git ls-files '*.go')`. `bin/`, `*.out` and `data/` are gitignored.
 
 Do not commit `coverage.out`; delete it.
+
+**govulncheck in the cloud container.** The network proxy blocks `vuln.go.dev` (CONNECT 403), so govulncheck cannot download its database. If its output mentions `vuln.go.dev`, `403` or `CONNECT tunnel failed`, write `govulncheck: not run (vuln.go.dev blocked); CI runs it on the PR` in the phase report and treat that step as passed. Any other govulncheck failure falls under the stop conditions below.
 
 **Stop conditions:**
 - Go is not 1.26.x.
@@ -471,7 +476,17 @@ CREATE INDEX IF NOT EXISTS idx_upload_slug_aliases_upload ON upload_slug_aliases
 
 **`internal/db/errors.go`:** add `ErrSlugTaken = errors.New("slug is already in use")` to the `var` block.
 
-**`UploadSlugExists`** (`internal/db/uploads.go`) also counts aliases. Its query becomes `SELECT EXISTS(SELECT 1 FROM uploads WHERE slug=?) OR EXISTS(SELECT 1 FROM upload_slug_aliases WHERE slug=?)`, scanned into a `bool`, so new uploads never take an old link.
+**`UploadSlugExists`** (`internal/db/uploads.go`) also counts aliases, so new uploads never take an old link. Its body becomes exactly:
+
+```go
+func (s *Store) UploadSlugExists(ctx context.Context, slug string) (bool, error) {
+	var exists bool
+	err := s.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM uploads WHERE slug=?) OR EXISTS(SELECT 1 FROM upload_slug_aliases WHERE slug=?)`, slug, slug).Scan(&exists)
+	return exists, err
+}
+```
+
+Remove the now-unused `errors` import from `uploads.go`; `database/sql` stays.
 
 **New `internal/db/slug_aliases.go`:**
 
@@ -516,12 +531,14 @@ const maxNameLength = 200
 // RenameRepository is the persistence a rename needs.
 type RenameRepository interface {
 	UploadSlugExists(ctx context.Context, slug string) (bool, error)
+	ResolveSlugAlias(ctx context.Context, slug string) (string, error)
 	RenameUpload(ctx context.Context, uploadID int64, newSlug, newName string) error
 }
 
 type RenameInput struct {
 	UploadID    int64
 	CurrentSlug string
+	CurrentName string
 	Name        string
 }
 
@@ -533,18 +550,20 @@ type RenameResult struct {
 }
 
 // Rename changes an upload's display name and derives its link from the new name
-// the same way upload does. The link is kept when the name slugifies to the
-// current slug or to nothing.
+// the same way upload does. The link is kept when the new name's slug form is
+// empty, equals the current slug, or equals the old name's slug form; a page's own
+// old link is taken back instead of minting a suffixed one.
 func Rename(ctx context.Context, repo RenameRepository, baseURL string, in RenameInput) (*RenameResult, error)
 ```
 
 Steps:
-1. Trim `in.Name`. If it is `""` → `KindNameRequired`, `"name is required"`. If `len(name) > maxNameLength` → `KindNameTooLong`, `"name must be 200 characters or fewer"`.
+1. Trim `in.Name`. If it is `""` → `KindNameRequired`, `"name is required"`. If `utf8.RuneCountInString(name) > maxNameLength` → `KindNameTooLong`, `"name must be 200 characters or fewer"`.
 2. Pick the slug:
-   - `slug := in.CurrentSlug`;
-   - `base := slugify(name)`;
-   - if `base != "" && base != in.CurrentSlug`, then `slug, err = generateSlugFromName(ctx, name, repo)`. On error → `KindSlugGeneration`, `"slug generation failed"`.
-3. `repo.RenameUpload(ctx, in.UploadID, slug, name)`. Any error → `KindPersistenceFailure`, `"rename failed"`. (`uploads` must not import `db`, so `db.ErrSlugTaken` from a race is reported generically.)
+   - start with `slug := in.CurrentSlug` and `base := slugify(name)`;
+   - keep the current slug when `base == ""`, `base == in.CurrentSlug`, or `base == slugify(in.CurrentName)` (the name changed but its slug form did not, for example a suffixed `index-html-ab12cd` page renamed from `index.html` to `Index.HTML`);
+   - otherwise, if `cur, err := repo.ResolveSlugAlias(ctx, base); err == nil && cur == in.CurrentSlug`, set `slug = base` (take back this page's own old link);
+   - otherwise `slug, err = generateSlugFromName(ctx, name, repo)`, and on error return `KindSlugGeneration`, `"slug generation failed"`.
+3. `repo.RenameUpload(ctx, in.UploadID, slug, name)`. On any error, `slog.Error("rename upload failed", "upload_id", in.UploadID, "err", err)` and return `KindPersistenceFailure`, `"rename failed"`. (`uploads` must not import `db`, so `db.ErrSlugTaken` from a race is reported generically.)
 4. Return `&RenameResult{Slug: slug, URL: baseURL + "/p/" + slug, Name: name, SlugChanged: slug != in.CurrentSlug}`.
 
 `Service.Create` is unchanged.
@@ -574,7 +593,7 @@ func redirectRenamedPage(w http.ResponseWriter, r *http.Request, path string) {
 No other route resolves aliases:
 - API, CLI and `/raw` URLs use the current slug.
 - `/raw` tokens are minted per page load.
-- A re-upload with `--slug <old>` gets "not found".
+- A re-upload with `--slug <old>` gets 404 `"page was renamed; use slug <current>"` (D12).
 - The password cookie is per slug, so password-page viewers unlock once more after a rename.
 
 ### D12. Rename API and CLI
@@ -584,7 +603,7 @@ No other route resolves aliases:
 **New `internal/server/api_rename.go`**, `handleRenameUpload`:
 1. `requireAPIToken`. `GetUpload` failure → 404 `"not found"`. Not owner or admin → 403 `"not owner"`.
 2. Decode `{"name": string}` with `decodeJSON(w, r, &body, smallJSONBodyLimit)`. On error → 400 `"bad json"`.
-3. `res, err := uploads.Rename(r.Context(), s.store, s.baseURL, uploads.RenameInput{UploadID: u.ID, CurrentSlug: u.Slug, Name: body.Name})`. On error → `status, msg := uploadHTTPError(err)` and `jsonError`.
+3. `res, err := uploads.Rename(r.Context(), s.store, s.baseURL, uploads.RenameInput{UploadID: u.ID, CurrentSlug: u.Slug, CurrentName: u.Name, Name: body.Name})`. On error → `status, msg := uploadHTTPError(err)` and `jsonError`.
 4. Audit `upload.rename` with detail `renameAuditDetail(u.Slug, res)`, where:
 
 ```go
@@ -596,6 +615,15 @@ func renameAuditDetail(oldSlug string, res *uploads.RenameResult) string {
    `renameAuditDetail` lives in `api_rename.go`.
 5. `jsonOK(w, map[string]any{"slug": res.Slug, "url": res.URL, "name": res.Name})`.
 
+**Version upload to an old slug** (`internal/server/api_uploads.go`, `handleUploadVersion`). When `GetUpload` fails, add this before the existing `"not found"`:
+
+```go
+if cur, aerr := s.store.ResolveSlugAlias(r.Context(), slug); aerr == nil {
+	jsonError(w, http.StatusNotFound, "page was renamed; use slug "+cur)
+	return
+}
+```
+
 **CLI.** In `internal/cli/commands.go`, add `case "rename": err = cmdRename(rest)` after `case "visibility"`. Add a usage line after the `peek visibility <slug> password --password-stdin` line:
 
 ```
@@ -606,7 +634,7 @@ In `internal/cli/uploads_command.go`, add `cmdRename(args []string) error` after
 - With fewer than 2 args, return `fmt.Errorf("usage: peek rename <slug> <new name>")`.
 - `slug := args[0]`; `name := strings.TrimSpace(strings.Join(args[1:], " "))`. If the name is empty, return the same usage error.
 - `LoadConfig` and `newClient` as in `cmdVisibility`.
-- `c.postJSON("/api/uploads/"+slug+"/name", map[string]any{"name": name}, &out)`, where `out` is `struct{ Slug, URL, Name string }` with json tags `slug`, `url` and `name`.
+- `c.postJSON("/api/uploads/"+url.PathEscape(slug)+"/name", map[string]any{"name": name}, &out)` (add the `net/url` import, as `grants_command.go` does), where `out` is `struct{ Slug, URL, Name string }` with json tags `slug`, `url` and `name`.
 - Print `slug: <slug>`, `url: <url>` and `name: <name>`, each on its own line, in that order, using `fmt.Printf`.
 
 ### D13. Dashboard rename form, name in the list, safe delete confirm
@@ -615,7 +643,7 @@ In `internal/cli/uploads_command.go`, add `cmdRename(args []string) error` after
 
 **New `internal/server/web_rename.go`**, `handleDashboardRename`:
 1. Follow D5 steps 1-4.
-2. `res, err := uploads.Rename(r.Context(), s.store, s.baseURL, uploads.RenameInput{UploadID: u.ID, CurrentSlug: u.Slug, Name: r.FormValue("name")})`. On error → `dashboardFlashManage(w, r, "err", uploadErrorMessage(err), slug)`.
+2. `res, err := uploads.Rename(r.Context(), s.store, s.baseURL, uploads.RenameInput{UploadID: u.ID, CurrentSlug: u.Slug, CurrentName: u.Name, Name: r.FormValue("name")})`. On error → `dashboardFlashManage(w, r, "err", uploadErrorMessage(err), slug)`.
 3. Audit `upload.rename` with `renameAuditDetail(u.Slug, res)`.
 4. `dashboardFlashManage(w, r, "ok", "Renamed to /p/"+res.Slug, res.Slug)`.
 
@@ -661,7 +689,7 @@ There is nothing to do before implementation. After implementation, one browser 
 
 Each risk below names what the worker would see if the plan is wrong. In every case the phase stops with `status=blocked`; it never improvises.
 
-- **Tooling.** `mise` is missing (D0), the Tailwind download fails, or `go` is not 1.26.x. Never hand-edit `pines.css`.
+- **Tooling.** `mise` is missing (D0), the Tailwind download fails, or `go` is not 1.26.x. Never hand-edit `pines.css`. `vuln.go.dev` is blocked by the proxy; see D0.
 - **The `Create` refactor.** It must keep the error order and messages, so a pre-existing `internal/uploads` test failing means it did not.
 - **Unexpected cookie callers.** Before D3, `grep -rn "setPageAuthCookie\|verifySessionCookie\|makeSessionCookieValue" internal` must print exactly 9 lines: `pages.go` 90, 134, 138, 141; `security.go` 100, 101, 106, 107; `comments.go` 282. Line numbers may differ by a few if p1 edits earlier lines first, but the files and the count must match.
 - **Template parsing.** If `NewRenderer` fails to parse `dashboard.gohtml` after D8 or D13, stop and quote the error.
@@ -687,7 +715,7 @@ verify_after_merge:
 final_checks:
   - docs/plans/dashboard-visibility-grants-plan.md and docs/plans/dashboard-visibility-grants-plan-manual-steps.html are deleted and `git grep -n "dashboard-visibility-grants-plan"` prints nothing
   - "`grep -rn \"makeSessionCookieValue\\|verifySessionCookie\" internal` prints nothing"
-  - mise run check-full (or the D0 equivalents) exits 0
+  - mise run check-full (or the D0 equivalents, with D0's govulncheck exception) exits 0
   - cd docs && pnpm build exits 0
 phases:
   - id: p1-visibility-core
@@ -824,7 +852,7 @@ phases:
       Read AGENTS.md, CONTRIBUTING.md, docs/architecture.md and docs/operations.md, then this plan's "Current state", D0, D7 and D8. p2 is merged: the Access dialog, handleDashboardVisibility and the dashboardPost test helper exist. Do D0's setup and run `check` on the starting point. Pattern commit for grants handlers plus tests: fb0d8ce.
       1. internal/db/grants.go and its test:
          - Extract scanUploadGrants and add ListUploadGrantsForUploads (D7).
-         - In internal/db/grants_test.go, add TestListUploadGrantsForUploads. Seed two uploads with `_, id1 := seedVersionUpload(t, s, "o1@example.test", "grant-m1", 1)` and `_, id2 := seedVersionUpload(t, s, "o2@example.test", "grant-m2", 1)`, using the store setup that TestListUploadGrantsOrdersByKindThenEmail uses.
+         - In internal/db/grants_test.go, add TestListUploadGrantsForUploads. Use `s := openTestStore(t)` (internal/db/store_test.go) and `ctx := context.Background()`. Seed two uploads with `_, id1 := seedVersionUpload(t, s, "o1@example.test", "grant-m1", 1)` and `_, id2 := seedVersionUpload(t, s, "o2@example.test", "grant-m2", 1)`.
          - Add to id1: user "zed@example.com", then group "team@example.com", then user "amy@example.com" (createdBy 0). Add to id2: user "bob@example.com".
          - Assert:
            - the map has exactly 2 keys;
@@ -897,7 +925,7 @@ phases:
          - Add ErrSlugTaken to internal/db/errors.go.
          - Change UploadSlugExists in internal/db/uploads.go.
          - Create internal/db/slug_aliases.go with RenameUpload and ResolveSlugAlias.
-      2. New internal/db/slug_aliases_test.go (package db). Use the store setup from internal/db/versions_test.go and seedVersionUpload with distinct emails per upload. Tests:
+      2. New internal/db/slug_aliases_test.go (package db). Use `s := openTestStore(t)` (internal/db/store_test.go), `ctx := context.Background()`, and seedVersionUpload with a distinct email per upload. Tests:
          a. TestRenameUploadKeepsOldSlugAsAlias:
             - _, id := seedVersionUpload(t, s, "o1@example.test", "first", 1); RenameUpload(ctx, id, "second", "Second").
             - GetUpload("second") has Name "Second" and ID id; GetUpload("first") returns sql.ErrNoRows.
@@ -909,17 +937,20 @@ phases:
          e. TestRenameUploadMissingUpload: RenameUpload(ctx, 9999, "x", "x") returns sql.ErrNoRows.
          f. TestSlugAliasesCascadeOnUploadDelete: seed "a"; rename to "b"; DeleteUpload(ctx, id) → ResolveSlugAlias("a") returns sql.ErrNoRows and UploadSlugExists("a") is false.
       3. Create internal/uploads/rename.go exactly as in D10.
-      4. New internal/uploads/rename_test.go (package uploads) with a fake `type fakeRenameRepo struct{ taken map[string]bool; renamed []string; err error }`:
+      4. New internal/uploads/rename_test.go (package uploads) with a fake `type fakeRenameRepo struct{ taken map[string]bool; aliases map[string]string; renamed []string; err error }`. Declare all three methods on `*fakeRenameRepo` and pass `&fakeRenameRepo{…}`:
          - UploadSlugExists returns taken[slug].
+         - ResolveSlugAlias returns aliases[slug], nil when present, else "", sql.ErrNoRows.
          - RenameUpload appends newSlug+"|"+newName to renamed and returns err.
-         Tests:
+         Tests (baseURL "http://h" unless stated):
          - TestRenameRequiresName: "  " → KindNameRequired, and nothing is renamed.
          - TestRenameRejectsLongName: strings.Repeat("a", 201) → KindNameTooLong.
-         - TestRenameKeepsSlugWhenNameSlugifiesToCurrent: CurrentSlug "my-report", Name "My Report" → Slug "my-report", SlugChanged false, renamed == ["my-report|My Report"].
-         - TestRenameKeepsSlugWhenNameHasNoSlugChars: Name "!!!" → Slug equals CurrentSlug.
-         - TestRenameDerivesNewSlug: CurrentSlug "old", Name "New Page" → Slug "new-page", URL "http://h/p/new-page" (baseURL "http://h"), SlugChanged true.
-         - TestRenameAddsSuffixOnClash: taken {"new-page": true} → Slug has prefix "new-page-" and is not "new-page".
-         - TestRenameReportsPersistenceFailure: err set → KindPersistenceFailure, message "rename failed".
+         - TestRenameKeepsSlugWhenNameSlugifiesToCurrent: CurrentSlug "my-report", CurrentName "my report", Name "My Report" → Slug "my-report", SlugChanged false, renamed == ["my-report|My Report"].
+         - TestRenameKeepsSlugWhenNameHasNoSlugChars: CurrentSlug "old", CurrentName "old", Name "!!!" → Slug "old".
+         - TestRenameKeepsSlugWhenSlugFormUnchanged: CurrentSlug "index-html-ab12cd", CurrentName "index.html", Name "Index.HTML", taken {"index-html": true} → Slug "index-html-ab12cd", SlugChanged false.
+         - TestRenameDerivesNewSlug: CurrentSlug "old", CurrentName "old", Name "New Page" → Slug "new-page", URL "http://h/p/new-page", SlugChanged true.
+         - TestRenameAddsSuffixOnClash: CurrentSlug "old", CurrentName "old", Name "New Page", taken {"new-page": true} → Slug has prefix "new-page-" and is not "new-page".
+         - TestRenameReclaimsOwnAlias: CurrentSlug "b", CurrentName "B", Name "A", taken {"a": true}, aliases {"a": "b"} → Slug "a", SlugChanged true.
+         - TestRenameReportsPersistenceFailure: CurrentSlug "old", CurrentName "old", Name "New Page", err errors.New("boom") → KindPersistenceFailure, message "rename failed".
       5. In internal/server/upload_service.go, add KindNameRequired and KindNameTooLong to uploadHTTPError's 400 case (D10).
       6. Implement D11 in internal/server/pages.go: redirectRenamedPage, plus alias resolution in handlePage and handlePageVersion.
       7. New internal/server/page_rename_test.go (package server), one test named TestRenamedPageRedirects. s, _ := newHandlerTestServer(t); u := newTwoVersionPage(t, s, "old", "public", ""); then s.store.RenameUpload(ctx, u.ID, "new", "New"). Then, with doRequest:
@@ -931,7 +962,7 @@ phases:
       8. Run gofmt, then check-full (D0).
     acceptance:
       - go test ./internal/db/ -run 'TestRenameUpload|TestSlugAliases' -v passes (6 tests)
-      - go test ./internal/uploads/ -run TestRename -v passes (7 tests)
+      - go test ./internal/uploads/ -run TestRename -v passes (9 tests)
       - go test ./internal/server/ -run TestRenamedPageRedirects -v passes
       - grep -c '{9, "upload_slug_aliases"' internal/db/migrations.go prints 1
       - check-full (D0) exits 0
@@ -943,6 +974,7 @@ phases:
     touches:
       - internal/server/routes.go
       - internal/server/api_rename.go
+      - internal/server/api_uploads.go
       - internal/server/rename_e2e_test.go
       - internal/server/web_rename.go
       - internal/server/web_rename_test.go
@@ -954,7 +986,7 @@ phases:
       - internal/cli/uploads_command_requests_test.go
     brief: |
       Read AGENTS.md, CONTRIBUTING.md, docs/architecture.md and docs/operations.md, then this plan's "Current state", D0, D12 and D13. p3 and p4 are merged: uploads.Rename, dashboardFlashManage, the Access dialog with grants, and the dashboardPost test helper exist. Do D0's setup and run `check` on the starting point.
-      1. Add the D12 API route, and create internal/server/api_rename.go with handleRenameUpload and renameAuditDetail.
+      1. Add the D12 API route, and create internal/server/api_rename.go with handleRenameUpload and renameAuditDetail. Add the D12 "Version upload to an old slug" check to handleUploadVersion in internal/server/api_uploads.go.
       2. Add the D13 dashboard route, and create internal/server/web_rename.go with handleDashboardRename.
       3. Make D13 markup changes (a), (b) and (c) in internal/web/templates/dashboard.gohtml. Regenerate pines.css (D0) and commit it if it changed.
       4. Add the CLI command and usage line to internal/cli/commands.go and internal/cli/uploads_command.go (D12).
@@ -972,6 +1004,7 @@ phases:
          b. TestDashboardRenameRejectsEmptyName: name="" → "/dashboard?err=name+is+required&manage=page".
          c. TestDashboardRenameRejectsNonOwner: account from s.store.CreateAccount(ctx, "user@example.test", "User", false) → "/dashboard?err=not+owner".
          d. TestDashboardRenameRejectsMissingCSRF: withCSRF=false → "/dashboard?err=invalid+session".
+         e. TestUploadVersionToRenamedSlugExplains: s, admin := newHandlerTestServer(t); u := newTwoVersionPage(t, s, "page", "public", ""); s.store.RenameUpload(ctx, u.ID, "renamed", "Renamed"); rec := uploadPage(t, s, admin, "<html><body>v3</body></html>", map[string]string{"slug": "page"}) (helper in upload_versions_test.go) → 404, body contains "page was renamed; use slug renamed".
       7. In internal/web/renderer_test.go, add TestDashboardRendersRenameFormAndSafeDeleteConfirm. Render one upload {Slug: "page", Name: "it's <b>", Visibility: "public"}. Assert the HTML contains:
          - `action="/dashboard/rename/page"`
          - `name="name" value="it&#39;s &lt;b&gt;"`
@@ -985,7 +1018,7 @@ phases:
          - Also assert cmdRename([]string{"page"}) returns an error containing "usage: peek rename".
       9. Run gofmt, then check-full (D0).
     acceptance:
-      - go test ./internal/server/ -run 'TestRenameE2E|TestDashboardRename' -v passes
+      - go test ./internal/server/ -run 'TestRenameE2E|TestDashboardRename|TestUploadVersionToRenamedSlugExplains' -v passes
       - go test ./internal/web/ -run TestDashboardRendersRenameFormAndSafeDeleteConfirm -v passes
       - go test ./internal/cli/ -run TestCmdRename -v passes
       - "`! grep -q \"confirm(\\$event, 'Delete\" internal/web/templates/dashboard.gohtml` exits 0"
@@ -1010,22 +1043,22 @@ phases:
       - docs/plans/dashboard-visibility-grants-plan-manual-steps.html
     brief: |
       Read AGENTS.md (never hard-wrap Markdown lines), CONTRIBUTING.md, docs/architecture.md and docs/operations.md. Pattern commit: f625dc2. Find each anchor below by its text. There is no changelog and there are no ADRs. Do D0's setup.
-      1. docs/src/content/docs/using-peek.md, "Pick Visibility": after the paragraph starting "Restricted pages are opened up with grants", add the paragraph: "In the dashboard, the **Access** button on an upload's row renames the page, changes its visibility, sets a new password and, for restricted pages, adds or removes people and Google groups. Renaming changes the link to follow the new name; old links keep redirecting and are never given to another page. Setting a new password signs out everyone who unlocked the page with the previous one." After the CLI block containing `peek visibility <slug> restricted`, add `peek rename <slug> "New name"` to that block on its own line.
+      1. docs/src/content/docs/using-peek.md, "Pick Visibility": after the paragraph starting "Restricted pages are opened up with grants", add the paragraph: "In the dashboard, the **Access** button on an upload's row renames the page, changes its visibility, sets a new password and, for restricted pages, adds or removes people and Google groups. Renaming changes the link to follow the new name; old links keep redirecting and are never given to another page. Setting a new password signs out everyone who unlocked the page with the previous one." Inside the ```sh block under "Change visibility after upload", after the line `peek visibility <slug> restricted`, add the line `peek rename <slug> "New name"`. In the "Common user commands" ```text block, after `peek visibility <slug> public|password|private|restricted`, add `peek rename <slug> <new name>`.
       2. docs/src/content/docs/auth-access.md, "Upload Visibility": after the paragraph starting "A restricted page is opened up with grants", add: "Owners and admins can change a page's name, mode, password and grants later from the dashboard's **Access** dialog or with `peek rename`, `peek visibility` and `peek grant`. A new password revokes every earlier unlock of that page."
       3. docs/src/content/docs/manual.md: in the code block containing `peek visibility <slug> public|password|private|restricted`, add a line `peek rename <slug> <new name>` after it. After that block, add: "The dashboard's **Access** row action does the same, and manages grants on restricted pages, without the CLI."
-      4. docs/src/content/docs/reference.md: after the line `peek visibility <slug> public|private|password|restricted [--password <pw> | --password-stdin]`, add `peek rename <slug> <new name>`. Find the API route list or table (search for `/api/uploads/{slug}/visibility`) and add `POST /api/uploads/{slug}/name` with body `{"name": "..."}`, matching that list's format. If there is no API list, skip the API part.
+      4. docs/src/content/docs/reference.md: after the line `peek visibility <slug> public|private|password|restricted [--password <pw> | --password-stdin]`, add `peek rename <slug> <new name>`. In the "## Page And API Routes" table, after the row `| \`DELETE /api/uploads/<slug>/grants\` | Remove a grant. Same JSON body. |`, add the row `| \`POST /api/uploads/<slug>/name\` | Rename a page. JSON body \`{"name":"..."}\`; returns the new \`slug\`, \`url\` and \`name\`. The link follows the name; old links redirect. |`. If that row is not there verbatim, stop with status=blocked.
       5. README.md:
          - Append to the paragraph starting "Upload visibility is set at creation time": "Setting a new password signs out viewers who unlocked the page with the old one. `peek rename <slug> <new name>` renames a page; its link follows the name and old links redirect. The dashboard's **Access** row action does all of this from the browser."
          - In the CLI block that contains `peek visibility <slug> restricted      only the owner, admins and grantees`, add the line `peek rename <slug> <new name>         rename; old links redirect`.
-         - In the paragraph starting "A browser dashboard at `/login` lets users", replace "password-protect" with "rename, change visibility, password and grants of".
+         - In the paragraph starting "A browser dashboard at `/login` lets users", replace "lets users upload, list, delete, password-protect, and view stats." with "lets users upload, list, rename and delete pages, change their visibility, password and grants, and view stats." If that phrase is not there verbatim, stop with status=blocked.
          - Replace the threat-table row starting "| Bypassing password gate |" with: "| Bypassing password gate | `/raw` requires a short-lived HMAC-signed view token bound to visitor cookie. Changing the password revokes earlier unlocks. |"
       6. docs/architecture.md:
          - In the `internal/uploads` bullet, replace "owns upload creation behavior:" with "owns upload creation, rename and visibility-change rules (`PrepareVisibility`, `Rename`):".
          - Append to the "## Storage" paragraph: "`PrepareVisibility` validates later visibility/password changes and `Rename` derives a new link from a new name, for both the API and the dashboard. Renaming never moves objects: each version keeps its stored object key, and old slugs stay reserved as redirecting aliases (`upload_slug_aliases`)."
       7. docs/operations.md:
          - In "## Page Access", after "or the grants API", insert ", or the dashboard's **Access** dialog".
-         - Append to the paragraph starting "The uploaded HTML is served to the sandboxed iframe": "Setting a new password revokes earlier password unlocks on the next request in the same way. Renaming a page redirects its old links (302) to the new one; password-page viewers unlock once more after a rename."
-         - In "## Upgrades And Rollbacks", after the paragraph about migrations 7 and 8, add: "The next release adds migration 9 (`upload_slug_aliases`). After upgrading, existing password-page unlock cookies stop working once; viewers re-enter the password."
+         - Append to the paragraph starting "The uploaded HTML is served to the sandboxed iframe": "Setting a new password revokes earlier password unlocks on the next request in the same way. Renaming a page redirects its old links (302) to the new one; password-page viewers unlock once more after a rename. Pages already open under the old link must be reloaded before comments work again."
+         - In "## Upgrades And Rollbacks", after the paragraph about migrations 7 and 8, add: "Migration 9 (`upload_slug_aliases`) keeps the old links of renamed pages reserved. After upgrading, existing password-page unlock cookies stop working once; viewers re-enter the password. Do not roll back to an older binary once a page has been renamed: older binaries do not reserve old links, so a new upload could overwrite a renamed page's first version. Restore the pre-upgrade backup and object storage instead."
       8. skills/peek-server/SKILL.md, under "### Manage page passwords", after its code block, add the line: "Setting a new password revokes every earlier unlock of the page. Owners and admins can also do this, manage grants and rename pages from the dashboard's **Access** row action; `peek rename <slug> <new name>` renames from the CLI (old links redirect)."
       9. skills/peek/SKILL.md: directly after the line ending "...also switch an existing page with `peek visibility <slug> restricted`." (the paragraph starting "Restricted pages admit only the owner"), append one unwrapped line: "Owners can manage grants in the dashboard's **Access** dialog, and rename a page with `peek rename <slug> <new name>` (old links redirect)."
       10. `git rm docs/plans/dashboard-visibility-grants-plan.md docs/plans/dashboard-visibility-grants-plan-manual-steps.html`. Then `git grep -n "dashboard-visibility-grants-plan"` must print nothing.
