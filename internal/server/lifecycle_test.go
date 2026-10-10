@@ -175,4 +175,7 @@ func seedExpiredRetentionUpload(t *testing.T, store *db.Store, ownerID int64, sl
 	if _, err := store.Exec(`UPDATE uploads SET created_at=? WHERE slug=?`, createdAt, slug); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.Exec(`UPDATE upload_versions SET created_at=? WHERE upload_id=(SELECT id FROM uploads WHERE slug=?)`, createdAt, slug); err != nil {
+		t.Fatal(err)
+	}
 }
