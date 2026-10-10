@@ -19,6 +19,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/puemos/peek/internal/db"
+	"github.com/puemos/peek/internal/models"
 	"github.com/puemos/peek/internal/uploadquota"
 	webui "github.com/puemos/peek/internal/web"
 )
@@ -509,5 +510,41 @@ func assertVisibilityUnchanged(t *testing.T, s *Server, slug string) {
 	}
 	if got.Visibility != "restricted" {
 		t.Fatalf("visibility = %q, want restricted", got.Visibility)
+	}
+}
+
+func TestDashboardVisibilityRestrictedReopensDialog(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := newTwoVersionPage(t, s, "page", "public", "")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"restricted"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?manage=page&ok=%2Fp%2Fpage+is+now+restricted")
+}
+
+func TestDashboardListsGrantsInAccessDialog(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "page")
+	grant(t, s, u, models.UploadGrantUser, "alice@example.com")
+	get := func() string {
+		rec := doRequest(t, s, http.MethodGet, "/dashboard?manage=page", nil, asSession(s, u.OwnerAccountID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d", rec.Code)
+		}
+		return rec.Body.String()
+	}
+	body := get()
+	for _, want := range []string{
+		`alice@example.com`,
+		`action="/dashboard/grants/page/remove"`,
+		`action="/dashboard/grants/page"`,
+		`$nextTick(() => $refs.visibilityDialog.showModal())`,
+		`<input type="hidden" name="kind" value="user">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("dashboard missing %q", want)
+		}
+	}
+	s.groups = fakeGroups{members: map[string]bool{}}
+	if body := get(); !strings.Contains(body, `<option value="group">Google group</option>`) {
+		t.Fatal("dashboard missing group option")
 	}
 }

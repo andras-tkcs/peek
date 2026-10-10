@@ -567,3 +567,27 @@ func TestPageTemplateToolbarCanBeHidden(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardAccessDialogShowsGrantHintWhenNotRestricted(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplateDashboard, DashboardData{
+		CSRF:    "csrf",
+		User:    "Admin",
+		Uploads: []DashboardUpload{{Slug: "page", Visibility: "public"}},
+	})
+	if err != nil {
+		t.Fatalf("execute dashboard: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{
+		"Grants apply once you save Restricted above.",
+		"Only you and admins can open this page until you share it.",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("dashboard missing %q", want)
+		}
+	}
+}

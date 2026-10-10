@@ -5,6 +5,7 @@ import webui "github.com/puemos/peek/internal/web"
 type setupData = webui.SetupData
 type loginData = webui.LoginData
 type dashUpload = webui.DashboardUpload
+type dashGrant = webui.DashboardGrant
 type inviteDashRow = webui.InviteDashboardRow
 type accountDashRow = webui.AccountDashboardRow
 type dashData = webui.DashboardData
