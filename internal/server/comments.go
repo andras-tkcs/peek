@@ -72,6 +72,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusForbidden, "not owner")
 			return
 		}
+		s.recordTokenUse(r, owner)
 	} else if !s.viewerCanAccessUpload(r, u) {
 		jsonError(w, s.uploadAccessStatus(r, u), uploadAccessRequiredMessage(u))
 		return

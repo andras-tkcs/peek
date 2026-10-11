@@ -2,9 +2,12 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/andras-tkcs/peek/internal/db"
 	"github.com/andras-tkcs/peek/internal/models"
 )
 
@@ -62,7 +65,20 @@ func (s *Server) authToken(next http.HandlerFunc) http.HandlerFunc {
 			jsonError(w, http.StatusForbidden, "account disabled")
 			return
 		}
+		s.recordTokenUse(r, t)
 		next(w, withAPIToken(r, t))
+	}
+}
+
+// recordTokenUse stores when t was last used, at most once per
+// db.TokenLastUsedInterval, so a busy key does not write on every request.
+func (s *Server) recordTokenUse(r *http.Request, t *models.Token) {
+	now := time.Now()
+	if t.LastUsedAt > 0 && now.Unix()-t.LastUsedAt < db.TokenLastUsedInterval {
+		return
+	}
+	if err := s.store.TouchTokenLastUsed(r.Context(), t.ID, now); err != nil {
+		slog.Warn("token last-used update failed", "token_id", t.ID, "err", err)
 	}
 }
 
@@ -86,6 +102,7 @@ func (s *Server) authAdmin(next http.HandlerFunc) http.HandlerFunc {
 			jsonError(w, http.StatusForbidden, "admin only")
 			return
 		}
+		s.recordTokenUse(r, t)
 		next(w, withAPIToken(r, t))
 	}
 }

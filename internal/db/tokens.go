@@ -44,8 +44,8 @@ func (s *Store) CreateToken(ctx context.Context, token, name string, isAdmin boo
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO tokens(account_id,token,name,is_admin,created_at,expires_at) VALUES(?,?,?,?,?,?)`,
-		accountID, HashToken(token), strings.TrimSpace(name), boolToInt(isAdmin), now, expiresAt); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO tokens(account_id,token,name,is_admin,created_at,expires_at,hint) VALUES(?,?,?,?,?,?,?)`,
+		accountID, HashToken(token), strings.TrimSpace(name), boolToInt(isAdmin), now, expiresAt, nullableHint(token)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -55,8 +55,138 @@ func (s *Store) CreateTokenForAccount(ctx context.Context, token string, account
 	if strings.TrimSpace(name) == "" {
 		name = "API token"
 	}
-	_, err := s.ExecContext(ctx, `INSERT INTO tokens(account_id,token,name,is_admin,created_at) VALUES(?,?,?,?,?)`,
-		accountID, HashToken(token), strings.TrimSpace(name), 0, time.Now().Unix())
+	_, err := s.CreateAccountToken(ctx, accountID, token, name)
+	return err
+}
+
+// TokenLastUsedInterval is how often, in seconds, a token's last use is written.
+const TokenLastUsedInterval = 60
+
+// TokenHint returns the last four characters of token for display, or "" for
+// tokens shorter than 8 characters.
+func TokenHint(token string) string {
+	if len(token) < 8 {
+		return ""
+	}
+	return token[len(token)-4:]
+}
+
+// nullableHint maps an empty hint to NULL.
+func nullableHint(token string) any {
+	if h := TokenHint(token); h != "" {
+		return h
+	}
+	return nil
+}
+
+// CreateAccountToken stores a new token for an existing account and returns its id.
+func (s *Store) CreateAccountToken(ctx context.Context, accountID int64, token, name string) (int64, error) {
+	res, err := s.ExecContext(ctx, `INSERT INTO tokens(account_id,token,name,is_admin,created_at,hint) VALUES(?,?,?,0,?,?)`,
+		accountID, HashToken(token), strings.TrimSpace(name), time.Now().Unix(), nullableHint(token))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+const apiKeyColumns = `id,account_id,name,hint,created_at,expires_at,last_used_at`
+
+func scanAPIKey(row interface{ Scan(...any) error }) (*models.APIKey, error) {
+	k := &models.APIKey{}
+	var hint sql.NullString
+	var lastUsed sql.NullInt64
+	var created int64
+	if err := row.Scan(&k.ID, &k.AccountID, &k.Name, &hint, &created, &k.ExpiresAt, &lastUsed); err != nil {
+		return nil, err
+	}
+	k.Hint = hint.String
+	k.CreatedAt = time.Unix(created, 0)
+	k.LastUsedAt = lastUsed.Int64
+	return k, nil
+}
+
+// ListAccountTokens returns accountID's tokens, newest first, including expired ones.
+func (s *Store) ListAccountTokens(ctx context.Context, accountID int64) ([]models.APIKey, error) {
+	rows, err := s.QueryContext(ctx, `SELECT `+apiKeyColumns+` FROM tokens WHERE account_id=? ORDER BY created_at DESC, id DESC`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.APIKey
+	for rows.Next() {
+		k, err := scanAPIKey(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *k)
+	}
+	return out, rows.Err()
+}
+
+// RegenerateAccountToken replaces the secret of accountID's token tokenID in one
+// transaction and returns the updated key. sql.ErrNoRows when the token does not
+// exist or belongs to another account.
+func (s *Store) RegenerateAccountToken(ctx context.Context, accountID, tokenID int64, token string) (*models.APIKey, error) {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	k, err := scanAPIKey(tx.QueryRowContext(ctx, `SELECT `+apiKeyColumns+` FROM tokens WHERE id=? AND account_id=?`, tokenID, accountID))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET token=?, hint=?, last_used_at=NULL WHERE id=? AND account_id=?`,
+		HashToken(token), nullableHint(token), tokenID, accountID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	k.Hint = TokenHint(token)
+	k.LastUsedAt = 0
+	return k, nil
+}
+
+// DeleteAccountToken deletes accountID's token tokenID and returns what it was.
+// sql.ErrNoRows when the token does not exist or belongs to another account.
+func (s *Store) DeleteAccountToken(ctx context.Context, accountID, tokenID int64) (*models.APIKey, error) {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	k, err := scanAPIKey(tx.QueryRowContext(ctx, `SELECT `+apiKeyColumns+` FROM tokens WHERE id=? AND account_id=?`, tokenID, accountID))
+	if err != nil {
+		return nil, err
+	}
+	if err := detachTokenUploads(ctx, tx, tokenID); err != nil {
+		return nil, err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM tokens WHERE id=? AND account_id=?`, tokenID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireRowsAffected(res); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return k, nil
+}
+
+// detachTokenUploads clears uploads.owner_token_id for a token about to be deleted.
+func detachTokenUploads(ctx context.Context, tx *sql.Tx, tokenID int64) error {
+	_, err := tx.ExecContext(ctx, `UPDATE uploads SET owner_token_id=NULL WHERE owner_token_id=?`, tokenID)
+	return err
+}
+
+// TouchTokenLastUsed records a use at now unless one was recorded in the last
+// TokenLastUsedInterval seconds.
+func (s *Store) TouchTokenLastUsed(ctx context.Context, tokenID int64, now time.Time) error {
+	_, err := s.ExecContext(ctx, `UPDATE tokens SET last_used_at=? WHERE id=? AND (last_used_at IS NULL OR last_used_at<=?)`,
+		now.Unix(), tokenID, now.Unix()-TokenLastUsedInterval)
 	return err
 }
 
@@ -72,12 +202,14 @@ func (s *Store) getTokenWhere(ctx context.Context, where string, arg any) (*mode
 	t := &models.Token{}
 	var isAdmin, disabled, ts, exp int64
 	var email sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT tk.id,tk.account_id,tk.token,a.name,a.email,a.is_admin,a.disabled,tk.created_at,tk.expires_at
+	var lastUsed sql.NullInt64
+	err := s.QueryRowContext(ctx, `SELECT tk.id,tk.account_id,tk.token,a.name,a.email,a.is_admin,a.disabled,tk.created_at,tk.expires_at,tk.last_used_at
 		FROM tokens tk JOIN accounts a ON a.id=tk.account_id WHERE `+where, arg).
-		Scan(&t.ID, &t.AccountID, &t.Token, &t.Name, &email, &isAdmin, &disabled, &ts, &exp)
+		Scan(&t.ID, &t.AccountID, &t.Token, &t.Name, &email, &isAdmin, &disabled, &ts, &exp, &lastUsed)
 	if err != nil {
 		return nil, err
 	}
+	t.LastUsedAt = lastUsed.Int64
 	t.Email = email.String
 	t.IsAdmin = isAdmin == 1
 	t.Disabled = disabled == 1
@@ -128,6 +260,9 @@ func (s *Store) DeleteTokenChecked(ctx context.Context, id int64) (*models.Token
 		if n <= 1 {
 			return nil, ErrLastAdmin
 		}
+	}
+	if err := detachTokenUploads(ctx, tx, id); err != nil {
+		return nil, err
 	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM tokens WHERE id=?`, id)
 	if err != nil {
