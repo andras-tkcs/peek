@@ -65,6 +65,7 @@ type Server struct {
 	passwordLimiter *limiter
 	globalLimiter   *limiter
 	cliLoginLimiter *limiter
+	apiKeyLimiter   *limiter
 
 	trustedProxy           bool
 	s3AllowPrivateEndpoint bool
@@ -174,6 +175,7 @@ func New(cfg Config) (*Server, error) {
 		passwordLimiter:        newLimiter(10, time.Minute),
 		globalLimiter:          newLimiter(300, time.Minute),
 		cliLoginLimiter:        newLimiter(120, time.Minute),
+		apiKeyLimiter:          newLimiter(10, time.Minute),
 		trustedProxy:           cfg.TrustedProxy,
 		s3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		oidcAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
