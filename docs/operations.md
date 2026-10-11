@@ -44,7 +44,7 @@ Set `--trusted-proxy` only when the reverse proxy is trusted and overwrites or c
 
 On first run, Peek creates a one-time setup URL in the logs and stores the setup code in the data directory. Use it to create the first admin. After an account exists, the setup file is removed and the setup route is closed.
 
-For company usage, prefer OAuth/SSO with invite-only signup. Admins can configure Google, GitHub, or generic OpenID Connect in Settings, create invite links, and promote or disable users later. Direct bearer tokens remain appropriate for internal automation, CI jobs, and agents.
+For company usage, prefer OAuth/SSO with invite-only signup. Admins can configure Google, GitHub, or generic OpenID Connect in Settings, create invite links, and promote or disable users later. Direct bearer tokens remain appropriate for internal automation, CI jobs, and agents. Users can create their own from **Dashboard → API keys**.
 
 ## Page Access
 
@@ -93,6 +93,8 @@ Before upgrading, take a SQLite backup and confirm you know where uploaded objec
 This release adds migrations 7 (`upload_versions`, which also adds a `version` column to comments and visits and backfills one version per existing page) and 8 (`upload_grants`). Existing objects are not moved and existing `private` pages keep their meaning.
 
 Migration 9 (`upload_slug_aliases`) keeps the old links of renamed pages reserved. After upgrading, existing password-page unlock cookies stop working once; viewers re-enter the password. Do not roll back to an older binary once a page has been renamed: older binaries do not reserve old links, so a new upload could overwrite a renamed page's first version. Restore the pre-upgrade backup and object storage instead.
+
+Migration 10 (`token_hint_last_used`) adds `hint` and `last_used_at` to `tokens`. Tokens created before it show `—` instead of their last four characters on the dashboard. Older binaries ignore both columns, so tokens keep working after a rollback, but older binaries still cannot revoke a token that uploaded a page.
 
 Rollback is simplest when the database has not been migrated by a newer binary. If a release includes migrations, treat rollback as restoring the pre-upgrade backup plus object storage state.
 

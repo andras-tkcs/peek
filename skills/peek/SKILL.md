@@ -57,6 +57,8 @@ shell history unless you explicitly use `--token`. Config is saved to
 `~/Library/Application Support/peek` on macOS). You can also set `PEEK_HOST` and
 `PEEK_TOKEN` per command (handy for CI/agents).
 
+`PEEK_TOKEN` can also be a key the user creates in the Peek web dashboard under **API keys** (it starts with `peek_`). Ask the user to create one there when the CLI login is not possible, and to put it in the environment rather than pasting it into the conversation.
+
 If the user doesn't have a server, token, or invite yet, point them to the
 **peek-server** skill.
 

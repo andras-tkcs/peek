@@ -98,6 +98,8 @@ peek token revoke <id>
 
 Tokens are stored hashed and the plaintext token is shown only at creation time.
 
+Any signed-in account can also create, regenerate and revoke its own keys under **Dashboard → API keys** without the CLI. The key is shown once. The tokens that `peek login` creates appear there as "CLI login" and can be revoked there. Admins keep `peek token` and `/api/tokens` for tokens of other accounts.
+
 ## Upload Visibility
 
 Each upload chooses one of four access modes:
