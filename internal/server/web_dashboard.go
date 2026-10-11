@@ -72,6 +72,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		SettingsMeta:  sortedMeta,
 		SettingsPanel: settingsPanel,
 		Uploads:       uploads,
+		APIKeys:       s.dashboardAPIKeyRows(r.Context(), owner.ID),
 
 		GroupGrantsEnabled: s.groups != nil,
 		ManageSlug:         r.URL.Query().Get("manage"),

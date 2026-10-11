@@ -47,9 +47,9 @@
         }
       },
 
-      copy(text) {
+      copy(text, success) {
         const value = String(text || "");
-        return window.peekCopyText(value, { success: "Copied link." }).then((ok) => {
+        return window.peekCopyText(value, { success: success || "Copied link." }).then((ok) => {
           if (ok) {
             this.copied = value;
             setTimeout(() => { if (this.copied === value) this.copied = ""; }, 1500);

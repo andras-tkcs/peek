@@ -20,7 +20,7 @@ peekd --addr :7700 --data ./data --base-url http://localhost:7700
 
 # 2. Open the setup URL from the server logs and create the first admin.
 
-# 3. Log in
+# 3. Log in (or create an API key under Dashboard → API keys)
 peek login --host http://localhost:7700
 
 # 4. Share a page
@@ -136,7 +136,7 @@ peek version                           show version
 
 Upload visibility is set at creation time with `--visibility public|password|private|restricted`. Password uploads require `--password` or `--password-stdin`; `peek upload <file.html> --password <pw>` is also accepted as shorthand for password visibility. Use `peek visibility <slug> public` to remove the password gate and make the link public again, or `peek visibility <slug> private` to require a Peek account. Restricted pages admit only the owner, admins and signed-in viewers matching a grant (`peek grant`); group grants need the `PEEK_GOOGLE_*` settings below. Re-uploading with `--slug` adds a version: `/p/<slug>` serves the latest and `/p/<slug>/v/<n>` any retained version. Setting a new password signs out viewers who unlocked the page with the old one. `peek rename <slug> <new name>` renames a page; its link follows the name and old links redirect. The dashboard's **Access** row action does all of this from the browser.
 
-Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env override for CI, `peek login --token-stdin`, then `peek login --token-file <path>`. The `--token <value>` flag still works where token login is allowed but warns because it leaks into shell history and process lists.
+Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env override for CI (with a key from Dashboard → API keys), `peek login --token-stdin`, then `peek login --token-file <path>`. The `--token <value>` flag still works where token login is allowed but warns because it leaks into shell history and process lists.
 
 ## Configuration
 
@@ -220,7 +220,7 @@ Protect `/metrics` at your proxy. Full deployment checklist: [docs/operations.md
 
 ## Web dashboard
 
-A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, and view stats. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from Settings and optionally restrict human login to one exact email domain. OAuth signups are invite-only: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
+A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, view stats, and create, regenerate and revoke their own API keys. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from Settings and optionally restrict human login to one exact email domain. OAuth signups are invite-only: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
 
 OAuth callback URLs:
 ```

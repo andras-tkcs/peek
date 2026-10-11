@@ -34,6 +34,20 @@ type Token struct {
 	Disabled  bool
 	CreatedAt time.Time
 	ExpiresAt int64 // unix timestamp, 0 = no expiry
+
+	LastUsedAt int64 // unix seconds of the last recorded API use, 0 = never
+}
+
+// APIKey is one of an account's own bearer tokens as the dashboard lists it.
+// It never carries the secret or its hash.
+type APIKey struct {
+	ID         int64
+	AccountID  int64
+	Name       string // tokens.name
+	Hint       string // last four characters of the key, "" when unknown
+	CreatedAt  time.Time
+	ExpiresAt  int64 // unix seconds, 0 = never
+	LastUsedAt int64 // unix seconds, 0 = never
 }
 
 type Account struct {

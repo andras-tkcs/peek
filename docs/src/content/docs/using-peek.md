@@ -107,6 +107,16 @@ Stats answer a narrow question: did reviewers open the page?
 
 Peek hashes analytics IPs. Treat stats as internal review activity, not a full web analytics product.
 
+## API Keys
+
+Every signed-in account has an **API keys** card on the dashboard. **Create key** takes a name (1 to 100 characters) and shows the full key once, starting with `peek_`, with a Copy button ("Copy it now. Peek stores only a hash and cannot show it again.").
+
+The list shows each key's name, last four characters, created, last used (updated at most once a minute) and expiry, including the "CLI login" keys that `peek login` creates. Keys that were created before the hint was recorded show `—` instead of their last four characters.
+
+**Regenerate** replaces the secret and keeps the name, and the old key stops working at once. **Revoke** deletes the key after a confirmation.
+
+A key acts as your account with the same access, so an admin's key can use the admin API. It keeps working until it is revoked or the account is disabled, even if an allowed email domain is set later. Use it as `PEEK_TOKEN` or as `Authorization: Bearer <key>`.
+
 ## CLI Workflow
 
 Configure once:
@@ -133,4 +143,4 @@ peek delete <slug>
 peek delete-all
 ```
 
-For automation, set `PEEK_HOST` and `PEEK_TOKEN`. Prefer browser login, `--token-stdin`, or `--token-file` over passing a token directly in the command line.
+For automation, set `PEEK_HOST` and `PEEK_TOKEN`, with a key from **Dashboard → API keys** or from `peek login`. Prefer browser login, `--token-stdin`, or `--token-file` over passing a token directly in the command line.

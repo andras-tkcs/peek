@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS upload_slug_aliases (
 	created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_upload_slug_aliases_upload ON upload_slug_aliases(upload_id);`},
+	{10, "token_hint_last_used", `-- ALTER TABLE handled idempotently below`},
 }
 
 func (s *Store) runMigrations() error {
@@ -91,6 +92,10 @@ func (s *Store) runMigrations() error {
 			}
 		} else if m.id == 7 {
 			if err := s.migrateUploadVersions(); err != nil {
+				return fmt.Errorf("migration %d (%s): %w", m.id, m.desc, err)
+			}
+		} else if m.id == 10 {
+			if err := s.migrateTokenHintLastUsed(); err != nil {
 				return fmt.Errorf("migration %d (%s): %w", m.id, m.desc, err)
 			}
 		} else if m.sql != "" {
@@ -197,6 +202,21 @@ func (s *Store) migrateUploadVersions() error {
 	_, err := s.Exec(`INSERT OR IGNORE INTO upload_versions(upload_id,version,object_key,size,created_by_account_id,created_at)
 		SELECT id,1,slug,size,NULL,created_at FROM uploads`)
 	return err
+}
+
+// migrateTokenHintLastUsed adds the dashboard's key hint and last-use time to
+// tokens. Existing rows keep NULL for both: only hashes are stored, so their
+// hints cannot be recovered.
+func (s *Store) migrateTokenHintLastUsed() error {
+	for _, stmt := range []string{
+		`ALTER TABLE tokens ADD COLUMN hint TEXT`,
+		`ALTER TABLE tokens ADD COLUMN last_used_at INTEGER`,
+	} {
+		if _, err := s.Exec(stmt); err != nil && !isDuplicateColumnError(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func isDuplicateColumnError(err error) bool {

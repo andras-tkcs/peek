@@ -2,11 +2,13 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/andras-tkcs/peek/internal/db"
 )
@@ -97,4 +99,81 @@ func newAuthTestStore(t *testing.T, token, name string, isAdmin bool) *db.Store 
 		t.Fatalf("seed token: %v", err)
 	}
 	return store
+}
+
+func tokenLastUsed(t *testing.T, s *Server, token string) sql.NullInt64 {
+	t.Helper()
+	var v sql.NullInt64
+	if err := s.store.QueryRow(`SELECT last_used_at FROM tokens WHERE token=?`, db.HashToken(token)).Scan(&v); err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func setTokenLastUsed(t *testing.T, s *Server, token string, v any) {
+	t.Helper()
+	if _, err := s.store.Exec(`UPDATE tokens SET last_used_at=? WHERE token=?`, v, db.HashToken(token)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func requireNear(t *testing.T, v sql.NullInt64, want int64) {
+	t.Helper()
+	if !v.Valid || v.Int64 < want-5 || v.Int64 > want+5 {
+		t.Fatalf("last_used_at = %v, want about %d", v, want)
+	}
+}
+
+func TestAuthTokenRecordsTokenUse(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	token := "user-token-0123456789"
+	newAccountWithToken(t, s, "u@example.test", token, false)
+	get := func() {
+		if rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer(token)); rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/uploads = %d", rec.Code)
+		}
+	}
+	get()
+	requireNear(t, tokenLastUsed(t, s, token), time.Now().Unix())
+
+	old := time.Now().Unix() - 30
+	setTokenLastUsed(t, s, token, old)
+	get()
+	if v := tokenLastUsed(t, s, token); v.Int64 != old {
+		t.Fatalf("throttled write changed value to %v", v)
+	}
+
+	setTokenLastUsed(t, s, token, time.Now().Unix()-120)
+	get()
+	requireNear(t, tokenLastUsed(t, s, token), time.Now().Unix())
+}
+
+func TestAuthAdminRecordsTokenUse(t *testing.T) {
+	s, adminToken := newHandlerTestServer(t)
+	if rec := doRequest(t, s, http.MethodGet, "/api/tokens", nil, asBearer(adminToken)); rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/tokens = %d", rec.Code)
+	}
+	requireNear(t, tokenLastUsed(t, s, adminToken), time.Now().Unix())
+}
+
+func TestListCommentsRecordsTokenUse(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	token := "user-token-0123456789"
+	newAccountWithToken(t, s, "u@example.test", token, false)
+	rec := uploadPage(t, s, token, versionTestHTML1, map[string]string{"visibility": "public"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("upload = %d: %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Slug string `json:"slug"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	setTokenLastUsed(t, s, token, nil)
+	rec = doRequest(t, s, http.MethodGet, "/api/uploads/"+out.Slug+"/comments", nil, asBearer(token))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("comments = %d: %s", rec.Code, rec.Body.String())
+	}
+	requireNear(t, tokenLastUsed(t, s, token), time.Now().Unix())
 }
