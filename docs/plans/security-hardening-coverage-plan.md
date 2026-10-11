@@ -23,12 +23,12 @@ The detailed design is in **Design A–E** below. They were written independentl
 
 - **Phases.** The "Phases", "Phase plan", "Proposed phases", "Execution order" and "Files touched" groupings inside Design A–E are superseded by the implementation manifest. A phase changes only the paths in its `touches`; the brief says which Design subsections it implements.
 - **Docs.** No security phase edits prose docs. Every "Docs", "Docs to update" and "Docs (Pn)" item in Design A–D is applied by the two docs phases (`p20-docs-operations`, `p21-docs-readme-skills`), with the text changes in §0.4 below. The only doc-adjacent files a security phase edits are `docs/astro.config.mjs` and `docs/src/components/SiteChrome.astro` (site config, in `p04-supply-chain-ci`).
-- **Stop conditions** in Design A–E apply to the phase implementing that subsection. "Ask the user / the orchestrator" in a stop condition means: stop with `status=blocked` and say why.
+- **Stop conditions** in Design A–E apply to the phase implementing that subsection. "Ask the user / the orchestrator" in a stop condition means: stop with `status=blocked` and say why. These are void: Design A › S1's two "manual browser smoke" stop conditions (now `ma1-browser-smoke`), Design B §0 "Blocking confirmation for the user" and the first Design B §2 stop condition (settled by §0.2), Design B §7's "manual smoke test" sentence (now `ma2-cli-login`), and Design D › L8's "use the next free id" (see §0.1).
 
 #### §0.1 Migration numbers
 
 - 11 `cli_login_request_context` and 12 `account_session_epoch`: both in `p02-db-auth-storage` (Design B §1 "Storage (P1)", §5 "Storage (P1)").
-- 13 `comment_account_id`: in `p17-comment-authors` (Design D › L8), which runs after `p02`. Keep the `migrations` slice sorted by id; the `m.id == 13` branch goes after `m.id == 12` and before `m.sql != ""`.
+- 13 `comment_account_id`: in `p17-comment-authors` (Design D › L8), which runs after `p02`. Keep the `migrations` slice sorted by id; the `m.id == 13` branch goes after `m.id == 12` and before `m.sql != ""`. If id 13 is already taken when p17 starts, p17 stops with `status=blocked` (this overrides Design D's "use the next free id").
 
 #### §0.2 API token policy: email-less automation accounts are exempt (overrides Design B §0 and §2)
 
@@ -87,7 +87,7 @@ const (
 )
 ```
 
-and call `dashboardOK(w, r, flashSessionsRevoked)` / `dashboardError(w, r, flashSessionsRevokeFailed)`. Its tests expect `/dashboard?ok=sessions_revoked` and `/dashboard?err=sessions_revoke_failed`. (Until `p16` lands the dashboard shows the raw code; that intermediate state never leaves the feature branch.) `p16-flash-codes` adds `flashSessionsRevoked: "other sessions signed out"` and `flashSessionsRevokeFailed: "sign out failed"` to `flashMessages` in `web_helpers.go`, includes both in `TestFlashMessagesCoverAllCodes`, and does not edit `web_sessions.go`.
+and call `dashboardOK(w, r, flashSessionsRevoked)` / `dashboardError(w, r, flashSessionsRevokeFailed)`. Its tests expect `/dashboard?ok=sessions_revoked` and `/dashboard?err=sessions_revoke_failed`. (Until `p16` lands the dashboard shows the raw code; that intermediate state never leaves the feature branch.) `p16-flash-codes` adds `flashSessionsRevoked: "other sessions signed out"` and `flashSessionsRevokeFailed: "sign out failed"` to `flashMessages` in `web_helpers.go`, includes both in `TestFlashMessagesCoverAllCodes`, and does not edit `web_sessions.go`: the two constants stay declared there and `web_helpers.go` only adds `flashMessages` entries for them. Because p16 makes `parseDashboardForm` redirect with `flashInvalidSession`, p16 also updates `TestDashboardSessionsRevokeRequiresCSRF` in `web_sessions_test.go` to expect `/dashboard?err=invalid_session`.
 
 #### §0.6 Design A › S2 is split in two phases
 
@@ -103,6 +103,8 @@ and call `dashboardOK(w, r, flashSessionsRevoked)` / `dashboardError(w, r, flash
 #### §0.8 Quality gate inside a phase
 
 Every phase runs `mise run check`. Phases touching `internal/server/**`, `internal/db/**`, `internal/objectstore/**` or `internal/uploads/**` run `mise run check-full`. In a cloud container `govulncheck` cannot reach `vuln.go.dev` (HTTP 403); when that is the **only** failing step, run `mise run check && mise run race && mise run staticcheck && mise run coverage` instead and say so in the phase report (CI runs govulncheck on the PR). Any other failure is real.
+
+`mise run check` runs `mise run build`, which regenerates `internal/web/assets/pines.css` with Tailwind. Until `p04-supply-chain-ci` lands, Tailwind also scans Markdown files, so docs and plan edits make `pines.css` drift (checked: a plain `mise run tailwind` on the plan branch changes it). A phase that does not list `internal/web/assets/pines.css` in its `touches` runs `git checkout -- internal/web/assets/pines.css` after each `mise run check` and never commits it. `p04` stops the drift (Tailwind no longer scans `docs/`, `skills/` and Markdown files) and commits one regenerated `pines.css`.
 
 #### §0.9 Coverage phases
 
@@ -135,6 +137,7 @@ Coverage phases (`c01`–`c14`, `g01`) follow Design E §5 with these rules:
 go test -coverprofile=/tmp/c.out ./internal/<pkg>/ >/dev/null && awk -F'[:, ]' 'NR>1 { t[$1]+=$4; if ($5>0) c[$1]+=$4 } END { for (f in t) if (100*c[f]/t[f] < 90) printf "%.1f %s\n", 100*c[f]/t[f], f }' /tmp/c.out | sort -n
 ```
 
+- **Unreachable blocks.** A file may end below its floor only when every block still at count 0 in it is listed in the phase report as unreachable, with the reason (Design E §3 class (c), or a reason of the same kind). That list is part of the phase's acceptance.
 - **Package floors** (checked by `g01`, not by CI): server ≥ 91%, db ≥ 90%, cli ≥ 91%, objectstore ≥ 92%, peekd ≥ 90%, uploads ≥ 92%, web ≥ 90%, groups ≥ 95% (Design E §4). At those floors the total is about 90.9%.
 - **Gate.** `g01` adds `scripts/coverage-gate.sh` exactly as Design E § "Phase G", wires it into `mise.toml` `[tasks.coverage]` and the `ci.yml` Coverage step, and may add top-up tests (≤ 300 lines, `_test.go` only) in any package below its floor until the total is ≥ 90.0%.
 
@@ -3881,7 +3884,7 @@ Releasing (which first publishes `checksums.txt`) is the maintainer's decision a
 - **Line drift.** Design line numbers are from 6380c6b/d7242f9. Workers locate code by symbol; a symbol that no longer exists or has a different shape than the design describes is a stop condition (`status=blocked`), not something to redesign.
 - **Coverage arithmetic.** The floors give about 90.9%. If the security phases add more untested code than expected, `g01` tops up; if the total is still below 90.0% after 300 lines of top-up, `g01` stops with `status=blocked` and lists the packages below their floors.
 - **Parallel server coverage phases** (`c02`–`c07`) share one Go package; identifier clashes are avoided by the prefixes in §0.9. A compile error after a merge from a duplicate identifier is fixed by renaming in the later phase.
-- **Docs site build.** `p20`/`p21` build the docs locally (`cd docs && pnpm install --frozen-lockfile && pnpm build`). If that cannot run in the container, they dispatch `pages.yml` against the feature branch and judge only its "Build docs" job; that workflow also has a deploy job, so say in the report whether the deploy job ran.
+- **Docs site build.** `p20`/`p21` build the docs locally (`cd docs && pnpm install --frozen-lockfile && pnpm build`). If that cannot run in the container, they dispatch `pages.yml` against the feature branch and judge its "Build docs" job; `p04` restricts the deploy job to `main`, so a dispatch from the feature branch only builds.
 
 ## Implementation manifest
 
@@ -3910,7 +3913,7 @@ verify_after_merge:
   - sh -c 'go test -coverprofile=/tmp/peek-cover.out ./... >/dev/null && go tool cover -func=/tmp/peek-cover.out | tail -1'
 final_checks:
   - docs/plans/security-hardening-coverage-plan.md and docs/plans/security-hardening-coverage-plan-manual-steps.html are deleted and `grep -rn "security-hardening-coverage-plan" --exclude-dir=.git .` prints nothing
-  - '`grep -rn puemos --exclude-dir=.git --exclude-dir=node_modules .` prints only LICENSE:3'
+  - '`grep -rn puemos --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=audits .` prints only LICENSE:3'
   - '`sh scripts/coverage-gate.sh` prints "coverage gate: OK" with a total of at least 90.0%'
   - '`grep -nE "uses: [^@]+@v[0-9]" .github/workflows/*.yml` prints nothing'
   - The audit report docs/audits/2026-10-security-and-coverage-audit.md starts with a status line naming this change
@@ -3938,7 +3941,7 @@ phases:
       6. Delete `handleRaw` and its route `GET /raw/{slug}` in internal/server/routes.go (item 7).
       7. In internal/server/web_csrf.go set `HttpOnly: true` on the `hn_csrf` cookie (item 8). Do not touch internal/web/templates/page.gohtml (item 9).
       8. Update the existing tests listed under "Existing tests to update" and add every test under "Tests to add" (Design A › S1), including the helpers `rawSrcFromPage`, `withCookieList`, `withFetchDest` and the three L6 tests.
-      9. Run `mise run check-full` (Design §0.8). Do not edit docs; p20/p21 apply Design A's docs items.
+      9. Do not edit internal/server/security_test.go (Design A lists it as conditional; nothing there needs to change). Run `mise run check-full` (Design §0.8). Do not edit docs; p20/p21 apply Design A's docs items.
     acceptance:
       - go test ./internal/server -count=1 -run 'TestRawSetsSandboxCSP|TestRawRejectsNonIframeFetchDest|TestRawTokenRequiresVisitorCookie|TestRawSandboxMatchesIframeAttribute|TestRawRefusedAfterVisibilityChange|TestRawRefusedAfterGrantRemoved|TestRawRefusedAfterPasswordChange|TestLegacyRawRouteRemoved|TestRawHTMLE2ERejectsLeakedURL|TestCSRFTokenSetsCookie' passes
       - '`grep -n "GET /raw/{slug}\"" internal/server/routes.go` prints nothing'
@@ -4011,6 +4014,8 @@ phases:
       - .github/workflows/pages.yml
       - docs/astro.config.mjs
       - docs/src/components/SiteChrome.astro
+      - internal/web/tailwind-input.css
+      - internal/web/assets/pines.css
     brief: |
       1. Read the must-read docs and Design §0, then Design C › S5 and Design C › L14 in full.
       2. release.yml: add the `checksums` job exactly as S5 Design item 1.
@@ -4018,14 +4023,18 @@ phases:
       4. mise.toml: replace the `[tasks.tailwind]` run script (S5 item 3). First re-download https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.1/sha256sums.txt and compare the four hashes; any difference is a stop condition.
       5. docs/astro.config.mjs and docs/src/components/SiteChrome.astro: `puemos` → `andras-tkcs` (S5 table rows marked P1).
       6. All four workflows: pin every `uses:` to the SHA with the version comment from the L14 table; ci.yml govulncheck `@v1.9.0` and staticcheck `version: "2026.2.1"`; mise.toml govulncheck `@v1.9.0` and staticcheck `@v0.8.1` with the comment line; permissions per L14 Design (release.yml top-level `contents: read` plus job-level, docker-main.yml and pages.yml job-level). Do not change the ci.yml Coverage step (g01 does).
-      7. Run every check under S5 "Tests / verification" and L14 "Tests / verification", including the offline fake-release run of install.sh in your scratch directory (never commit the test copy), the Tailwind re-download check and `git diff --exit-code internal/web/assets/pines.css`.
-      8. Run `mise run check`. Do not edit README.md, skills/ or docs/src/content (p21 does).
+      7. pages.yml: add `if: github.ref == 'refs/heads/main'` to the `deploy` job, so a dispatch against another branch only builds.
+      8. internal/web/tailwind-input.css: directly after `@import "tailwindcss";` add the three lines `@source not "../../docs";`, `@source not "../../skills";` and `@source not "../../**/*.md";` (Tailwind v4 source exclusion; paths are relative to the CSS file). Run `mise run tailwind` and commit the regenerated internal/web/assets/pines.css once. Verify the exclusion: create an untracked `docs/tw-probe.md` containing the class `bg-[#123457]`, run `mise run tailwind`, check that `grep -c 123457 internal/web/assets/pines.css` prints 0, delete the probe and run `mise run tailwind` again so `git diff --exit-code internal/web/assets/pines.css` is clean. If Tailwind rejects the `@source not` syntax, stop with status=blocked.
+      9. Run every check under S5 "Tests / verification" and L14 "Tests / verification", including the offline fake-release run of install.sh in your scratch directory (never commit the test copy) and the Tailwind re-download check. `mise run govulncheck` gets HTTP 403 from vuln.go.dev in a cloud container; that is expected (Design §0.8) and is not a reason to fall back to v1.8.0. Instead check that `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -version` builds and runs; fall back to v1.8.0 only if that fails.
+      10. Run `mise run check`. Do not edit README.md, skills/ or docs/src/content (p21 does).
     acceptance:
       - '`sh -n install.sh` exits 0 and `grep -c "andras-tkcs/peek" install.sh` prints at least 2'
       - '`grep -nE "uses: [^@]+@v[0-9]" .github/workflows/*.yml` prints nothing'
       - '`grep -n "@latest\|\"latest\"" .github/workflows/*.yml mise.toml` prints nothing'
       - '`grep -n "checksums.txt" .github/workflows/release.yml` matches'
       - '`python3 -c "import yaml,sys;[yaml.safe_load(open(f)) for f in sys.argv[1:]]" .github/workflows/*.yml` exits 0'
+      - '`grep -c "@source not" internal/web/tailwind-input.css` prints 3 and `grep -n "refs/heads/main" .github/workflows/pages.yml` matches'
+      - '`mise run tailwind && git diff --exit-code internal/web/assets/pines.css` exits 0 on the committed tree'
       - mise run check passes
 
   - id: p05-cli-login-host
@@ -4206,7 +4215,7 @@ phases:
 
   - id: p10-cli-login-pages
     title: Typed-code CLI login pages with request context, rate limit and 90-day CLI tokens (S3 server side, S4 expiry)
-    depends_on: [p01-raw-sandbox, p02-db-auth-storage, p07-token-policy]
+    depends_on: [p01-raw-sandbox, p02-db-auth-storage, p04-supply-chain-ci, p07-token-policy]
     complexity: M
     touches:
       - internal/server/cli_login.go
@@ -4225,7 +4234,7 @@ phases:
       6. Tests: new internal/server/cli_login_test.go with every test of Design B §1 "internal/server/cli_login_test.go"; the internal/web/renderer_test.go changes.
       7. Run `mise run check-full` (Design §0.8).
     acceptance:
-      - go test ./internal/server ./internal/web -count=1 -run 'TestNormalizeUserCode|TestCLILoginStartReturnsCodeFreeVerificationURL|TestCLILoginLegacyLinkRedirectsWithoutCode|TestCLILoginEntryRequiresSession|TestCLILoginEntryRendersCodeForm|TestCLILoginLookupShowsRequestContext|TestCLILoginLookupRejectsUnknownExpiredOrMalformedCode|TestCLILoginLookupRequiresCSRF|TestCLILoginLookupIsRateLimited|TestCLILoginApproveIssuesNinetyDayToken|TestCLILoginApproveDeny|TestCLILoginApproveRequiresCSRF|TestCLILoginApproveRequiresSession|TestCLILoginApproveExpiredCode|TestCLILoginPollDeniesAccountFailingPolicy|TestTemplates' passes
+      - go test ./internal/server ./internal/web -count=1 -run 'TestNormalizeUserCode|TestCLILoginStartReturnsCodeFreeVerificationURL|TestCLILoginLegacyLinkRedirectsWithoutCode|TestCLILoginEntryRequiresSession|TestCLILoginEntryRendersCodeForm|TestCLILoginLookupShowsRequestContext|TestCLILoginLookupRejectsUnknownExpiredOrMalformedCode|TestCLILoginLookupRequiresCSRF|TestCLILoginLookupIsRateLimited|TestCLILoginApproveIssuesNinetyDayToken|TestCLILoginApproveDeny|TestCLILoginApproveRequiresCSRF|TestCLILoginApproveRequiresSession|TestCLILoginApproveExpiredCode|TestCLILoginPollDeniesAccountFailingPolicy|TestRendererExecutesAllTemplates' passes
       - '`grep -n "\"/cli-login/\" + userCode" internal/server/cli_login.go` prints nothing and `grep -c "cliTokenTTL = 90 \* 24 \* time.Hour" internal/server/cli_login.go` prints 1'
       - mise run check passes
 
@@ -4238,7 +4247,7 @@ phases:
       - internal/server/web_login_test.go
     brief: |
       1. Read the must-read docs and Design §0 (§0.7), then Design B §4.
-      2. internal/server/web_login.go: `passwordCompare`, `dummyPasswordHash` (`sync.OnceValue`), `checkPassword`, and the new order inside `checkPasswordLogin` (p09b's throttle wrapper stays around it).
+      2. internal/server/web_login.go: `passwordCompare`, `dummyPasswordHash` (`sync.OnceValue`), `checkPassword`, and the new order inside `checkPasswordLogin` (p09b's throttle wrapper stays around it). `checkPasswordLogin` still returns `(int64, string, error)` in this phase, so Design B §4's `return nil, fmt.Errorf(...)` is written `return 0, "", fmt.Errorf(...)`; p11b changes the types.
       3. Tests in internal/server/web_login_test.go: `TestLoginWithPasswordRunsOneBcryptCompareOnEveryFailure` (fresh server per subtest) and `TestDummyPasswordHashIsDefaultCost`.
       4. Run `mise run check-full` (Design §0.8).
     acceptance:
@@ -4269,7 +4278,7 @@ phases:
       3. internal/server/web_auth.go: parse the subject with `parseSessionSubject` and refuse a stale epoch before the `accountActive` check.
       4. Callers: oauth_flow.go and web_setup.go pass the account; web_login.go changes `loginWithPassword`, `checkPasswordLogin` and `loginWithToken` to return `(*models.Account, error)` and `handleLogin` uses the account (§0.7).
       5. New internal/server/web_sessions.go with `handleDashboardSessionsRevoke` and the two flash constants of §0.5; route `POST /dashboard/sessions/revoke` in routes.go; the button in internal/web/templates/dashboard.gohtml.
-      6. Run `mise run build`; commit a pines.css change if any; stop if classes are removed.
+      6. Run `mise run build`; commit a pines.css change if any (pines.css is generated, so it is not counted as a ninth source file); stop if classes are removed.
       7. Tests: new internal/server/web_sessions_test.go (Design B §5 list, with the §0.5 Locations), `TestLoginSetsEpochSessionCookie` in web_login_test.go, arity updates in auth_domain_test.go and web_login_test.go.
       8. Run `mise run check-full` (Design §0.8).
     acceptance:
@@ -4326,7 +4335,7 @@ phases:
   - id: p15-audit-detail
     title: Quote user-controlled audit detail values (L7b)
     depends_on: [p14-slugs-names]
-    complexity: S
+    complexity: M
     touches:
       - internal/server/lifecycle.go
       - internal/server/api_tokens.go
@@ -4368,13 +4377,14 @@ phases:
       - internal/server/web_api_keys_test.go
       - internal/server/admin_test.go
       - internal/server/settings_test.go
+      - internal/server/web_sessions_test.go
     brief: |
       1. Read the must-read docs and Design §0 (§0.5), then Design D › L9 in full and the two web_dashboard.go lines of Design D › L7 "P3".
-      2. internal/server/web_helpers.go: the flash constants and `flashMessages` (all codes of the L9 tables plus the two of §0.5), the new redirect helpers, `dashboardFlashView`, `resolveFlash`, `flashText`, `findDashUpload`, `dashUploadHasGrant`, `grantFlashCode`.
+      2. internal/server/web_helpers.go: the flash constants of the L9 tables and `flashMessages` (all L9 codes, plus entries for `flashSessionsRevoked` and `flashSessionsRevokeFailed`, which stay declared in web_sessions.go), the new redirect helpers, `dashboardFlashView`, `resolveFlash`, `flashText`, `findDashUpload`, `dashUploadHasGrant`, `grantFlashCode`.
       3. internal/server/upload_service.go: delete `uploadErrorMessage`, add `uploadFlashCode`.
       4. internal/server/web_dashboard.go: split `handleDashboard` into it plus `renderDashboard`; convert every call site; the two `auditDetail` lines.
       5. Convert the call sites in settings.go (inline 400 render for normalize errors), web_rename.go, web_grants.go, admin.go and web_api_keys.go exactly as listed.
-      6. Update and add the tests in L9 "Tests to update (P3)" and "Tests to add (P3)"; include `flashSessionsRevoked` and `flashSessionsRevokeFailed` in `TestFlashMessagesCoverAllCodes`.
+      6. Update and add the tests in L9 "Tests to update (P3)" and "Tests to add (P3)"; include `flashSessionsRevoked` and `flashSessionsRevokeFailed` in `TestFlashMessagesCoverAllCodes`; in web_sessions_test.go change `TestDashboardSessionsRevokeRequiresCSRF` to expect `/dashboard?err=invalid_session` (§0.5).
       7. Check: `grep -n 'dashboardError(w, r, "' internal/server/*.go`, `grep -n 'dashboardOK(w, r, "' internal/server/*.go` and `grep -n '"[a-z_]*="+' internal/server/*.go | grep -v _test` (only pages.go and comments.go may remain).
       8. If a flash producer outside the listed files appears, stop with status=blocked. Run `mise run check-full` (Design §0.8).
     acceptance:
@@ -4429,7 +4439,7 @@ phases:
       2. For each of the four files, apply every docs item that names it in Design A (S1, S2, L1), Design B §6 (as amended by §0.2), Design C (S7, L10, L11, S6, L12, L13) and Design D (L15, L7a, L7b, L8). Use the code on the branch as the source of truth for flag names, defaults and texts; where a docs item disagrees with the merged code, follow the code and say so in the report.
       3. docs/operations.md "Upgrades And Rollbacks": one paragraph each for migrations 11, 12, 13 and the S1, S2 and token-policy notes, in that order, after the migration 10 paragraph.
       4. No manual line wrapping (AGENTS.md).
-      5. Build the docs site: `cd docs && pnpm install --frozen-lockfile && pnpm build`. If that cannot run in the container, dispatch `pages.yml` against the feature branch with the GitHub MCP `actions_run_trigger`, judge only the "Build docs" job, and say whether the deploy job ran.
+      5. Build the docs site: `cd docs && pnpm install --frozen-lockfile && pnpm build`. If that cannot run in the container, dispatch `pages.yml` against the feature branch with the GitHub MCP `actions_run_trigger` and judge its "Build docs" job (p04 made the deploy job run only on main; if the deploy job runs anyway, cancel the run and stop with status=blocked).
     acceptance:
       - '`grep -n "PEEK_TRUSTED_PROXY_CIDRS" docs/operations.md` matches, `grep -n "PEEK_METRICS_TOKEN" docs/operations.md` matches, `grep -n "Migration 13" docs/operations.md` matches'
       - '`grep -n "/cli-login" docs/src/content/docs/auth-access.md` matches and `grep -n "verified" docs/src/content/docs/reference.md` matches'
@@ -4438,7 +4448,7 @@ phases:
   - id: p21-docs-readme-skills
     title: README, server setup, deployment platforms and skills (repo references, new flags, security table)
     depends_on: [p04-supply-chain-ci, p06-cli-path-segments, p13-body-cap, p16-flash-codes, p17-comment-authors]
-    complexity: S
+    complexity: M
     touches:
       - README.md
       - docs/src/content/docs/server-setup.md
@@ -4480,8 +4490,8 @@ phases:
       5. Measure with the per-file command of §0.9. Run `mise run check-full` (Design §0.8).
     acceptance:
       - go test ./internal/server -count=1 passes
-      - the §0.9 per-file command lists none of admin.go, web_setup.go (floor 85), bootstrap.go, server.go (floor 85), render.go, assets.go, web_format.go, json_decode.go below its floor
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - apart from files whose remaining count-0 blocks are all listed in the report as unreachable (§0.9), the §0.9 per-file command lists none of admin.go, web_setup.go (floor 85), bootstrap.go, server.go (floor 85), render.go, assets.go, web_format.go, json_decode.go below its floor
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c02-cov-server-api
     title: Coverage for server token, stats, grants, rename, versions and audit APIs
@@ -4501,8 +4511,8 @@ phases:
       4. Measure with the §0.9 command. Run `mise run check-full` (Design §0.8).
     acceptance:
       - go test ./internal/server -count=1 passes
-      - the §0.9 per-file command lists none of api_stats.go, api_tokens.go, api_grants.go, api_rename.go, api_versions.go, api_audit.go
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - apart from files whose remaining count-0 blocks are all listed in the report as unreachable (§0.9), the §0.9 per-file command lists none of api_stats.go, api_tokens.go, api_grants.go, api_rename.go, api_versions.go, api_audit.go
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c03-cov-server-settings-helpers
     title: Coverage for server settings, runtime settings and small helpers
@@ -4523,8 +4533,8 @@ phases:
       4. Measure with the §0.9 command. Run `mise run check-full` (Design §0.8).
     acceptance:
       - go test ./internal/server -count=1 passes
-      - the §0.9 per-file command lists none of settings.go, runtime_settings.go, access.go, auth_domain.go, upload_delete.go, upload_service.go, web_helpers.go, account_policy.go
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - apart from files whose remaining count-0 blocks are all listed in the report as unreachable (§0.9), the §0.9 per-file command lists none of settings.go, runtime_settings.go, access.go, auth_domain.go, upload_delete.go, upload_service.go, web_helpers.go, account_policy.go
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c04-cov-server-dashboard-login
     title: Coverage for server dashboard, API keys, web grants, web login, web auth, sessions
@@ -4545,8 +4555,8 @@ phases:
       4. Measure with the §0.9 command. Run `mise run check-full` (Design §0.8).
     acceptance:
       - go test ./internal/server -count=1 passes
-      - the §0.9 per-file command lists none of web_dashboard.go, web_api_keys.go, web_grants.go, web_login.go, web_auth.go, web_sessions.go, web_rename.go
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - apart from files whose remaining count-0 blocks are all listed in the report as unreachable (§0.9), the §0.9 per-file command lists none of web_dashboard.go, web_api_keys.go, web_grants.go, web_login.go, web_auth.go, web_sessions.go, web_rename.go
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c05-cov-server-oauth
     title: Coverage for server OAuth flow, profile, config, accounts and session helpers
@@ -4565,8 +4575,8 @@ phases:
       4. Measure with the §0.9 command. Run `mise run check-full` (Design §0.8).
     acceptance:
       - go test ./internal/server -count=1 passes
-      - the §0.9 per-file command lists none of oauth_flow.go, oauth_profile.go, oauth_config.go, oauth_accounts.go, oauth_session.go
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - apart from files whose remaining count-0 blocks are all listed in the report as unreachable (§0.9), the §0.9 per-file command lists none of oauth_flow.go, oauth_profile.go, oauth_config.go, oauth_accounts.go, oauth_session.go
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c06-cov-server-cli-login-runtime
     title: Coverage for server CLI login, metrics, health, middleware, security, client IP, rate limits
@@ -4587,8 +4597,8 @@ phases:
       4. Measure with the §0.9 command (security.go floor 85). Run `mise run check-full` (Design §0.8).
     acceptance:
       - go test ./internal/server -count=1 passes
-      - the §0.9 per-file command lists none of cli_login.go, metrics.go, health.go, middleware.go, client_ip.go, ratelimit.go, and security.go not below 85%
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - apart from files whose remaining count-0 blocks are all listed in the report as unreachable (§0.9), the §0.9 per-file command lists none of cli_login.go, metrics.go, health.go, middleware.go, client_ip.go, ratelimit.go, and security.go not below 85%
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c07-cov-server-uploads-pages
     title: Coverage for server uploads API, pages, comments, lifecycle, analytics, account comments
@@ -4607,8 +4617,8 @@ phases:
       4. Measure with the §0.9 command. Then measure the whole package: `go test -cover ./internal/server/`. Run `mise run check-full` (Design §0.8).
     acceptance:
       - go test ./internal/server -count=1 passes
-      - the §0.9 per-file command lists none of api_uploads.go, pages.go, comments.go, lifecycle.go, analytics.go
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - apart from files whose remaining count-0 blocks are all listed in the report as unreachable (§0.9), the §0.9 per-file command lists none of api_uploads.go, pages.go, comments.go, lifecycle.go, analytics.go
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c08-cov-db-store
     title: Coverage for every non-migration db file (closed-store table, triggers, scan errors)
@@ -4637,7 +4647,7 @@ phases:
     acceptance:
       - go test ./internal/db -count=1 passes
       - the §0.9 per-file command for internal/db lists no non-migration file below its floor
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c09-cov-db-migrations
     title: Coverage for db migrations and store open
@@ -4654,7 +4664,7 @@ phases:
     acceptance:
       - go test ./internal/db -count=1 passes
       - '`go test -cover ./internal/db/` reports at least 90.0% of statements'
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c10-cov-cli-core
     title: Coverage for the CLI dispatcher, config, login, OAuth login, discovery, browser and client
@@ -4677,8 +4687,8 @@ phases:
       4. Measure with the §0.9 command (login_command.go floor 85, browser.go floor 50). Run `mise run check`.
     acceptance:
       - go test ./internal/cli -count=1 passes
-      - the §0.9 per-file command lists none of commands.go, config_command.go, login_oauth.go, login_discovery.go, client.go, hostcheck.go, and login_command.go, browser.go not below their floors
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - apart from files whose remaining count-0 blocks are all listed in the report as unreachable (§0.9), the §0.9 per-file command lists none of commands.go, config_command.go, login_oauth.go, login_discovery.go, client.go, hostcheck.go, and login_command.go, browser.go not below their floors
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c11-cov-cli-commands
     title: Coverage for the CLI upload, uploads, grants, gdpr, stats/comments and token commands
@@ -4701,7 +4711,7 @@ phases:
     acceptance:
       - go test ./internal/cli -count=1 passes
       - '`go test -cover ./internal/cli/` reports at least 91.0% of statements'
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c12-cov-objectstore
     title: Coverage for the S3 client against a fake S3 and file storage error paths
@@ -4719,7 +4729,7 @@ phases:
     acceptance:
       - go test ./internal/objectstore -count=1 passes
       - '`go test -cover ./internal/objectstore/` reports at least 92.0% of statements'
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: c13-cov-peekd
     title: Coverage for peekd Run, runServe (signal-driven), backup, env, healthcheck
@@ -4731,6 +4741,7 @@ phases:
       - internal/peekd/backup_test.go
       - internal/peekd/healthcheck_test.go
       - internal/peekd/run_test.go
+      - internal/peekd/run.go
     brief: |
       1. Read the must-read docs and Design §0 (§0.9), then Design E § "Phase P1" and its risks in §8.
       2. Step 0: re-profile internal/peekd and list count-0 blocks.
@@ -4761,7 +4772,7 @@ phases:
       4. Measure: uploads ≥ 92.0%, web ≥ 90.0%, groups ≥ 95.0%, version 100% (`go test -cover ./internal/uploads/ ./internal/web/ ./internal/groups/ ./internal/version/`). Run `mise run check-full` (Design §0.8).
     acceptance:
       - '`go test -cover ./internal/uploads/ ./internal/web/ ./internal/groups/ ./internal/version/` reports at least 92.0%, 90.0%, 95.0% and 100.0% respectively'
-      - '`git diff --name-only origin/fix/security-hardening-coverage...HEAD | grep -v "_test.go$"` prints nothing'
+      - '`git fetch -q origin fix/security-hardening-coverage && git diff --name-only FETCH_HEAD...HEAD | grep -v "_test.go$"` prints nothing'
 
   - id: g01-coverage-gate
     title: CI and local gate at 90.0% total coverage
