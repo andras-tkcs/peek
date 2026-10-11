@@ -29,6 +29,11 @@ func TestRendererExecutesAllTemplates(t *testing.T) {
 			want: "Continue with GitHub",
 		},
 		{
+			name: TemplateAPIKeyShown,
+			data: APIKeyShownData{Title: "API key created", Name: "QA runner", Key: "peek_x"},
+			want: "Copy it now. Peek stores only a hash and cannot show it again.",
+		},
+		{
 			name: TemplateDashboard,
 			data: DashboardData{
 				CSRF:         "csrf",
@@ -618,5 +623,39 @@ func TestDashboardRendersRenameFormAndSafeDeleteConfirm(t *testing.T) {
 	}
 	if strings.Contains(html, `'Delete it`) {
 		t.Fatalf("dashboard embeds the name in an Alpine string: %s", html)
+	}
+}
+
+func TestDashboardTemplateRendersAPIKeys(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplateDashboard, DashboardData{
+		CSRF: "csrf",
+		User: "u",
+		APIKeys: []DashboardAPIKey{{
+			ID: 7, Name: "QA runner", Hint: "…a1b2", Created: "2026-10-01 10:00", LastUsed: "Never", Expires: "Never",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("execute dashboard: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{
+		`action="/dashboard/api-keys/7/regenerate"`,
+		`action="/dashboard/api-keys/7/revoke"`,
+		"…a1b2",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("dashboard missing %q", want)
+		}
+	}
+	body, err = renderer.Execute(TemplateDashboard, DashboardData{CSRF: "csrf", User: "u"})
+	if err != nil {
+		t.Fatalf("execute empty dashboard: %v", err)
+	}
+	if !strings.Contains(string(body), "No API keys yet.") {
+		t.Fatal("empty dashboard missing placeholder")
 	}
 }

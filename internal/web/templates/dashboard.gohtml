@@ -189,6 +189,51 @@
     {{end}}
   </div>
 
+  <div class="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <h2 class="mb-1 text-base font-semibold tracking-tight text-card-foreground">API keys <span class="text-xs font-normal text-muted-foreground/70">{{len .APIKeys}}</span></h2>
+    <p class="mb-4 text-xs text-muted-foreground">Use a key as <span class="font-mono">PEEK_TOKEN</span> or as a Bearer token in scripts and integrations. A key acts as your account, with the same access.</p>
+    <form method="POST" action="/dashboard/api-keys" class="mb-4 flex gap-2.5">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="text" name="name" placeholder="Key name, for example QA runner" required maxlength="100" class="h-10 min-w-[180px] flex-1 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+      <button type="submit" class="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Create key</button>
+    </form>
+    {{if .APIKeys}}
+    <div class="overflow-x-auto">
+    <table class="w-full border-collapse text-sm">
+      <thead><tr class="border-b border-border text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><th class="px-3 py-2">Name</th><th class="px-3 py-2">Key</th><th class="px-3 py-2">Created</th><th class="px-3 py-2">Last used</th><th class="px-3 py-2">Expires</th><th class="px-3 py-2"></th></tr></thead>
+      <tbody>
+      {{range .APIKeys}}
+        <tr class="border-b border-border/50 last:border-0 hover:bg-foreground/[0.025]">
+          <td class="h-10 px-3">{{.Name}}</td>
+          <td class="px-3 font-mono text-muted-foreground">{{.Hint}}</td>
+          <td class="px-3 text-muted-foreground">{{.Created}}</td>
+          <td class="px-3 text-muted-foreground">{{.LastUsed}}</td>
+          <td class="px-3 text-muted-foreground">{{.Expires}}</td>
+          <td class="px-3">
+            <div class="peek-row-actions">
+              <form method="POST" action="/dashboard/api-keys/{{.ID}}/regenerate" data-confirm="Regenerate {{.Name}}? The current key stops working immediately." x-on:submit="confirm($event, $el.dataset.confirm)" class="m-0">
+                <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                <button type="submit" class="peek-row-button">Regenerate</button>
+              </form>
+              <form method="POST" action="/dashboard/api-keys/{{.ID}}/revoke" data-confirm="Revoke {{.Name}}? It stops working immediately." x-on:submit="confirm($event, $el.dataset.confirm)" class="m-0">
+                <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                <button type="submit" class="peek-row-button peek-row-button-danger">Revoke</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    </div>
+    {{else}}
+    <div class="py-10 text-center">
+      <p class="text-sm text-foreground">No API keys yet.</p>
+      <p class="mt-1.5 text-xs text-muted-foreground">Create a key above. Keys from <span class="font-mono">peek login</span> show up here as "CLI login".</p>
+    </div>
+    {{end}}
+  </div>
+
   {{if .IsAdmin}}
   <div class="rounded-xl border border-border bg-card p-5 shadow-sm">
     <h2 class="mb-4 text-base font-semibold tracking-tight text-card-foreground">Invitations <span class="text-xs font-normal text-muted-foreground/70">{{len .Invites}}</span></h2>

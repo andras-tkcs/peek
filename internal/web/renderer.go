@@ -19,6 +19,7 @@ const (
 	TemplateError        = "error"
 	TemplateCLILogin     = "cli-login"
 	TemplateCLILoginDone = "cli-login-done"
+	TemplateAPIKeyShown  = "api-key-shown"
 )
 
 // DashboardCSP is the Content-Security-Policy for the management UI.
@@ -187,6 +188,22 @@ type LimitSetting struct {
 	Step        int64
 }
 
+type DashboardAPIKey struct {
+	ID       int64
+	Name     string
+	Hint     string // "…a1b2", or "—" when unknown
+	Created  string // "2006-01-02 15:04"
+	LastUsed string // "2006-01-02 15:04", or "Never"
+	Expires  string // "Never", "2006-01-02 15:04", or "2006-01-02 15:04 (expired)"
+}
+
+type APIKeyShownData struct {
+	Title       string // "API key created" or "API key regenerated"
+	Name        string
+	Key         string
+	Regenerated bool
+}
+
 type DashboardData struct {
 	CSRF             string
 	User             string
@@ -197,6 +214,7 @@ type DashboardData struct {
 	Invites          []InviteDashboardRow
 	Accounts         []AccountDashboardRow
 	Uploads          []DashboardUpload
+	APIKeys          []DashboardAPIKey
 	UploadError      string
 	FlashSuccess     string
 	UploadSuccessURL string
