@@ -81,19 +81,19 @@
       <tbody>
       {{range .Uploads}}
         <tr class="border-b border-border/50 last:border-0 hover:bg-foreground/[0.025]">
-          <td class="h-10 px-3">
-            <div class="flex items-center gap-2 whitespace-nowrap">
-              <a href="/p/{{.Slug}}" target="_blank" class="font-medium text-primary no-underline hover:underline">/p/{{.Slug}}</a>
-              <button type="button" x-data="{ url: '/p/{{.Slug}}' }" data-url="/p/{{.Slug}}" x-on:click="copy(url)" class="peek-copy-button" :class="{ 'peek-copy-button-copied': copied === url }" :aria-label="copied === url ? 'Copied' : 'Copy link'" title="Copy link">
+          <td class="h-10 w-full max-w-0 px-3">
+            <div class="flex min-w-0 items-center gap-2 whitespace-nowrap">
+              <a href="/p/{{.Slug}}" target="_blank" title="/p/{{.Slug}}" class="min-w-0 truncate font-medium text-primary no-underline hover:underline">/p/{{.Slug}}</a>
+              <button type="button" x-data="{ url: '/p/{{.Slug}}' }" data-url="/p/{{.Slug}}" x-on:click="copy(url)" class="peek-copy-button shrink-0" :class="{ 'peek-copy-button-copied': copied === url }" :aria-label="copied === url ? 'Copied' : 'Copy link'" title="Copy link">
                 <svg x-show="copied !== url" class="peek-copy-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" /></svg>
                 <svg x-show="copied === url" x-cloak class="peek-copy-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m7.5 15.75 3 3 6-7.5M8.25 8.25H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m1.5-15.75c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0 1 18 18.75h-2.25m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375" /></svg>
               </button>
-              <span class="max-w-[16rem] truncate text-xs text-muted-foreground">{{.Name}}</span>
+              <span title="{{.Name}}" class="hidden min-w-0 max-w-[16rem] truncate text-xs text-muted-foreground sm:inline">{{.Name}}</span>
             </div>
           </td>
-          <td class="px-3 text-muted-foreground">{{.SizeHuman}}</td>
+          <td class="whitespace-nowrap px-3 text-muted-foreground">{{.SizeHuman}}</td>
           <td class="px-3"><span class="rounded-md bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">{{.Visibility}}</span></td>
-          <td class="px-3 text-muted-foreground">{{.CreatedHuman}}</td>
+          <td class="whitespace-nowrap px-3 text-muted-foreground">{{.CreatedHuman}}</td>
           <td class="px-3">
             <div class="peek-row-actions">
               <div x-data="{ vis: '{{.Visibility}}' }" x-init="{{if eq $.ManageSlug .Slug}}$nextTick(() => $refs.visibilityDialog.showModal()){{end}}" class="m-0">
