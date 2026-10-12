@@ -276,6 +276,10 @@
             this.syncFrame();
             return;
           }
+          if (data.hn === "params") {
+            this.syncParams(data.query);
+            return;
+          }
           if (data.hn === "togglebar") {
             this.toggleBar();
             return;
@@ -333,6 +337,16 @@
             }
           }
         });
+      },
+
+      // Mirror the page's on-page filters into this URL's query string.
+      syncParams(query) {
+        if (typeof query !== "string" || query.length > 2048) return;
+        const qs = query.replace(/^[?#]/, "");
+        const url = window.location.pathname + (qs ? "?" + qs : "") + window.location.hash;
+        try {
+          history.replaceState(null, "", url);
+        } catch (e) {}
       },
 
       toggleCommentMode() {

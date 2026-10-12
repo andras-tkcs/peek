@@ -252,6 +252,7 @@ type PageData struct {
 	Name          string
 	Slug          string
 	RawURL        string
+	FrameURL      string
 	Visibility    string
 	Version       int
 	LatestVersion int
