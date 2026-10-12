@@ -54,7 +54,7 @@ func TestRendererExecutesAllTemplates(t *testing.T) {
 		},
 		{
 			name: TemplatePage,
-			data: PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123?t=t&v=v"},
+			data: PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123?t=t&v=v", FrameURL: "/raw/abc123?t=t&v=v"},
 			want: "sandbox=",
 		},
 		{
@@ -140,7 +140,7 @@ func TestPageTemplateUsesDatasetForViewerConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new renderer: %v", err)
 	}
-	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123/v/1?t=t&v=v", Visibility: "password", Version: 1, LatestVersion: 3})
+	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123/v/1?t=t&v=v", FrameURL: "/raw/abc123/v/1?t=t&v=v", Visibility: "password", Version: 1, LatestVersion: 3})
 	if err != nil {
 		t.Fatalf("execute page: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestPageTemplateOmitsBannerOnLatestVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new renderer: %v", err)
 	}
-	body, err := renderer.Execute(TemplatePage, PageData{Name: "p", Slug: "abc123", RawURL: "/raw/abc123/v/3", Visibility: "public", Version: 3, LatestVersion: 3})
+	body, err := renderer.Execute(TemplatePage, PageData{Name: "p", Slug: "abc123", RawURL: "/raw/abc123/v/3", FrameURL: "/raw/abc123/v/3", Visibility: "public", Version: 3, LatestVersion: 3})
 	if err != nil {
 		t.Fatalf("execute page: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestPageTemplateNameModalCanBeShownByAlpine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new renderer: %v", err)
 	}
-	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123?t=t&v=v", Visibility: "public"})
+	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123?t=t&v=v", FrameURL: "/raw/abc123?t=t&v=v", Visibility: "public"})
 	if err != nil {
 		t.Fatalf("execute page: %v", err)
 	}
@@ -546,7 +546,7 @@ func TestPageTemplateToolbarCanBeHidden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new renderer: %v", err)
 	}
-	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123?t=t&v=v", Visibility: "public"})
+	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123?t=t&v=v", FrameURL: "/raw/abc123?t=t&v=v", Visibility: "public"})
 	if err != nil {
 		t.Fatalf("execute page: %v", err)
 	}

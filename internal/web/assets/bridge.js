@@ -6,6 +6,8 @@
 //  - draw numbered pins + highlight commented text, anchored to the page
 //  - scroll-to + flash an anchor when the parent requests "locate"
 //  - forward the Shift+H toolbar shortcut to the parent
+//  - expose window.peek.params / setParams so a page can keep its filters in
+//    the viewer's address bar (the parent URL's query string)
 // It does NOT call the server directly (the iframe is opaque-origin); all
 // comments traffic goes through the trusted parent page via postMessage.
 (function () {
@@ -363,6 +365,46 @@
   function notifyReady() {
     parent.postMessage({ hn: "ready" }, "*");
   }
+
+  // --- page params (filters kept in the parent URL's query string) ---
+  // The parent passes its query string in this iframe's fragment, so the page
+  // can read it synchronously (location.hash) before this script even runs.
+  var MAX_PARAMS = 2048;
+  function currentParams() {
+    return new URLSearchParams((location.hash || "").replace(/^#/, ""));
+  }
+  function sendParams(qs) {
+    if (qs.length > MAX_PARAMS) return false;
+    try { history.replaceState(null, "", qs ? "#" + qs : location.pathname + location.search); } catch (e) {}
+    parent.postMessage({ hn: "params", query: qs }, "*");
+    return true;
+  }
+  window.peek = {
+    get params() { return currentParams(); },
+    // setParams({region: "eu", q: null}) merges into the current params;
+    // null/undefined/"" removes a key. A string replaces them wholesale.
+    setParams: function (next) {
+      var qs;
+      if (typeof next === "string") {
+        qs = next.replace(/^[?#]/, "");
+      } else {
+        var p = currentParams();
+        Object.keys(next || {}).forEach(function (k) {
+          var v = next[k];
+          if (v === null || v === undefined || v === "") p.delete(k);
+          else if (Array.isArray(v)) { p.delete(k); v.forEach(function (x) { p.append(k, String(x)); }); }
+          else p.set(k, String(v));
+        });
+        qs = p.toString();
+      }
+      return sendParams(qs);
+    }
+  };
+  // Pages that simply assign location.hash are mirrored to the parent too.
+  window.addEventListener("hashchange", function () {
+    var qs = (location.hash || "").replace(/^#/, "");
+    if (qs.length <= MAX_PARAMS) parent.postMessage({ hn: "params", query: qs }, "*");
+  });
 
   // --- wiring ---
   window.addEventListener("mousemove", onMouseMove, true);

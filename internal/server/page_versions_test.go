@@ -205,3 +205,19 @@ func TestPageVersionRecordsVisitVersion(t *testing.T) {
 		t.Fatalf("visit version = %d, want 1", visits[0].Version)
 	}
 }
+
+func TestPageQueryReachesFrameAsFragmentOnly(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	newTwoVersionPage(t, s, "pgquery", models.UploadVisibilityPublic, "")
+	rec := doRequest(t, s, http.MethodGet, "/p/pgquery?region=eu&q=a%20b", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET = %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `#region=eu&amp;q=a%20b"`) {
+		t.Fatalf("iframe src missing query fragment: %s", body)
+	}
+	if strings.Contains(body, "region=eu&amp;download") || strings.Contains(body, "download=1#") {
+		t.Fatalf("query leaked into the download link: %s", body)
+	}
+}

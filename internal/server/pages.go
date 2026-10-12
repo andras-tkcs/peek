@@ -81,12 +81,16 @@ func (s *Server) parseExistingVersion(r *http.Request, u *models.Upload) (int, b
 
 func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upload, version int, pagePath string) {
 	slug := u.Slug
+	pageQuery := pagePath
+	if r.URL.RawQuery != "" {
+		pageQuery += "?" + r.URL.RawQuery
+	}
 	if u.Visibility == models.UploadVisibilityPassword && !s.viewerCanAccessUpload(r, u) {
-		s.renderHTML(w, http.StatusOK, webui.TemplateGate, webui.GateData{Slug: slug, Action: pagePath})
+		s.renderHTML(w, http.StatusOK, webui.TemplateGate, webui.GateData{Slug: slug, Action: pageQuery})
 		return
 	}
 	if u.Visibility == models.UploadVisibilityPrivate && !s.viewerCanAccessUpload(r, u) {
-		s.setNextPath(w, pagePath)
+		s.setNextPath(w, nextPathWithQuery(pagePath, r.URL.RawQuery))
 		if _, err := r.Cookie(sessionCookie); err == nil {
 			s.clearCookie(w, sessionCookie, "/")
 		}
@@ -96,7 +100,7 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 	if u.Visibility == models.UploadVisibilityRestricted && !s.viewerCanAccessUpload(r, u) {
 		a, ok := s.webAuth(r)
 		if !ok {
-			s.setNextPath(w, pagePath)
+			s.setNextPath(w, nextPathWithQuery(pagePath, r.URL.RawQuery))
 			if _, err := r.Cookie(sessionCookie); err == nil {
 				s.clearCookie(w, sessionCookie, "/")
 			}
@@ -120,11 +124,38 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 	rawURL := "/raw/" + slug + "/v/" + strconv.Itoa(version) + "?t=" + makeViewToken(s.secret, viewSubject(slug, version), vid) + "&v=" + vid
 	d := pageData{
 		Name: u.Name, Slug: slug,
-		RawURL: rawURL, Visibility: u.Visibility,
+		RawURL: rawURL, FrameURL: frameURL(rawURL, r.URL.RawQuery), Visibility: u.Visibility,
 		Version: version, LatestVersion: u.LatestVersion,
 	}
 	w.Header().Set("Content-Security-Policy", webui.PageCSP)
 	s.renderHTML(w, http.StatusOK, webui.TemplatePage, d)
+}
+
+func querysuffix(r *http.Request) string {
+	if r.URL.RawQuery == "" {
+		return ""
+	}
+	return "?" + r.URL.RawQuery
+}
+
+// frameURL appends the page's query string to the iframe URL as a fragment.
+// Fragments are never sent to the server, and the sandboxed page can read them
+// synchronously from location.hash, so on-page filters survive reloads and
+// shared links without the query reaching /raw.
+func frameURL(rawURL, query string) string {
+	if query == "" {
+		return rawURL
+	}
+	return rawURL + "#" + query
+}
+
+// nextPathWithQuery keeps the query across a login redirect, unless it holds
+// bytes a cookie value cannot carry.
+func nextPathWithQuery(path, query string) string {
+	if query == "" || strings.ContainsAny(query, " \",;\\") {
+		return path
+	}
+	return path + "?" + query
 }
 
 func (s *Server) handlePagePassword(w http.ResponseWriter, r *http.Request) {
@@ -153,10 +184,13 @@ func (s *Server) handlePagePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	pw := r.FormValue("password")
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(pw)) != nil {
-		s.renderHTML(w, http.StatusUnauthorized, webui.TemplateGate, webui.GateData{Slug: slug, Action: pagePath, Error: true})
+		s.renderHTML(w, http.StatusUnauthorized, webui.TemplateGate, webui.GateData{Slug: slug, Action: pagePath + querysuffix(r), Error: true})
 		return
 	}
 	s.setPageAuthCookie(w, u)
+	if r.URL.RawQuery != "" {
+		pagePath += "?" + r.URL.RawQuery
+	}
 	http.Redirect(w, r, pagePath, http.StatusSeeOther)
 }
 
