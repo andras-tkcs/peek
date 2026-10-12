@@ -54,6 +54,9 @@
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-95 shrink-0"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
     <span id="hn-count" class="hn-badge" x-text="commentCount" :class="{ 'hn-badge-empty': commentCount === 0 }">0</span>
   </button>
+  <a id="hn-download-btn" class="hn-toolbar-button" title="Download HTML" aria-label="Download HTML" href="{{.RawURL}}&amp;download=1" download>
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-95 shrink-0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+  </a>
   <button id="hn-hide-btn" class="hn-toolbar-button" type="button" title="Hide toolbar (Shift+H)" aria-label="Hide toolbar" @click="hideBar">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-95 shrink-0"><path d="M6 9l6 6 6-6"/></svg>
   </button>

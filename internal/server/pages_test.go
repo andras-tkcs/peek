@@ -297,3 +297,18 @@ func pageTestCookie(cookies []*http.Cookie, name string) *http.Cookie {
 	}
 	return nil
 }
+
+func TestDownloadFilename(t *testing.T) {
+	cases := map[string]string{
+		"report.html":     "report.html",
+		"report":          "report.html",
+		"../../etc/x.htm": "x.htm",
+		"  ":              "slug1.html",
+		`a\b\c.html`:      "c.html",
+	}
+	for in, want := range cases {
+		if got := downloadFilename(in, "slug1"); got != want {
+			t.Errorf("downloadFilename(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

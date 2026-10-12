@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -201,7 +204,7 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.serveRawObject(w, r, slug, ver.ObjectKey)
+	s.serveRawObject(w, r, slug, u.Name, ver.ObjectKey)
 }
 
 func (s *Server) handleRawVersion(w http.ResponseWriter, r *http.Request) {
@@ -227,10 +230,14 @@ func (s *Server) handleRawVersion(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.serveRawObject(w, r, slug, ver.ObjectKey)
+	s.serveRawObject(w, r, slug, u.Name, ver.ObjectKey)
 }
 
-func (s *Server) serveRawObject(w http.ResponseWriter, r *http.Request, slug, objectKey string) {
+func (s *Server) serveRawObject(w http.ResponseWriter, r *http.Request, slug, name, objectKey string) {
+	if r.URL.Query().Get("download") == "1" {
+		s.serveDownload(w, r, slug, name, objectKey)
+		return
+	}
 	rc, err := s.storage.Open(r.Context(), objectKey)
 	if err != nil {
 		http.NotFound(w, r)
@@ -252,6 +259,34 @@ func (s *Server) serveRawObject(w http.ResponseWriter, r *http.Request, slug, ob
 	}
 	defer rc.Close()
 	writeRawHTML(w, slug, rc, insertOffset)
+}
+
+// serveDownload sends the original uploaded HTML, without the injected bridge,
+// as an attachment.
+func (s *Server) serveDownload(w http.ResponseWriter, r *http.Request, slug, name, objectKey string) {
+	rc, err := s.storage.Open(r.Context(), objectKey)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer rc.Close()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": downloadFilename(name, slug)}))
+	if _, err := io.Copy(w, rc); err != nil {
+		slog.Error("write download response", "slug", slug, "err", err)
+	}
+}
+
+func downloadFilename(name, slug string) string {
+	name = strings.TrimSpace(filepath.Base(strings.ReplaceAll(name, "\\", "/")))
+	if name == "" || name == "." || name == "/" {
+		name = slug
+	}
+	if ext := strings.ToLower(filepath.Ext(name)); ext != ".html" && ext != ".htm" {
+		name += ".html"
+	}
+	return name
 }
 
 func writeRawHTML(w http.ResponseWriter, slug string, body io.Reader, insertOffset int64) {
