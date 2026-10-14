@@ -33,4 +33,4 @@ ci:
     - workflow: pages.yml
       use_when: Verifying that the Astro docs site under docs/ still builds.
 
-stacks: []
+stacks: [go]
