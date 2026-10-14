@@ -11,8 +11,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/uploadquota"
 	webui "github.com/andras-tkcs/peek/internal/web"
 	"golang.org/x/crypto/bcrypt"
@@ -315,5 +317,40 @@ func TestDownloadFilename(t *testing.T) {
 		if got := downloadFilename(in, "slug1"); got != want {
 			t.Errorf("downloadFilename(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestPagePasswordFailuresLockPageAfterLimit(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	hash, err := bcrypt.GenerateFromPassword([]byte("right"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newTwoVersionPage(t, s, "pwlock", models.UploadVisibilityPassword, string(hash))
+	newTwoVersionPage(t, s, "pwother", models.UploadVisibilityPassword, string(hash))
+	now := time.Unix(1700000000, 0)
+	s.pagePasswordFailLimiter.now = func() time.Time { return now }
+	post := func(slug, pw string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/p/"+slug, strings.NewReader("password="+pw))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetPathValue("slug", slug)
+		rec := httptest.NewRecorder()
+		s.handlePagePassword(rec, req)
+		return rec
+	}
+	for i := 0; i < pagePasswordFailureMax; i++ {
+		if rec := post("pwlock", "wrong"); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d", i, rec.Code)
+		}
+	}
+	if rec := post("pwlock", "right"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("locked status = %d", rec.Code)
+	}
+	if rec := post("pwother", "right"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("other page status = %d", rec.Code)
+	}
+	now = now.Add(pagePasswordFailureWindow + time.Second)
+	if rec := post("pwlock", "right"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("after window status = %d", rec.Code)
 	}
 }

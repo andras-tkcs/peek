@@ -178,12 +178,18 @@ func (s *Server) handlePagePassword(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, pagePath, http.StatusSeeOther)
 		return
 	}
+	failKey := strconv.FormatInt(u.ID, 10) // upload id: stable across renames
+	if s.pagePasswordFailLimiter.blocked(failKey) {
+		rateLimitError(w, r)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		s.renderWebError(w, http.StatusBadRequest, "Bad request", "The password form could not be read.")
 		return
 	}
 	pw := r.FormValue("password")
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(pw)) != nil {
+		s.pagePasswordFailLimiter.recordFailure(failKey)
 		s.renderHTML(w, http.StatusUnauthorized, webui.TemplateGate, webui.GateData{Slug: slug, Action: pagePath + querysuffix(r), Error: true})
 		return
 	}

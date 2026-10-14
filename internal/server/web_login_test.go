@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/andras-tkcs/peek/internal/db"
 	webui "github.com/andras-tkcs/peek/internal/web"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestLoginRejectsMalformedForm(t *testing.T) {
@@ -81,4 +84,70 @@ func hasCookie(cookies []*http.Cookie, name string) bool {
 		}
 	}
 	return false
+}
+
+func newLoginLimiterServer(t *testing.T) (*Server, func(email, pw string) error) {
+	t.Helper()
+	s, _ := newHandlerTestServer(t)
+	hash, err := bcrypt.GenerateFromPassword([]byte("right"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, email := range []string{"user@example.test", "other@example.test"} {
+		if _, err := s.store.CreateAccountWithPassword(context.Background(), email, "User", string(hash), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	try := func(email, pw string) error {
+		req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(url.Values{"email": {email}, "password": {pw}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		_, _, err := s.loginWithPassword(req)
+		return err
+	}
+	return s, try
+}
+
+func TestPasswordLoginFailuresLockAccountAfterLimit(t *testing.T) {
+	_, try := newLoginLimiterServer(t)
+	for i := 0; i < accountLoginFailureMax; i++ {
+		if err := try("user@example.test", "wrong"); err == nil || errors.Is(err, errLoginThrottled) {
+			t.Fatalf("attempt %d: err = %v, want plain failure", i, err)
+		}
+	}
+	if err := try("USER@example.test ", "right"); !errors.Is(err, errLoginThrottled) {
+		t.Fatalf("locked account err = %v, want errLoginThrottled", err)
+	}
+	if err := try("other@example.test", "right"); err != nil {
+		t.Fatalf("other account err = %v", err)
+	}
+}
+
+func TestPasswordLoginThrottlesUnknownEmails(t *testing.T) {
+	_, try := newLoginLimiterServer(t)
+	for i := 0; i < accountLoginFailureMax; i++ {
+		if err := try("ghost@example.test", "x"); errors.Is(err, errLoginThrottled) {
+			t.Fatalf("attempt %d throttled early", i)
+		}
+	}
+	if err := try("ghost@example.test", "x"); !errors.Is(err, errLoginThrottled) {
+		t.Fatalf("err = %v, want errLoginThrottled", err)
+	}
+}
+
+func TestHandleLoginReturns429WhenAccountThrottled(t *testing.T) {
+	s, _ := newLoginLimiterServer(t)
+	for i := 0; i < accountLoginFailureMax; i++ {
+		s.accountLoginLimiter.recordFailure("user@example.test")
+	}
+	body := url.Values{"method": {"password"}, "email": {"user@example.test"}, "password": {"right"}, "csrf": {"tok"}}.Encode()
+	rec := doRequest(t, s, http.MethodPost, "/login", strings.NewReader(body), func(r *http.Request) {
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.AddCookie(&http.Cookie{Name: csrfCookie, Value: "tok"})
+	})
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Too many requests. Try again shortly.") {
+		t.Fatalf("body = %s", rec.Body.String())
+	}
 }
