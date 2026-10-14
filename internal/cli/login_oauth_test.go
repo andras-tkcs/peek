@@ -275,3 +275,108 @@ func TestLoginOAuthDoesNotOpenUntrustedVerificationURL(t *testing.T) {
 		})
 	}
 }
+
+// oauthPollServer serves a valid start response and the given poll body; a
+// start or poll status of 0 means 200.
+func oauthPollServer(t *testing.T, start map[string]any, pollStatus int, pollBody string) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/cli/login/start":
+			_ = json.NewEncoder(w).Encode(start)
+		case "/api/cli/login/poll":
+			if pollStatus != 0 {
+				w.WriteHeader(pollStatus)
+			}
+			_, _ = w.Write([]byte(pollBody))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+func fastOAuthHooks(t *testing.T) {
+	t.Helper()
+	now := time.Unix(100, 0)
+	restoreOAuthTestHooks(t, func() time.Time { return now }, func(d time.Duration) { now = now.Add(d) }, func(string) error { return nil })
+}
+
+func TestLoginOAuthTerminalPollStatuses(t *testing.T) {
+	cases := map[string]string{
+		"denied":   "login denied",
+		"expired":  "login expired",
+		"consumed": "login already consumed",
+		"weird":    "unexpected login status: weird",
+	}
+	for status, want := range cases {
+		t.Run(status, func(t *testing.T) {
+			setTestConfigHome(t)
+			fastOAuthHooks(t)
+			ts := oauthPollServer(t, map[string]any{"device_code": "d", "verification_url": "http://x/y", "interval": 1, "expires_in": 30}, 0, `{"status":"`+status+`"}`)
+			err := loginOAuth(&Config{}, ts.URL)
+			if err == nil || err.Error() != want {
+				t.Fatalf("error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+func TestLoginOAuthAppliesDefaultsAndSaves(t *testing.T) {
+	setTestConfigHome(t)
+	var slept []time.Duration
+	now := time.Unix(100, 0)
+	restoreOAuthTestHooks(t, func() time.Time { return now }, func(d time.Duration) { slept = append(slept, d); now = now.Add(d) }, func(string) error { return nil })
+	// No interval or expires_in: defaults of 2s and 900s apply.
+	ts := oauthPollServer(t, map[string]any{"device_code": "d", "verification_url": "http://x/y"}, 0, `{"status":"approved","token":"tok"}`)
+	if _, err := captureStdout(t, func() error { return loginOAuth(&Config{}, ts.URL+"/") }); err != nil {
+		t.Fatalf("loginOAuth: %v", err)
+	}
+	if len(slept) != 1 || slept[0] != 2*time.Second {
+		t.Fatalf("slept = %v", slept)
+	}
+	if cfg, _ := LoadConfig(); cfg.Token != "tok" {
+		t.Fatalf("cfg = %+v", cfg)
+	}
+}
+
+func TestLoginOAuthApprovedSaveFailure(t *testing.T) {
+	setTestConfigHome(t)
+	breakSaveConfig(t)
+	fastOAuthHooks(t)
+	ts := oauthPollServer(t, map[string]any{"device_code": "d", "verification_url": "http://x/y", "interval": 1, "expires_in": 30}, 0, `{"status":"approved","token":"tok"}`)
+	if err := loginOAuth(&Config{}, ts.URL); err == nil {
+		t.Fatal("expected a save error")
+	}
+}
+
+func TestLoginOAuthTimesOutWhilePending(t *testing.T) {
+	setTestConfigHome(t)
+	fastOAuthHooks(t)
+	ts := oauthPollServer(t, map[string]any{"device_code": "d", "verification_url": "http://x/y", "interval": 1, "expires_in": 1}, 0, `{"status":"pending"}`)
+	err := loginOAuth(&Config{}, ts.URL)
+	if err == nil || err.Error() != "login expired" {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestLoginOAuthStartAndPollHTTPErrors(t *testing.T) {
+	setTestConfigHome(t)
+	fastOAuthHooks(t)
+
+	if err := loginOAuth(&Config{}, closedServerURL(t)); err == nil {
+		t.Fatal("expected a start transport error")
+	}
+
+	startFails := jsonServer(t, 500, `{"error":"start broke"}`)
+	if err := loginOAuth(&Config{}, startFails.URL); err == nil || !strings.Contains(err.Error(), "start broke") {
+		t.Fatalf("start error = %v", err)
+	}
+
+	pollFails := oauthPollServer(t, map[string]any{"device_code": "d", "verification_url": "http://x/y", "interval": 1, "expires_in": 30}, 500, `{"error":"poll broke"}`)
+	if err := loginOAuth(&Config{}, pollFails.URL); err == nil || !strings.Contains(err.Error(), "poll broke") {
+		t.Fatalf("poll error = %v", err)
+	}
+}
