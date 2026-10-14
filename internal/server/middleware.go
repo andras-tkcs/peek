@@ -15,6 +15,25 @@ type contextKey string
 
 const apiTokenContextKey contextKey = "api-token"
 
+// maxRequestBodyBytes caps request bodies on every route except the two upload
+// routes, which apply their own limit from the max_upload setting. 64 KiB matches
+// the largest JSON body any handler accepts (defaultJSONBodyLimit).
+const maxRequestBodyBytes = defaultJSONBodyLimit
+
+// bodyLimitExempt reports whether r is an upload, whose handler sets its own
+// MaxBytesReader.
+func bodyLimitExempt(r *http.Request) bool {
+	return r.Method == http.MethodPost && (r.URL.Path == "/api/upload" || r.URL.Path == "/dashboard/upload")
+}
+
+func requestTooLargeError(w http.ResponseWriter, r *http.Request) {
+	if wantsJSONError(r) {
+		jsonError(w, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+	http.Error(w, "Request body too large.", http.StatusRequestEntityTooLarge)
+}
+
 func (s *Server) withMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -27,6 +46,13 @@ func (s *Server) withMiddleware(h http.Handler) http.Handler {
 		if !s.globalLimiter.allow(s.rateLimitKey(r)) {
 			rateLimitError(w, r)
 			return
+		}
+		if r.Body != nil && r.Body != http.NoBody && !bodyLimitExempt(r) {
+			if r.ContentLength > maxRequestBodyBytes {
+				requestTooLargeError(w, r)
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 		}
 		reqTotal.Add(1)
 		rw := &statusRecorder{ResponseWriter: w, status: 200}
