@@ -57,7 +57,7 @@ For Okta, use the issuer URL for the authorization server, for example `https://
 
 ## Allowed Email Domain
 
-Admins can set one allowed email domain in Settings. When configured, human sign-in must use an account email from that exact domain. The rule applies to OAuth login and signup, local password login, web token login, CLI browser approval, private-page sessions, and new invites. It does not block direct API bearer tokens, so existing automation tokens keep working.
+Admins can set one allowed email domain in Settings. When configured, human sign-in must use an account email from that exact domain. The rule applies to OAuth login and signup, local password login, web token login, CLI browser approval, private-page sessions, and new invites. It also applies to API bearer tokens of accounts with an email: a token whose account email is outside the domain is refused with 403. Automation tokens from `peek token create` have no email and are not affected.
 
 Use the bare domain, such as `example.com`. A leading `@` is accepted and normalized away. Subdomains are not implicit matches, so `person@team.example.com` does not match `example.com`.
 
@@ -75,9 +75,15 @@ If an account already exists with the verified email, Peek links the OAuth ident
 
 When OAuth is enabled, non-admin password and token web login are disabled. Admins keep password login as a recovery path, as long as the admin email also matches the allowed domain when one is configured.
 
+The same rule applies to API tokens: while OAuth is enabled, a non-admin account's token works only if the account has signed in with OAuth at least once.
+
+## Sessions
+
+Dashboard sessions last 7 days. **Sign out other sessions** in the dashboard header ends every other browser session of your account and keeps this one. Disabling an account ends all of its sessions, and enabling it again does not bring them back. **Sign out** ends only the current browser's session. API keys are not affected; revoke them under **Dashboard → API keys**.
+
 ## CLI Login
 
-`peek login` starts a browser approval flow when the server supports it. The CLI opens a verification URL, the user approves in the dashboard, and Peek issues a normal API token to the CLI.
+`peek login` starts a browser approval flow when the server supports it. The CLI prints a code such as `ABCD-EFGH` and opens `<host>/cli-login`. Sign in, type the code from your own terminal, check the request details (the IP address and client that started the login, and when), and approve. Peek then issues an API token to the CLI that expires after 90 days; run `peek login` again after that. Never type a code that someone else sent you: approving gives whoever ran `peek login` a token that acts as you. Old links of the form `/cli-login/<code>` open the empty code form. Code entry is limited to 10 attempts per minute per client IP.
 
 If browser login is unavailable or inappropriate for automation, use one of the safer token input paths:
 
@@ -127,7 +133,7 @@ peek grants <slug>
 peek revoke <slug> alice@example.com
 ```
 
-Grants apply to page views, comments, and view stats. Revoking a grant takes effect on the next page load; an iframe that is already open can keep working for up to 1 hour. Group grants need the Google service account described in [Server setup](/peek/docs/server-setup/), and membership changes take up to the cache TTL (5 minutes by default) to apply.
+Grants apply to page views, comments, and view stats. Revoking a grant takes effect the next time the page or its frame loads. Group grants need the Google service account described in [Server setup](/peek/docs/server-setup/), and membership changes take up to the cache TTL (5 minutes by default) to apply.
 
 ## Parameters
 
