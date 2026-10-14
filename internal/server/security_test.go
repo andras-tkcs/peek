@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -129,5 +130,67 @@ func TestPageAuthCookieBoundToPasswordHash(t *testing.T) {
 	}
 	if verifyPageAuthCookie(secret, v, "other", "hashA") {
 		t.Fatal("cookie must not verify for another slug")
+	}
+}
+
+func TestSecurityCovTokenParsing(t *testing.T) {
+	const secret = "0123456789abcdef0123456789abcdef"
+	if verifyToken(secret, "only.two", "slug") {
+		t.Error("verifyToken accepted a two-part token")
+	}
+	if verifyViewToken(secret, "a.b.c", "a", "b") {
+		t.Error("verifyViewToken accepted a three-part token")
+	}
+	if verifyViewToken(secret, "slug.vid.notanumber.sig", "slug", "vid") {
+		t.Error("verifyViewToken accepted a non-numeric expiry")
+	}
+	if verifyViewToken(secret, "slug.vid.1.sig", "slug", "vid") {
+		t.Error("verifyViewToken accepted an expired token")
+	}
+	good := makeViewToken(secret, "slug", "vid")
+	if !verifyViewToken(secret, good, "slug", "vid") {
+		t.Error("verifyViewToken rejected a fresh token")
+	}
+	if verifyViewToken(secret, good, "slug", "other") || verifyViewToken(secret, good, "slug", "") {
+		t.Error("verifyViewToken accepted a different visitor")
+	}
+}
+
+func TestSecurityCovSignedSubjectRejections(t *testing.T) {
+	const secret = "0123456789abcdef0123456789abcdef"
+	valid := makeWebSession(secret, "42", time.Hour)
+	if sub, ok := parseSignedSubject(secret, valid); !ok || sub != "42" {
+		t.Fatalf("valid session = %q, %v", sub, ok)
+	}
+	for name, val := range map[string]string{
+		"empty":      "",
+		"one part":   "42",
+		"two parts":  "42.123",
+		"bad hmac":   "42.99999999999." + strings.Repeat("0", 64),
+		"bad expiry": "42.abc." + strings.Repeat("0", 64),
+		"expired":    makeWebSession(secret, "42", -time.Hour),
+		"tampered":   strings.Replace(valid, "42", "43", 1),
+	} {
+		if _, ok := parseSignedSubject(secret, val); ok {
+			t.Errorf("%s: parseSignedSubject accepted %q", name, val)
+		}
+	}
+}
+
+func TestSecurityCovEncryptDecryptEdgeCases(t *testing.T) {
+	key := strings.Repeat("ab", 32)
+	stubSecureRandomRead(t, func([]byte) (int, error) { return 0, errors.New("rand failed") })
+	if _, err := encryptSecret(key, "x"); err == nil {
+		t.Error("encryptSecret ignored a nonce failure")
+	}
+	// A valid base64 string shorter than the GCM nonce is treated as legacy plaintext.
+	if got, err := decryptSecret(key, "abc"); err != nil || got != "abc" {
+		t.Errorf("decryptSecret short = %q, %v", got, err)
+	}
+	if got, err := decryptSecret(key, "not base64 !!"); err != nil || got != "not base64 !!" {
+		t.Errorf("decryptSecret legacy = %q, %v", got, err)
+	}
+	if _, err := decryptSecret("zz", "abc"); err == nil {
+		t.Error("decryptSecret accepted an invalid key")
 	}
 }
