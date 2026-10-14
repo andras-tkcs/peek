@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -207,28 +208,30 @@ func TestLoginWithTokenRejectsDisallowedDomain(t *testing.T) {
 	}
 }
 
-func TestDirectAPITokenAuthIgnoresAllowedEmailDomain(t *testing.T) {
-	store := newAuthTestStore(t, "automation-token", "automation", false)
-	if err := store.SetSetting(context.Background(), authAllowedEmailDomainSetting, "example.com"); err != nil {
+func TestDirectAPITokenAuthHonoursAllowedEmailDomain(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	newAccountWithToken(t, s, "user@other.test", "other-token-0123", false)
+	newAccountWithToken(t, s, "user@example.test", "ok-token-0123", false)
+	if err := s.store.SetSetting(context.Background(), authAllowedEmailDomainSetting, "example.test"); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{store: store}
-	called := false
-	handler := s.authToken(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		jsonOK(w, map[string]string{"status": "ok"})
-	})
-	req := httptest.NewRequest(http.MethodGet, "/api/uploads", nil)
-	req.Header.Set("Authorization", "Bearer automation-token")
-	rec := httptest.NewRecorder()
 
-	handler(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer("other-token-0123"))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("off-domain status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	if !called {
-		t.Fatal("handler was not called")
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["error"] != "account email domain is not allowed" {
+		t.Fatalf("error = %q", body["error"])
+	}
+	if rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer("ok-token-0123")); rec.Code != http.StatusOK {
+		t.Fatalf("on-domain status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if tokenLastUsed(t, s, "other-token-0123").Valid {
+		t.Fatal("refused token recorded a use")
 	}
 }
 

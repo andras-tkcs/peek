@@ -61,8 +61,8 @@ func (s *Server) authToken(next http.HandlerFunc) http.HandlerFunc {
 			jsonError(w, http.StatusUnauthorized, "invalid token")
 			return
 		}
-		if t.Disabled {
-			jsonError(w, http.StatusForbidden, "account disabled")
+		if err := s.tokenAccountActive(r.Context(), t); err != nil {
+			writeTokenPolicyError(w, err)
 			return
 		}
 		s.recordTokenUse(r, t)
@@ -94,8 +94,8 @@ func (s *Server) authAdmin(next http.HandlerFunc) http.HandlerFunc {
 			jsonError(w, http.StatusUnauthorized, "invalid token")
 			return
 		}
-		if t.Disabled {
-			jsonError(w, http.StatusForbidden, "account disabled")
+		if err := s.tokenAccountActive(r.Context(), t); err != nil {
+			writeTokenPolicyError(w, err)
 			return
 		}
 		if !t.IsAdmin {
