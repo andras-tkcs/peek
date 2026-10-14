@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -64,6 +65,30 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.consumeNextPath(w, r), http.StatusSeeOther)
 }
 
+// passwordCompare is bcrypt.CompareHashAndPassword; tests swap it to count calls.
+var passwordCompare = bcrypt.CompareHashAndPassword
+
+// dummyPasswordHash is a bcrypt hash of a constant at bcrypt.DefaultCost, made
+// once on first use. Failed logins compare against it so they take as long as a
+// real comparison.
+var dummyPasswordHash = sync.OnceValue(func() []byte {
+	h, err := bcrypt.GenerateFromPassword([]byte("peek-dummy-password-for-timing"), bcrypt.DefaultCost)
+	if err != nil {
+		panic("generate dummy password hash: " + err.Error())
+	}
+	return h
+})
+
+// checkPassword runs exactly one bcrypt comparison: against hash when it is
+// set, otherwise against dummyPasswordHash (and then always fails).
+func checkPassword(hash, password string) bool {
+	if hash == "" {
+		_ = passwordCompare(dummyPasswordHash(), []byte(password))
+		return false
+	}
+	return passwordCompare([]byte(hash), []byte(password)) == nil
+}
+
 var errLoginThrottled = errors.New("too many failed sign-in attempts")
 
 func loginFailureKey(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
@@ -89,7 +114,14 @@ func (s *Server) loginWithPassword(r *http.Request) (int64, string, error) {
 
 func (s *Server) checkPasswordLogin(ctx context.Context, email, password string) (int64, string, error) {
 	owner, err := s.store.GetAccountByEmail(ctx, email)
-	if err != nil || owner.PasswordHash == "" {
+	hash := ""
+	if err == nil {
+		hash = owner.PasswordHash
+	}
+	// Exactly one bcrypt comparison on every path, so response time does not
+	// reveal which accounts exist. Policy errors are only reachable with the
+	// correct password.
+	if !checkPassword(hash, password) {
 		return 0, "", fmt.Errorf("invalid credentials")
 	}
 	if owner.Disabled {
@@ -100,9 +132,6 @@ func (s *Server) checkPasswordLogin(ctx context.Context, email, password string)
 	}
 	if s.oauthLoginRequired(ctx) && !owner.IsAdmin {
 		return 0, "", fmt.Errorf("oauth required")
-	}
-	if bcrypt.CompareHashAndPassword([]byte(owner.PasswordHash), []byte(password)) != nil {
-		return 0, "", fmt.Errorf("invalid credentials")
 	}
 	return owner.ID, owner.Name, nil
 }
