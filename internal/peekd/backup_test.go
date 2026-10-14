@@ -74,3 +74,53 @@ func TestBackupDatabaseRemovesFileOnFailure(t *testing.T) {
 		t.Fatalf("destination should be removed, stat err = %v", err)
 	}
 }
+
+func TestRunBackupWritesSnapshot(t *testing.T) {
+	dataDir := seedBackupSource(t)
+	dest := filepath.Join(t.TempDir(), "snap.db")
+	if got := runBackup([]string{"--data", dataDir, dest}); got != 0 {
+		t.Fatalf("runBackup = %d, want 0", got)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("backup not written: %v", err)
+	}
+}
+
+func TestRunBackupDefaultsDestinationInsideDataDir(t *testing.T) {
+	dataDir := seedBackupSource(t)
+	if got := runBackup([]string{"--data", dataDir}); got != 0 {
+		t.Fatalf("runBackup = %d, want 0", got)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "peek-backup.db")); err != nil {
+		t.Fatalf("default backup not written: %v", err)
+	}
+}
+
+func TestRunBackupReturnsUsageForBadArgs(t *testing.T) {
+	if got := runBackup([]string{"--nope"}); got != 2 {
+		t.Fatalf("bad flag: runBackup = %d, want 2", got)
+	}
+	if got := runBackup([]string{"a", "b"}); got != 2 {
+		t.Fatalf("extra args: runBackup = %d, want 2", got)
+	}
+}
+
+func TestRunBackupFailsForUnusableDataDir(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dataDir, "peek.db"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "snap.db")
+	if got := runBackup([]string{"--data", dataDir, dest}); got != 1 {
+		t.Fatalf("runBackup = %d, want 1", got)
+	}
+}
+
+func TestBackupDatabaseFailsWhenDestinationDirectoryIsMissing(t *testing.T) {
+	dataDir := seedBackupSource(t)
+	dest := filepath.Join(t.TempDir(), "no-such-dir", "snap.db")
+	err := backupDatabase(dataDir, dest)
+	if err == nil || !strings.Contains(err.Error(), "create backup file") {
+		t.Fatalf("error = %v, want create backup file", err)
+	}
+}
