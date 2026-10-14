@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -41,6 +40,10 @@ func cmdGrant(args []string) error {
 	if err != nil {
 		return err
 	}
+	seg, err := slugPath(g.slug)
+	if err != nil {
+		return err
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -50,7 +53,7 @@ func cmdGrant(args []string) error {
 		return err
 	}
 	in := map[string]string{"kind": g.kind, "email": g.email}
-	if err := c.postJSON("/api/uploads/"+url.PathEscape(g.slug)+"/grants", in, nil); err != nil {
+	if err := c.postJSON("/api/uploads/"+seg+"/grants", in, nil); err != nil {
 		return err
 	}
 	fmt.Printf("granted %s %s on %s\n", g.kind, g.email, g.slug)
@@ -59,6 +62,10 @@ func cmdGrant(args []string) error {
 
 func cmdRevoke(args []string) error {
 	g, err := parseGrantArgs("revoke", args)
+	if err != nil {
+		return err
+	}
+	seg, err := slugPath(g.slug)
 	if err != nil {
 		return err
 	}
@@ -74,7 +81,7 @@ func cmdRevoke(args []string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := c.req("DELETE", "/api/uploads/"+url.PathEscape(g.slug)+"/grants", strings.NewReader(string(b)), "application/json")
+	resp, err := c.req("DELETE", "/api/uploads/"+seg+"/grants", strings.NewReader(string(b)), "application/json")
 	if err != nil {
 		return err
 	}
@@ -90,6 +97,10 @@ func cmdGrants(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: peek grants <slug>")
 	}
+	seg, err := slugPath(args[0])
+	if err != nil {
+		return err
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -103,7 +114,7 @@ func cmdGrants(args []string) error {
 		Email     string `json:"email"`
 		CreatedAt int64  `json:"created_at"`
 	}
-	if err := c.getJSON("/api/uploads/"+url.PathEscape(args[0])+"/grants", &items); err != nil {
+	if err := c.getJSON("/api/uploads/"+seg+"/grants", &items); err != nil {
 		return err
 	}
 	if len(items) == 0 {

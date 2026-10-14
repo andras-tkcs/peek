@@ -92,8 +92,12 @@ func cmdToken(args []string) error {
 		if id == "" {
 			return fmt.Errorf("usage: peek token revoke <id>  (see ids in `peek token list`)")
 		}
+		idSeg, err := tokenIDPath(id)
+		if err != nil {
+			return err
+		}
 		run = func(c *client) error {
-			if err := c.del("/api/tokens/"+id, nil); err != nil {
+			if err := c.del("/api/tokens/"+idSeg, nil); err != nil {
 				return err
 			}
 			fmt.Printf("revoked token %s\n", id)
