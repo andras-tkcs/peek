@@ -130,7 +130,7 @@ func TestDashboardAPIKeyRevoke(t *testing.T) {
 	key, _ := createDashboardKey(t, s, id, "QA runner")
 	keys := accountKeys(t, s, id)
 	rec := dashboardPost(t, s, id, "/dashboard/api-keys/"+strconv.FormatInt(keys[0].ID, 10)+"/revoke", url.Values{}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=API+key+revoked")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=api_key_revoked")
 	if code := keyStatus(t, s, key); code != http.StatusUnauthorized {
 		t.Fatalf("revoked key = %d", code)
 	}
@@ -145,7 +145,7 @@ func TestDashboardAPIKeyRevoke(t *testing.T) {
 	}
 	keys = accountKeys(t, s, id)
 	rec = dashboardPost(t, s, id, "/dashboard/api-keys/"+strconv.FormatInt(keys[0].ID, 10)+"/revoke", url.Values{}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=API+key+revoked")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=api_key_revoked")
 	if code := keyStatus(t, s, key2); code != http.StatusUnauthorized {
 		t.Fatalf("revoked key2 = %d", code)
 	}
@@ -182,7 +182,7 @@ func TestDashboardAPIKeyRequiresCSRF(t *testing.T) {
 	kid := strconv.FormatInt(accountKeys(t, s, id)[0].ID, 10)
 	for _, path := range []string{"/dashboard/api-keys", "/dashboard/api-keys/" + kid + "/regenerate", "/dashboard/api-keys/" + kid + "/revoke"} {
 		rec := dashboardPost(t, s, id, path, url.Values{"name": {"x"}}, false)
-		assertDashboardRedirect(t, rec, "/dashboard?err=invalid+session")
+		assertDashboardRedirect(t, rec, "/dashboard?err=invalid_session")
 	}
 	if got := accountKeys(t, s, id); len(got) != 1 {
 		t.Fatalf("keys = %+v", got)
@@ -239,7 +239,7 @@ func TestDashboardAPIKeyNameValidation(t *testing.T) {
 	id := newKeyAccount(t, s, "u@example.test", false)
 	for _, name := range []string{"", "   ", strings.Repeat("a", 101), "bad\nname"} {
 		rec := dashboardPost(t, s, id, "/dashboard/api-keys", url.Values{"name": {name}}, true)
-		assertDashboardRedirect(t, rec, "/dashboard?err=API+key+name+must+be+1+to+100+characters")
+		assertDashboardRedirect(t, rec, "/dashboard?err=api_key_name")
 	}
 	if got := accountKeys(t, s, id); len(got) != 0 {
 		t.Fatalf("keys = %+v", got)
@@ -298,7 +298,7 @@ func TestDashboardAPIKeyNeverLoggedOrAudited(t *testing.T) {
 	kid := accountKeys(t, s, id)[0].ID
 	key2, _ := regenerateDashboardKey(t, s, id, kid)
 	rec := dashboardPost(t, s, id, "/dashboard/api-keys/"+strconv.FormatInt(kid, 10)+"/revoke", url.Values{}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=API+key+revoked")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=api_key_revoked")
 	if key1 == "" || key2 == "" {
 		t.Fatal("keys not captured")
 	}

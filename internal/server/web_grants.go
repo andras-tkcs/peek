@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/andras-tkcs/peek/internal/models"
 )
@@ -22,11 +23,11 @@ func (s *Server) dashboardGrantUpload(w http.ResponseWriter, r *http.Request) (*
 	}
 	u, err := s.store.GetUpload(r.Context(), r.PathValue("slug"))
 	if err != nil {
-		dashboardError(w, r, "not found")
+		dashboardError(w, r, flashNotFound)
 		return nil, nil, false
 	}
 	if u.OwnerAccountID != owner.ID && !owner.IsAdmin {
-		dashboardError(w, r, "not owner")
+		dashboardError(w, r, flashNotOwner)
 		return nil, nil, false
 	}
 	return owner, u, true
@@ -41,16 +42,16 @@ func (s *Server) handleDashboardGrantAdd(w http.ResponseWriter, r *http.Request)
 	kind := r.FormValue("kind")
 	email, msg := s.normalizeGrantInput(kind, r.FormValue("email"), true)
 	if msg != "" {
-		dashboardFlashManage(w, r, "err", msg, slug)
+		dashboardFlashManage(w, r, "err", grantFlashCode(msg), slug)
 		return
 	}
 	if _, err := s.store.AddUploadGrant(r.Context(), u.ID, kind, email, owner.ID); err != nil {
 		slog.Error("dashboard grant add failed", "slug", slug, "err", err)
-		dashboardFlashManage(w, r, "err", "grant update failed", slug)
+		dashboardFlashManage(w, r, "err", flashGrantFailed, slug)
 		return
 	}
 	s.auditRequest(r, owner.Name, "upload.grant.add", auditDetail("slug", u.Slug, "kind", kind, "email", email))
-	dashboardFlashManage(w, r, "ok", "Shared /p/"+slug+" with "+email, slug)
+	dashboardFlash(w, r, url.Values{"ok": {flashGrantAdded}, "manage": {slug}, "slug": {slug}, "email": {email}})
 }
 
 func (s *Server) handleDashboardGrantRemove(w http.ResponseWriter, r *http.Request) {
@@ -62,18 +63,18 @@ func (s *Server) handleDashboardGrantRemove(w http.ResponseWriter, r *http.Reque
 	kind := r.FormValue("kind")
 	email, msg := s.normalizeGrantInput(kind, r.FormValue("email"), false)
 	if msg != "" {
-		dashboardFlashManage(w, r, "err", msg, slug)
+		dashboardFlashManage(w, r, "err", grantFlashCode(msg), slug)
 		return
 	}
 	if err := s.store.RemoveUploadGrant(r.Context(), u.ID, kind, email); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			dashboardFlashManage(w, r, "err", "grant not found", slug)
+			dashboardFlashManage(w, r, "err", flashGrantNotFound, slug)
 			return
 		}
 		slog.Error("dashboard grant remove failed", "slug", slug, "err", err)
-		dashboardFlashManage(w, r, "err", "grant update failed", slug)
+		dashboardFlashManage(w, r, "err", flashGrantFailed, slug)
 		return
 	}
 	s.auditRequest(r, owner.Name, "upload.grant.remove", auditDetail("slug", u.Slug, "kind", kind, "email", email))
-	dashboardFlashManage(w, r, "ok", "Removed "+email+" from /p/"+slug, slug)
+	dashboardFlashManage(w, r, "ok", flashGrantRemoved, slug)
 }

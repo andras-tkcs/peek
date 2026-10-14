@@ -14,9 +14,13 @@ func (s *Server) handleDashboardRename(w http.ResponseWriter, r *http.Request) {
 	slug := u.Slug
 	res, err := uploads.Rename(r.Context(), s.store, s.baseURL, uploads.RenameInput{UploadID: u.ID, CurrentSlug: u.Slug, CurrentName: u.Name, Name: r.FormValue("name")})
 	if err != nil {
-		dashboardFlashManage(w, r, "err", uploadErrorMessage(err), slug)
+		code := uploadFlashCode(err)
+		if code == flashUploadPersistenceFailure {
+			code = flashRenameFailed
+		}
+		dashboardFlashManage(w, r, "err", code, slug)
 		return
 	}
 	s.auditRequest(r, owner.Name, "upload.rename", renameAuditDetail(u.Slug, res))
-	dashboardFlashManage(w, r, "ok", "Renamed to /p/"+res.Slug, res.Slug)
+	dashboardFlashManage(w, r, "ok", flashRenamed, res.Slug)
 }

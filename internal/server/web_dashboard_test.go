@@ -91,7 +91,7 @@ func TestDashboardRendersGenericSuccessFlash(t *testing.T) {
 	}
 	s := &Server{store: store, renderer: renderer, secret: strings.Repeat("0", 64)}
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard?ok=settings+saved", nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard?ok=settings_saved", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: makeWebSession(s.secret, strconv.FormatInt(account.ID, 10), sessionTTL)})
 	rec := httptest.NewRecorder()
 
@@ -281,6 +281,57 @@ func TestDashboardUploadPassesVisibility(t *testing.T) {
 	if len(list) != 1 || list[0].Visibility != "private" {
 		t.Fatalf("uploads = %+v", list)
 	}
+	if loc := rec.Header().Get("Location"); loc != "/dashboard?uploaded="+list[0].Slug {
+		t.Fatalf("Location = %q", loc)
+	}
+}
+
+func TestDashboardIgnoresFreeTextFlash(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	viewer, err := s.store.CreateAccount(context.Background(), "viewer@example.test", "Viewer", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doRequest(t, s, http.MethodGet,
+		"/dashboard?err=Your+session+expired.+Call+IT&ok=Pay+now&uploaded=https%3A%2F%2Fevil.example%2Fx",
+		nil, asSession(s, viewer.ID))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, banned := range []string{"Call IT", "Pay now", "evil.example", "Uploaded! Share link:"} {
+		if strings.Contains(body, banned) {
+			t.Fatalf("dashboard rendered %q from the query string", banned)
+		}
+	}
+}
+
+func TestDashboardUploadedFlashShowsOwnUploadLink(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := newTwoVersionPage(t, s, "page", models.UploadVisibilityPublic, "")
+
+	rec := doRequest(t, s, http.MethodGet, "/dashboard?uploaded=page", nil, asSession(s, u.OwnerAccountID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Uploaded! Share link:") || !strings.Contains(body, s.baseURL+"/p/page") {
+		t.Fatalf("owner dashboard missing share link: %s", body)
+	}
+
+	other, err := s.store.CreateAccount(context.Background(), "other@example.test", "Other", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = doRequest(t, s, http.MethodGet, "/dashboard?uploaded=page", nil, asSession(s, other.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "Uploaded! Share link:") {
+		t.Fatal("another account's dashboard rendered the upload link")
+	}
 }
 
 func TestDashboardDeleteReportsDatabaseDeleteFailureAfterStorageDelete(t *testing.T) {
@@ -301,7 +352,7 @@ func TestDashboardDeleteReportsDatabaseDeleteFailureAfterStorageDelete(t *testin
 	if err != nil {
 		t.Fatalf("parse location: %v", err)
 	}
-	if got := u.Query().Get("err"); got != "delete failed" {
+	if got := u.Query().Get("err"); got != "delete_failed" {
 		t.Fatalf("err query = %q, location = %q", got, loc)
 	}
 	if len(storage.deleted) != 1 || storage.deleted[0] != "page" {
@@ -328,7 +379,7 @@ func TestDashboardDeleteStopsWhenStorageDeleteFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse location: %v", err)
 	}
-	if got := u.Query().Get("err"); got != "delete failed" {
+	if got := u.Query().Get("err"); got != "delete_failed" {
 		t.Fatalf("err query = %q, location = %q", got, loc)
 	}
 	if len(storage.deleted) != 1 || storage.deleted[0] != "page" {
@@ -434,7 +485,7 @@ func TestDashboardVisibilitySetsPasswordAndAudits(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}, "password": {"pw"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=Password+updated+for+%2Fp%2Fpage")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=password_updated&slug=page")
 	got, err := s.store.GetUpload(context.Background(), "page")
 	if err != nil {
 		t.Fatalf("get upload: %v", err)
@@ -464,7 +515,7 @@ func TestDashboardVisibilityMakesPublic(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"public"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=%2Fp%2Fpage+is+now+public")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=visibility_set&slug=page")
 	got, err := s.store.GetUpload(context.Background(), "page")
 	if err != nil {
 		t.Fatalf("get upload: %v", err)
@@ -478,7 +529,7 @@ func TestDashboardVisibilityRejectsPasswordWithoutValue(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=password+visibility+requires+a+password")
+	assertDashboardRedirect(t, rec, "/dashboard?err=upload_password_required")
 	assertVisibilityUnchanged(t, s, "page")
 }
 
@@ -490,7 +541,7 @@ func TestDashboardVisibilityRejectsNonOwner(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	rec := dashboardPost(t, s, other.ID, "/dashboard/visibility/page", url.Values{"visibility": {"public"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=not+owner")
+	assertDashboardRedirect(t, rec, "/dashboard?err=not_owner")
 	assertVisibilityUnchanged(t, s, "page")
 }
 
@@ -498,7 +549,7 @@ func TestDashboardVisibilityRejectsMissingCSRF(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"public"}}, false)
-	assertDashboardRedirect(t, rec, "/dashboard?err=invalid+session")
+	assertDashboardRedirect(t, rec, "/dashboard?err=invalid_session")
 	assertVisibilityUnchanged(t, s, "page")
 }
 
@@ -517,7 +568,7 @@ func TestDashboardVisibilityRestrictedReopensDialog(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := newTwoVersionPage(t, s, "page", "public", "")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"restricted"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?manage=page&ok=%2Fp%2Fpage+is+now+restricted")
+	assertDashboardRedirect(t, rec, "/dashboard?manage=page&ok=visibility_set&slug=page")
 }
 
 func TestDashboardListsGrantsInAccessDialog(t *testing.T) {

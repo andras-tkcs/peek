@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,15 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+	s.renderDashboard(w, r, owner, http.StatusOK, r.URL.Query(), "")
+}
+
+// renderDashboard renders owner's dashboard. Flash codes come from q; when
+// inlineError is set it is shown as the error toast instead (used by handlers
+// that answer a POST with the page rather than a redirect).
+func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request, owner *models.Account, status int, q url.Values, inlineError string) {
+	noCache(w)
+	w.Header().Set("Content-Security-Policy", webui.DashboardCSP)
 	var list []models.Upload
 	var listErr error
 	if owner.IsAdmin {
@@ -75,7 +85,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		APIKeys:       s.dashboardAPIKeyRows(r.Context(), owner.ID),
 
 		GroupGrantsEnabled: s.groups != nil,
-		ManageSlug:         r.URL.Query().Get("manage"),
+		ManageSlug:         q.Get("manage"),
 	}
 	if listErr != nil {
 		dashData_.UploadError = "uploads could not be loaded"
@@ -84,17 +94,16 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		dashData_.Invites = s.dashboardInviteRows(r.Context())
 		dashData_.Accounts = s.dashboardAccountRows(r.Context(), owner.ID)
 	}
-	// carry over flash messages from query params
-	if e := r.URL.Query().Get("err"); e != "" {
-		dashData_.UploadError = e
+	flash := resolveFlash(q, uploads, s.baseURL)
+	if flash.Error != "" {
+		dashData_.UploadError = flash.Error
 	}
-	if msg := r.URL.Query().Get("ok"); msg != "" {
-		dashData_.FlashSuccess = msg
+	if inlineError != "" {
+		dashData_.UploadError = inlineError
 	}
-	if url := r.URL.Query().Get("uploaded"); url != "" {
-		dashData_.UploadSuccessURL = url
-	}
-	s.renderHTML(w, http.StatusOK, webui.TemplateDashboard, dashData_)
+	dashData_.FlashSuccess = flash.Success
+	dashData_.UploadSuccessURL = flash.UploadedURL
+	s.renderHTML(w, status, webui.TemplateDashboard, dashData_)
 }
 
 func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +117,7 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUpload+1024)
 	if err := r.ParseMultipartForm(maxUpload); err != nil {
-		dashboardError(w, r, "file too large or invalid form")
+		dashboardError(w, r, flashFormInvalid)
 		return
 	}
 	validCSRF, err := s.validateCSRF(r, w, r.FormValue("csrf"))
@@ -117,7 +126,7 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validCSRF {
-		dashboardError(w, r, "invalid session")
+		dashboardError(w, r, flashInvalidSession)
 		return
 	}
 
@@ -130,7 +139,7 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 	if mode == "paste" {
 		html := strings.TrimSpace(r.FormValue("html"))
 		if html == "" {
-			dashboardError(w, r, "no html pasted")
+			dashboardError(w, r, flashNoHTML)
 			return
 		}
 		data = []byte(html)
@@ -140,13 +149,13 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 	} else {
 		file, header, err := r.FormFile("file")
 		if err != nil {
-			dashboardError(w, r, "no file selected")
+			dashboardError(w, r, flashNoFile)
 			return
 		}
 		defer file.Close()
 		data, err = io.ReadAll(io.LimitReader(file, maxUpload+1))
 		if err != nil || int64(len(data)) > maxUpload {
-			dashboardError(w, r, "file too large")
+			dashboardError(w, r, flashFileTooLarge)
 			return
 		}
 		if name == "" {
@@ -164,12 +173,11 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		logUploadError(err)
-		dashboardError(w, r, uploadErrorMessage(err))
+		dashboardError(w, r, uploadFlashCode(err))
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.create", "slug="+up.Slug+" name="+up.Name+" size="+strconv.Itoa(up.Size))
-	shareURL := up.URL
-	dashboardUploaded(w, r, shareURL)
+	s.auditRequest(r, owner.Name, "upload.create", auditDetail("slug", up.Slug, "name", up.Name, "size", strconv.Itoa(up.Size)))
+	dashboardUploaded(w, r, up.Slug)
 }
 
 func (s *Server) handleDashboardDelete(w http.ResponseWriter, r *http.Request) {
@@ -184,19 +192,19 @@ func (s *Server) handleDashboardDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	u, err := s.store.GetUpload(r.Context(), slug)
 	if err != nil {
-		dashboardError(w, r, "not found")
+		dashboardError(w, r, flashNotFound)
 		return
 	}
 	if u.OwnerAccountID != owner.ID && !owner.IsAdmin {
-		dashboardError(w, r, "not owner")
+		dashboardError(w, r, flashNotOwner)
 		return
 	}
 	if err := s.deleteUpload(r.Context(), *u); err != nil {
 		slog.Error("dashboard upload delete failed", "slug", slug, "err", err)
-		dashboardError(w, r, "delete failed")
+		dashboardError(w, r, flashDeleteFailed)
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.delete", "slug="+slug+" name="+u.Name)
+	s.auditRequest(r, owner.Name, "upload.delete", auditDetail("slug", slug, "name", u.Name))
 	dashboardHome(w, r)
 }
 
@@ -212,33 +220,33 @@ func (s *Server) handleDashboardVisibility(w http.ResponseWriter, r *http.Reques
 	}
 	u, err := s.store.GetUpload(r.Context(), slug)
 	if err != nil {
-		dashboardError(w, r, "not found")
+		dashboardError(w, r, flashNotFound)
 		return
 	}
 	if u.OwnerAccountID != owner.ID && !owner.IsAdmin {
-		dashboardError(w, r, "not owner")
+		dashboardError(w, r, flashNotOwner)
 		return
 	}
 	change, err := uploads.PrepareVisibility(r.FormValue("visibility"), r.FormValue("password"))
 	if err != nil {
-		dashboardError(w, r, uploadErrorMessage(err))
+		dashboardError(w, r, uploadFlashCode(err))
 		return
 	}
 	if err := s.store.SetUploadVisibility(r.Context(), u.ID, change.Visibility, change.PasswordHash); err != nil {
 		slog.Error("dashboard visibility update failed", "slug", slug, "err", err)
-		dashboardError(w, r, "visibility update failed")
+		dashboardError(w, r, flashVisibilityFailed)
 		return
 	}
 	s.auditRequest(r, owner.Name, "upload.visibility.set", visibilityAuditDetail(slug, change.Visibility))
 	if change.Visibility == models.UploadVisibilityPassword {
-		dashboardOK(w, r, "Password updated for /p/"+slug)
+		dashboardOKSlug(w, r, flashPasswordUpdated, slug)
 		return
 	}
 	if change.Visibility == models.UploadVisibilityRestricted {
-		dashboardFlashManage(w, r, "ok", "/p/"+slug+" is now restricted", slug)
+		dashboardFlashManage(w, r, "ok", flashVisibilitySet, slug)
 		return
 	}
-	dashboardOK(w, r, "/p/"+slug+" is now "+change.Visibility)
+	dashboardOKSlug(w, r, flashVisibilitySet, slug)
 }
 
 func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {

@@ -39,9 +39,16 @@ func uploadHTTPError(err error) (int, string) {
 	}
 }
 
-func uploadErrorMessage(err error) string {
-	_, msg := uploadHTTPError(err)
-	return msg
+// uploadFlashCode maps an upload error to a dashboard flash code.
+func uploadFlashCode(err error) string {
+	var uploadErr *uploads.Error
+	if errors.As(err, &uploadErr) {
+		code := "upload_" + string(uploadErr.Kind)
+		if _, ok := flashMessages[code]; ok {
+			return code
+		}
+	}
+	return flashUploadFailed
 }
 
 func logUploadError(err error) {
