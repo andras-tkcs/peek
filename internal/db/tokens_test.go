@@ -261,3 +261,30 @@ func TestMigrationAddsTokenHintLastUsed(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCreateAccountTokenExpiringStoresExpiry(t *testing.T) {
+	ctx := context.Background()
+	s := openTokenTestStore(t)
+	a, err := s.CreateAccount(ctx, "a@example.test", "a", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp := time.Now().Add(time.Hour).Unix()
+	if _, err := s.CreateAccountTokenExpiring(ctx, a.ID, "future-token-0123456789", "future", exp); err != nil {
+		t.Fatal(err)
+	}
+	tk, err := s.GetToken(ctx, "future-token-0123456789")
+	if err != nil || tk.ExpiresAt != exp {
+		t.Fatalf("GetToken = %+v, %v", tk, err)
+	}
+	keys, err := s.ListAccountTokens(ctx, a.ID)
+	if err != nil || len(keys) != 1 || keys[0].ExpiresAt != exp {
+		t.Fatalf("ListAccountTokens = %+v, %v", keys, err)
+	}
+	if _, err := s.CreateAccountTokenExpiring(ctx, a.ID, "past-token-0123456789", "past", time.Now().Add(-time.Minute).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetToken(ctx, "past-token-0123456789"); err == nil {
+		t.Fatal("expired token was returned")
+	}
+}

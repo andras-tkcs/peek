@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS upload_slug_aliases (
 );
 CREATE INDEX IF NOT EXISTS idx_upload_slug_aliases_upload ON upload_slug_aliases(upload_id);`},
 	{10, "token_hint_last_used", `-- ALTER TABLE handled idempotently below`},
+	{11, "cli_login_request_context", `-- ALTER TABLE handled idempotently below`},
+	{12, "account_session_epoch", `-- ALTER TABLE handled idempotently below`},
 }
 
 func (s *Store) runMigrations() error {
@@ -96,6 +98,14 @@ func (s *Store) runMigrations() error {
 			}
 		} else if m.id == 10 {
 			if err := s.migrateTokenHintLastUsed(); err != nil {
+				return fmt.Errorf("migration %d (%s): %w", m.id, m.desc, err)
+			}
+		} else if m.id == 11 {
+			if err := s.migrateCLILoginRequestContext(); err != nil {
+				return fmt.Errorf("migration %d (%s): %w", m.id, m.desc, err)
+			}
+		} else if m.id == 12 {
+			if err := s.migrateAccountSessionEpoch(); err != nil {
 				return fmt.Errorf("migration %d (%s): %w", m.id, m.desc, err)
 			}
 		} else if m.sql != "" {
@@ -404,4 +414,29 @@ func (s *Store) columnInfo(table, column string) (exists, notNull bool, err erro
 		}
 	}
 	return false, false, rows.Err()
+}
+
+// migrateCLILoginRequestContext records where a `peek login` request came from,
+// so the approval page can show it. Existing rows keep ”.
+func (s *Store) migrateCLILoginRequestContext() error {
+	for _, stmt := range []string{
+		`ALTER TABLE cli_login_devices ADD COLUMN request_ip TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE cli_login_devices ADD COLUMN request_user_agent TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := s.Exec(stmt); err != nil && !isDuplicateColumnError(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateAccountSessionEpoch adds the counter that signs an account out of
+// every dashboard session when it changes. Existing accounts start at 0, which
+// keeps their current sessions valid.
+func (s *Store) migrateAccountSessionEpoch() error {
+	_, err := s.Exec(`ALTER TABLE accounts ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0`)
+	if err != nil && !isDuplicateColumnError(err) {
+		return err
+	}
+	return nil
 }

@@ -81,8 +81,14 @@ func nullableHint(token string) any {
 
 // CreateAccountToken stores a new token for an existing account and returns its id.
 func (s *Store) CreateAccountToken(ctx context.Context, accountID int64, token, name string) (int64, error) {
-	res, err := s.ExecContext(ctx, `INSERT INTO tokens(account_id,token,name,is_admin,created_at,hint) VALUES(?,?,?,0,?,?)`,
-		accountID, HashToken(token), strings.TrimSpace(name), time.Now().Unix(), nullableHint(token))
+	return s.CreateAccountTokenExpiring(ctx, accountID, token, name, 0)
+}
+
+// CreateAccountTokenExpiring stores a new token for an existing account that
+// stops working at expiresAt (unix seconds, 0 = never) and returns its id.
+func (s *Store) CreateAccountTokenExpiring(ctx context.Context, accountID int64, token, name string, expiresAt int64) (int64, error) {
+	res, err := s.ExecContext(ctx, `INSERT INTO tokens(account_id,token,name,is_admin,created_at,expires_at,hint) VALUES(?,?,?,0,?,?,?)`,
+		accountID, HashToken(token), strings.TrimSpace(name), time.Now().Unix(), expiresAt, nullableHint(token))
 	if err != nil {
 		return 0, err
 	}
