@@ -158,7 +158,7 @@ func TestRawHTMLE2ERequiresIssuedViewToken(t *testing.T) {
 	app.client = noRedirectClient()
 	up := uploadRawHTML(t, app, "raw-token-page", "public")
 
-	raw := app.request(t, http.MethodGet, "/raw/"+up.Slug, nil)
+	raw := app.request(t, http.MethodGet, "/raw/"+up.Slug+"/v/1", nil)
 	assertStatus(t, raw, http.StatusForbidden)
 
 	page := app.request(t, http.MethodGet, "/p/"+up.Slug, nil)
@@ -168,6 +168,26 @@ func TestRawHTMLE2ERequiresIssuedViewToken(t *testing.T) {
 	assertStatus(t, raw, http.StatusOK)
 	if !strings.Contains(string(raw.Body), "e2e body") {
 		t.Fatalf("raw response did not include uploaded HTML: %s", raw.Body)
+	}
+}
+
+func TestRawHTMLE2ERejectsLeakedURL(t *testing.T) {
+	app := newTestApp(t)
+	app.client = noRedirectClient()
+	up := uploadRawHTML(t, app, "raw-leak-page", "public")
+	page := app.request(t, http.MethodGet, "/p/"+up.Slug, nil)
+	assertStatus(t, page, http.StatusOK)
+	rawPath := rawPathFromPage(t, string(page.Body), up.Slug)
+	fetchDest := func(v string) requestOption {
+		return func(r *http.Request) { r.Header.Set("Sec-Fetch-Dest", v) }
+	}
+
+	assertStatus(t, app.request(t, http.MethodGet, rawPath, nil, fetchDest("iframe")), http.StatusForbidden)
+	assertStatus(t, app.request(t, http.MethodGet, rawPath, nil, withCookies(page.Cookies...), fetchDest("document")), http.StatusForbidden)
+	raw := app.request(t, http.MethodGet, rawPath, nil, withCookies(page.Cookies...), fetchDest("iframe"))
+	assertStatus(t, raw, http.StatusOK)
+	if csp := raw.Header.Get("Content-Security-Policy"); !strings.HasPrefix(csp, "sandbox allow-scripts allow-popups;") {
+		t.Fatalf("raw CSP = %q", csp)
 	}
 }
 
