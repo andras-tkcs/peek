@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="Peek" width="180">
 </h1>
 
-[![CI](https://github.com/puemos/peek/actions/workflows/ci.yml/badge.svg)](https://github.com/puemos/peek/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/puemos/peek?sort=semver)](https://github.com/puemos/peek/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
+[![CI](https://github.com/andras-tkcs/peek/actions/workflows/ci.yml/badge.svg)](https://github.com/andras-tkcs/peek/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/andras-tkcs/peek?sort=semver)](https://github.com/andras-tkcs/peek/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
 
 
 
@@ -25,7 +25,7 @@ peek login --host http://localhost:7700
 
 # 4. Share a page
 peek upload mypage.html --visibility public
-#  -> http://localhost:7700/p/PhiUs-lMbZE_Sw
+#  -> http://localhost:7700/p/mypage-html-k7m2xq
 
 # Or upload it with password protection
 peek upload mypage.html --visibility password --password s3cret
@@ -35,27 +35,27 @@ Common follow-up commands:
 
 ```sh
 peek list
-peek stats PhiUs-lMbZE_Sw
-peek comments PhiUs-lMbZE_Sw
-peek comments PhiUs-lMbZE_Sw --version 2
-peek upload mypage.html --slug PhiUs-lMbZE_Sw   # new version at /p/PhiUs-lMbZE_Sw/v/2
-peek versions PhiUs-lMbZE_Sw
-peek grant PhiUs-lMbZE_Sw alice@example.com    # for --visibility restricted pages
-peek visibility PhiUs-lMbZE_Sw password --password newpass
-peek visibility PhiUs-lMbZE_Sw public
-peek delete PhiUs-lMbZE_Sw
-peek export PhiUs-lMbZE_Sw
+peek stats mypage-html-k7m2xq
+peek comments mypage-html-k7m2xq
+peek comments mypage-html-k7m2xq --version 2
+peek upload mypage.html --slug mypage-html-k7m2xq   # new version at /p/mypage-html-k7m2xq/v/2
+peek versions mypage-html-k7m2xq
+peek grant mypage-html-k7m2xq alice@example.com    # for --visibility restricted pages
+peek visibility mypage-html-k7m2xq password --password newpass
+peek visibility mypage-html-k7m2xq public
+peek delete mypage-html-k7m2xq
+peek export mypage-html-k7m2xq
 ```
 
 ## Install
 
-**Prebuilt binaries** (recommended): grab a `peekd` + `peek` archive for your OS/arch from the [releases page](https://github.com/puemos/peek/releases).
+**Prebuilt binaries** (recommended): grab a `peekd` + `peek` archive for your OS/arch from the [releases page](https://github.com/andras-tkcs/peek/releases).
 
 **CLI one-liner:**
 ```sh
-curl -fsSL https://raw.githubusercontent.com/puemos/peek/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
 ```
-Override with `PEEK_VERSION` / `PEEK_INSTALL_DIR`.
+Override with `PEEK_VERSION` / `PEEK_INSTALL_DIR`. `install.sh` verifies the archive against the release's `checksums.txt` and refuses to install on mismatch; releases published before checksums were added (v0.8.1 and older) have no checksums file.
 
 **Go install:**
 ```sh
@@ -68,9 +68,9 @@ go install github.com/andras-tkcs/peek/cmd/peek@latest    # CLI
 docker run -d --name peek -p 7700:7700 \
   -v peek-data:/data \
   -e PEEK_BASE_URL=https://peek.example.com \
-  ghcr.io/puemos/peek:latest
+  ghcr.io/andras-tkcs/peek:latest
 ```
-The `/data` volume holds the database, uploads, and signing key. On first run Peek prints a one-time setup URL. The image is `scratch`-based, multi-arch (`amd64`/`arm64`), runs as uid 65532.
+For production, pin a release tag (`ghcr.io/andras-tkcs/peek:<version>`) or an image digest (`ghcr.io/andras-tkcs/peek@sha256:…`). The `/data` volume holds the database, uploads, and signing key. On first run Peek prints a one-time setup URL. The image is `scratch`-based, multi-arch (`amd64`/`arm64`), runs as uid 65532.
 
 ```sh
 docker compose up -d              # local stack
@@ -148,16 +148,18 @@ Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env o
 | `--data` | `PEEK_DATA` | `./data` | Data dir (db + uploads + secret) |
 | `--base-url` | `PEEK_BASE_URL` | `http://localhost:7700` | Public base URL. Use `https://…` in production for Secure cookies + HSTS. |
 | `--max-upload` | `PEEK_MAX_UPLOAD` | `2097152` (2 MiB) | Max upload size in bytes |
-| `--secret` | `PEEK_SECRET` | _(stored in data dir)_ | HMAC/encryption secret for multi-instance cookie/settings sharing |
+| `--secret` | `PEEK_SECRET` | _(stored in data dir)_ | HMAC/encryption secret for multi-instance cookie/settings sharing. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--max-total-size` | `PEEK_MAX_TOTAL_SIZE` | `0` | Total upload storage limit in bytes (`0` = unlimited) |
 | `--retention-days` | `PEEK_RETENTION_DAYS` | `0` | Auto-delete uploads older than N days (`0` = off) |
 | `--trusted-proxy` | `PEEK_TRUSTED_PROXY` | `false` | Trust `X-Forwarded-For` for analytics/audit IPs |
+| `--trusted-proxy-cidrs` | `PEEK_TRUSTED_PROXY_CIDRS` | `127.0.0.0/8,::1/128` | Proxies allowed to set `X-Forwarded-For` (with `--trusted-proxy`) |
+| `--metrics-token` | `PEEK_METRICS_TOKEN` | _(empty)_ | Bearer token (at least 16 characters) required on `/metrics`. Or `PEEK_METRICS_TOKEN_FILE` with the path to a file. |
 | `--storage` | `PEEK_STORAGE` | `file` | Storage backend: `file` or `s3` |
 | `--s3-endpoint` | `PEEK_S3_ENDPOINT` | _(empty)_ | S3-compatible endpoint URL |
 | `--s3-bucket` | `PEEK_S3_BUCKET` | _(empty)_ | S3 bucket name |
 | `--s3-region` | `PEEK_S3_REGION` | `us-east-1` | S3 region |
 | `--s3-access-key` | `PEEK_S3_ACCESS_KEY` | _(empty)_ | S3 access key |
-| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | _(empty)_ | S3 secret key |
+| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | _(empty)_ | S3 secret key. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--s3-allow-private-endpoint` | `PEEK_S3_ALLOW_PRIVATE_ENDPOINT` | `false` | Allow private/link-local S3 endpoints for dev |
 | `--google-sa-key-file` | `PEEK_GOOGLE_SA_KEY_FILE` | *(empty)* | Google service account JSON key for group grants (needs `--google-admin-email`) |
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | *(empty)* | Workspace admin to impersonate for group lookups |
@@ -178,20 +180,22 @@ Config saved to `<user-config-dir>/peek/config.json`. Override per-command with 
 | --- | --- |
 | Anyone can upload | Every upload requires a valid API token or authenticated dashboard session. |
 | Token theft from database | Tokens stored as SHA-256 hashes; plaintext shown only at creation. |
-| Long-lived tokens | API tokens can include an expiry; expired tokens are rejected. |
+| Long-lived tokens | `peek login` tokens expire after 90 days; admin tokens can include an expiry; expired tokens are rejected. |
 | Token leaking via terminal | `peek login` uses browser login; token fallback reads from hidden prompt/stdin/file. |
+| Phished CLI login | The approval link carries no code: the user types it from their own terminal and sees the requesting IP, client and time before approving. |
+| Offboarding | API tokens follow the allowed email domain and OAuth-required rules; disabling an account or **Sign out other sessions** ends dashboard sessions server-side. |
 | OAuth token exposure | Provider tokens used only for profile lookup; not stored. |
-| Session-cookie theft | Dashboard cookie is a signed, revocable reference; `HttpOnly`, `SameSite=Strict`, `Secure` on https. |
+| Session-cookie theft | Dashboard cookie is a signed reference that the server can revoke per account; `HttpOnly`, `SameSite=Strict`, `Secure` on https. |
 | CSRF / clickjacking | Dashboard forms require CSRF tokens; CSP with `frame-ancestors 'none'`. |
 | Credentials in clear | Secure cookies + HSTS on https. Server warns on non-local plain http. |
 | Uploaded HTML harms host | Server never executes HTML, only streams bytes. |
-| Uploaded HTML steals data | Rendered in `<iframe sandbox="allow-scripts">` with opaque origin. |
+| Uploaded HTML steals data | Rendered in `<iframe sandbox="allow-scripts allow-popups">` and served with CSP `sandbox allow-scripts allow-popups`, so it has an opaque origin even when the raw URL is opened directly; `/raw` refuses non-iframe loads (`Sec-Fetch-Dest`). |
 | Cross-origin attacks | Parent and iframe communicate only via `postMessage`. |
-| Bypassing password gate | `/raw` requires a short-lived HMAC-signed view token bound to visitor cookie. Changing the password revokes earlier unlocks. |
-| Brute force / spam | Per-IP rate limits on login, password gate, and comment posting. |
-| Malicious content | HTML sniffed, binaries rejected, configurable `MaxBytesReader`. |
+| Bypassing password gate | `/raw` requires a short-lived HMAC-signed view token bound to the HttpOnly visitor cookie, and re-checks page access on every load. Changing the password revokes earlier unlocks. |
+| Brute force / spam | Per-IP rate limits on login, password gate, and comment posting, plus per-account sign-in and per-page password failure limits. |
+| Malicious content | HTML sniffed, binaries rejected, configurable `MaxBytesReader`; non-upload requests are capped at 64 KiB. |
 | SSRF via S3 | Endpoints must be HTTP(S); private/link-local IPs blocked unless explicitly allowed. |
-| Path traversal / SQLi | Random base64url slugs; all queries parameterized. |
+| Path traversal / SQLi / link guessing | Slugs are the page name plus a random 6-character suffix (fully random when the name has no letters or digits); all queries parameterized. |
 | Password / IP leakage | Passwords bcrypt-hashed; analytics IPs SHA-256 hashed. |
 
 ## Deployment
@@ -204,7 +208,7 @@ peek.example.com {
 }
 ```
 
-Set `--trusted-proxy` if your proxy forwards `X-Forwarded-For`. Back up the `data/` directory.
+Set `--trusted-proxy` if your proxy forwards `X-Forwarded-For`, and `--trusted-proxy-cidrs` if it does not connect from localhost. Back up the `data/` directory.
 
 For Render, Fly.io, Railway, Kubernetes, and stateless app platforms, read the [cloud deployment notes](docs/src/content/docs/deployment-platforms.md) before deploying. Peek needs durable storage mounted at `/data`; a managed container filesystem is not enough to preserve SQLite data, uploaded files, or the generated signing key.
 
@@ -216,7 +220,7 @@ Operational endpoints:
 | `/readyz` | Readiness check |
 | `/metrics` | Prometheus text metrics |
 
-Protect `/metrics` at your proxy. Full deployment checklist: [docs/operations.md](docs/operations.md).
+Set `--metrics-token` (or `PEEK_METRICS_TOKEN_FILE`) to require a bearer token on `/metrics`, or protect it at your proxy. Full deployment checklist: [docs/operations.md](docs/operations.md).
 
 ## Web dashboard
 
@@ -234,7 +238,7 @@ https://peek.example.com/oauth/oidc/callback
 Coding agents (Claude Code, opencode, etc.) can install skills to share HTML and return a link:
 
 ```sh
-npx skills add puemos/peek@peek -g -y
+npx skills add andras-tkcs/peek@peek -g -y
 ```
 
 Two skills ship in this repo:

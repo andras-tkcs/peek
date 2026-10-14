@@ -27,7 +27,7 @@ long-term, or serving non-HTML content.
 ## Install the CLI
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/puemos/peek/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
 ```
 
 This downloads a prebuilt `peek` binary for your OS/arch and installs it
@@ -48,7 +48,7 @@ the hidden prompt:
 peek login --host https://peek.example.com
 ```
 
-Browser login saves a normal Peek API token locally after approval. For
+The browser asks for the code that `peek login` prints; type it yourself, never use a code someone sent you. Browser login saves a normal Peek API token locally after approval. For
 token-only servers, use `peek login --token-stdin` or `peek login --token-file
 <path>`. For automation, set `PEEK_TOKEN` per command; OAuth-enabled servers
 require the browser flow for human CLI login. The token never lands in your
@@ -73,8 +73,8 @@ peek upload path/to/page.html --visibility public
 Output includes the shareable URL and the slug:
 
 ```
-uploaded: https://peek.example.com/p/PhiUs-lMbZE_Sw
-slug:     PhiUs-lMbZE_Sw
+uploaded: https://peek.example.com/p/page-html-k7m2xq
+slug:     page-html-k7m2xq
 ```
 
 ### Upload with password protection
