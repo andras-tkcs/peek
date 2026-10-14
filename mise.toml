@@ -77,11 +77,8 @@ description = "Run the unit test suite with the race detector"
 run = "go test -race -count=1 ./..."
 
 [tasks.coverage]
-description = "Run tests and print total coverage"
-run = """
-go test -coverprofile=coverage.out ./...
-go tool cover -func=coverage.out | tail -1
-"""
+description = "Run tests with coverage and fail below the 90% total-statement gate"
+run = "sh scripts/coverage-gate.sh"
 
 [tasks.govulncheck]
 description = "Run the Go vulnerability scanner"
