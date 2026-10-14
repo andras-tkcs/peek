@@ -81,3 +81,50 @@ func TestRevokeCommandSendsDelete(t *testing.T) {
 		t.Fatalf("output = %q", out)
 	}
 }
+
+func TestCovGrantsUsageErrors(t *testing.T) {
+	configureTestClient(t, "http://127.0.0.1:1")
+	cases := map[string]func() error{
+		"grant flag":   func() error { return cmdGrant([]string{"demo", "a@b.c", "--nope"}) },
+		"grant arity":  func() error { return cmdGrant([]string{"demo"}) },
+		"grant slug":   func() error { return cmdGrant([]string{"bad/slug", "a@b.c"}) },
+		"revoke flag":  func() error { return cmdRevoke([]string{"--nope"}) },
+		"revoke slug":  func() error { return cmdRevoke([]string{"bad/slug", "a@b.c"}) },
+		"grants arity": func() error { return cmdGrants(nil) },
+		"grants slug":  func() error { return cmdGrants([]string{"bad/slug"}) },
+	}
+	for name, fn := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := fn(); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestCovGrantsEnvFailures(t *testing.T) {
+	cases := map[string]func() error{
+		"grant":  func() error { return cmdGrant([]string{"demo", "a@b.c"}) },
+		"revoke": func() error { return cmdRevoke([]string{"demo", "a@b.c", "--group"}) },
+		"grants": func() error { return cmdGrants([]string{"demo"}) },
+	}
+	for name, fn := range cases {
+		t.Run(name, func(t *testing.T) { covEnvFailures(t, fn) })
+	}
+}
+
+func TestCovGrantsListsEmptyAndPopulated(t *testing.T) {
+	ts := covFake(t, map[string]string{"/api/uploads/demo/grants": `[]`}, nil)
+	configureTestClient(t, ts.URL)
+	out, err := captureStdout(t, func() error { return cmdGrants([]string{"demo"}) })
+	if err != nil || !strings.Contains(out, "no grants") {
+		t.Fatalf("empty: %q %v", out, err)
+	}
+
+	ts = covFake(t, map[string]string{"/api/uploads/demo/grants": `[{"kind":"group","email":"eng@x.io","created_at":0}]`}, nil)
+	configureTestClient(t, ts.URL)
+	out, err = captureStdout(t, func() error { return cmdGrants([]string{"demo"}) })
+	if err != nil || !strings.Contains(out, "eng@x.io") {
+		t.Fatalf("populated: %q %v", out, err)
+	}
+}
