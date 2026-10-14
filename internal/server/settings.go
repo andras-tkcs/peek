@@ -225,7 +225,7 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 		if meta.IsBool {
 			normalized, err := s.normalizeSettingValue(k, r.FormValue(k))
 			if err != nil {
-				dashboardError(w, r, err.Error())
+				s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
 				return
 			}
 			updates[k] = normalized
@@ -233,7 +233,7 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 		}
 		v, submitted, err := dashboardSubmittedSettingValue(k, r.PostForm)
 		if err != nil {
-			dashboardError(w, r, err.Error())
+			s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
 			return
 		}
 		if !submitted {
@@ -244,23 +244,23 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 		}
 		normalized, err := s.normalizeSettingValue(k, v)
 		if err != nil {
-			dashboardError(w, r, err.Error())
+			s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
 			return
 		}
 		updates[k] = normalized
 	}
 	if err := s.validateAllowedEmailDomainUpdate(r.Context(), updates); err != nil {
-		dashboardError(w, r, err.Error())
+		s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
 		return
 	}
 	for _, k := range s.settingKeys(updates) {
 		if err := s.encryptedSetSetting(r.Context(), k, updates[k]); err != nil {
-			dashboardError(w, r, "settings update failed")
+			dashboardError(w, r, flashSettingsFailed)
 			return
 		}
 	}
 	s.auditRequest(r, owner.Name, "settings.update", "via dashboard")
-	dashboardOK(w, r, "settings saved")
+	dashboardOK(w, r, flashSettingsSaved)
 }
 
 func dashboardSubmittedSettingValue(key string, form map[string][]string) (string, bool, error) {

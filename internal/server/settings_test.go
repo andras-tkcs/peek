@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	webui "github.com/andras-tkcs/peek/internal/web"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -195,7 +196,7 @@ func TestNormalizeOIDCIssuerAllowsPrivateWithExplicitOptIn(t *testing.T) {
 	}
 }
 
-func TestDashboardSettingsInvalidS3EndpointRedirectEscapesQuery(t *testing.T) {
+func TestDashboardSettingsInvalidS3EndpointRendersInlineError(t *testing.T) {
 	store, err := db.Open(filepath.Join(t.TempDir(), "peek.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -206,7 +207,11 @@ func TestDashboardSettingsInvalidS3EndpointRedirectEscapesQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{store: store, secret: strings.Repeat("0", 64)}
+	renderer, err := webui.NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{store: store, renderer: renderer, secret: strings.Repeat("0", 64)}
 
 	form := url.Values{
 		"csrf":        {"csrf-token"},
@@ -220,20 +225,14 @@ func TestDashboardSettingsInvalidS3EndpointRedirectEscapesQuery(t *testing.T) {
 
 	s.handleDashboardSettings(rec, req)
 
-	if rec.Code != http.StatusSeeOther {
+	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	loc := rec.Header().Get("Location")
-	u, err := url.Parse(loc)
-	if err != nil {
-		t.Fatalf("parse redirect location %q: %v", loc, err)
+	if loc := rec.Header().Get("Location"); loc != "" {
+		t.Fatalf("Location = %q, want inline render", loc)
 	}
-	got := u.Query().Get("err")
-	if !strings.HasPrefix(got, "invalid s3 endpoint: ") {
-		t.Fatalf("err query = %q", got)
-	}
-	if strings.Contains(loc, " ") {
-		t.Fatalf("redirect location contains raw space: %q", loc)
+	if !strings.Contains(rec.Body.String(), "invalid s3 endpoint: ") {
+		t.Fatalf("body missing inline error: %s", rec.Body.String())
 	}
 }
 
@@ -254,7 +253,11 @@ func TestDashboardSettingsRejectsInvalidValuesBeforeWriting(t *testing.T) {
 	if err := store.SetSetting(context.Background(), "max_upload", "1024"); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{store: store, secret: strings.Repeat("0", 64)}
+	renderer, err := webui.NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{store: store, renderer: renderer, secret: strings.Repeat("0", 64)}
 
 	form := url.Values{
 		"csrf":       {"csrf-token"},
@@ -268,16 +271,11 @@ func TestDashboardSettingsRejectsInvalidValuesBeforeWriting(t *testing.T) {
 
 	s.handleDashboardSettings(rec, req)
 
-	if rec.Code != http.StatusSeeOther {
+	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	loc := rec.Header().Get("Location")
-	u, err := url.Parse(loc)
-	if err != nil {
-		t.Fatalf("parse redirect location %q: %v", loc, err)
-	}
-	if got := u.Query().Get("err"); got != "max_upload must be a positive integer" {
-		t.Fatalf("err query = %q, location = %q", got, loc)
+	if !strings.Contains(rec.Body.String(), "max_upload must be a positive integer") {
+		t.Fatalf("body missing inline error: %s", rec.Body.String())
 	}
 	if got := mustGetSetting(t, store, "auth_token_login_enabled"); got != "true" {
 		t.Fatalf("auth_token_login_enabled was partially updated to %q", got)
@@ -431,7 +429,7 @@ func TestDashboardSettingsRejectsMalformedForm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse redirect location %q: %v", loc, err)
 	}
-	if got := u.Query().Get("err"); got != "invalid session" {
+	if got := u.Query().Get("err"); got != "invalid_session" {
 		t.Fatalf("err query = %q, location = %q", got, loc)
 	}
 }

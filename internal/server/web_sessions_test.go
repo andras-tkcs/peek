@@ -143,7 +143,7 @@ func TestDashboardSessionsRevokeRequiresCSRF(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	id := newSessionTestAccount(t, s)
 	rec := dashboardPost(t, s, id, "/dashboard/sessions/revoke", url.Values{}, false)
-	assertDashboardRedirect(t, rec, "/dashboard?err=invalid+session")
+	assertDashboardRedirect(t, rec, "/dashboard?err=invalid_session")
 	a, err := s.store.GetAccountByID(context.Background(), id)
 	if err != nil || a.SessionEpoch != 0 {
 		t.Fatalf("epoch = %d err = %v", a.SessionEpoch, err)

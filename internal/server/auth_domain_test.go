@@ -15,6 +15,7 @@ import (
 
 	"github.com/andras-tkcs/peek/internal/db"
 	"github.com/andras-tkcs/peek/internal/models"
+	webui "github.com/andras-tkcs/peek/internal/web"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -141,7 +142,11 @@ func TestDashboardSettingsRejectsDomainThatWouldLockOutAdminsBeforeWriting(t *te
 	if err := store.SetSetting(context.Background(), "max_upload", "1024"); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{store: store, secret: strings.Repeat("0", 64)}
+	renderer, err := webui.NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{store: store, renderer: renderer, secret: strings.Repeat("0", 64)}
 	form := url.Values{
 		"csrf":                        {"csrf-token"},
 		authAllowedEmailDomainSetting: {"other.com"},
@@ -155,7 +160,7 @@ func TestDashboardSettingsRejectsDomainThatWouldLockOutAdminsBeforeWriting(t *te
 
 	s.handleDashboardSettings(rec, req)
 
-	if rec.Code != http.StatusSeeOther {
+	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	if got := mustGetSetting(t, store, "max_upload"); got != "1024" {
@@ -285,7 +290,7 @@ func TestDashboardCreateInviteRejectsDisallowedDomain(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	loc := rec.Header().Get("Location")
-	if !strings.Contains(loc, "email+must+match+allowed+domain") {
+	if loc != "/dashboard?err=invite_domain" {
 		t.Fatalf("location = %q", loc)
 	}
 }

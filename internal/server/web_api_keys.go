@@ -115,7 +115,7 @@ func (s *Server) handleDashboardAPIKeyCreate(w http.ResponseWriter, r *http.Requ
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
 	if !validAPIKeyName(name) {
-		dashboardError(w, r, apiKeyNameError)
+		dashboardError(w, r, flashAPIKeyName)
 		return
 	}
 	key, err := newAPIKey()
@@ -125,7 +125,7 @@ func (s *Server) handleDashboardAPIKeyCreate(w http.ResponseWriter, r *http.Requ
 	}
 	if err != nil {
 		slog.Error("api key create failed", "account_id", owner.ID, "err", err)
-		dashboardError(w, r, "API key could not be created")
+		dashboardError(w, r, flashAPIKeyCreateFailed)
 		return
 	}
 	s.auditRequest(r, owner.Name, "token.create", apiKeyAuditDetail(id, name))
@@ -161,7 +161,7 @@ func (s *Server) handleDashboardAPIKeyRegenerate(w http.ResponseWriter, r *http.
 	}
 	if err != nil {
 		slog.Error("api key regenerate failed", "account_id", owner.ID, "token_id", id, "err", err)
-		dashboardError(w, r, "API key could not be regenerated")
+		dashboardError(w, r, flashAPIKeyRegenerateFailed)
 		return
 	}
 	s.auditRequest(r, owner.Name, "token.regenerate", apiKeyAuditDetail(k.ID, k.Name))
@@ -189,9 +189,9 @@ func (s *Server) handleDashboardAPIKeyRevoke(w http.ResponseWriter, r *http.Requ
 	}
 	if err != nil {
 		slog.Error("api key revoke failed", "account_id", owner.ID, "token_id", id, "err", err)
-		dashboardError(w, r, "API key could not be revoked")
+		dashboardError(w, r, flashAPIKeyRevokeFailed)
 		return
 	}
 	s.auditRequest(r, owner.Name, "token.revoke", apiKeyAuditDetail(k.ID, k.Name))
-	dashboardOK(w, r, "API key revoked")
+	dashboardOK(w, r, flashAPIKeyRevoked)
 }

@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"net/url"
-	"strings"
 	"testing"
 
 	"github.com/andras-tkcs/peek/internal/models"
@@ -38,7 +37,7 @@ func TestDashboardGrantAddAndRemove(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	loc := grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "user", "Alice@Example.com", true)
-	wantLocation(t, loc, "/dashboard?manage=page&ok=Shared+%2Fp%2Fpage+with+alice%40example.com")
+	wantLocation(t, loc, "/dashboard?email=alice%40example.com&manage=page&ok=grant_added&slug=page")
 	grants := grantCount(t, s, u.ID)
 	if len(grants) != 1 || grants[0].Kind != "user" || grants[0].Email != "alice@example.com" {
 		t.Fatalf("grants = %+v", grants)
@@ -47,7 +46,7 @@ func TestDashboardGrantAddAndRemove(t *testing.T) {
 		t.Fatal("missing upload.grant.add audit")
 	}
 	loc = grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page/remove", "user", "alice@example.com", true)
-	wantLocation(t, loc, "/dashboard?manage=page&ok=Removed+alice%40example.com+from+%2Fp%2Fpage")
+	wantLocation(t, loc, "/dashboard?manage=page&ok=grant_removed&slug=page")
 	if g := grantCount(t, s, u.ID); len(g) != 0 {
 		t.Fatalf("grants = %+v, want none", g)
 	}
@@ -60,7 +59,7 @@ func TestDashboardGrantRejectsInvalidEmail(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	loc := grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "user", "not-an-email", true)
-	wantLocation(t, loc, "/dashboard?err=invalid+email+address&manage=page")
+	wantLocation(t, loc, "/dashboard?err=grant_email&manage=page&slug=page")
 	if g := grantCount(t, s, u.ID); len(g) != 0 {
 		t.Fatalf("grants = %+v", g)
 	}
@@ -70,9 +69,7 @@ func TestDashboardGrantRejectsGroupWithoutLookup(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	loc := grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "group", "team@example.com", true)
-	if !strings.HasPrefix(loc, "/dashboard?err=group+grants+need+Google+group+lookup") || !strings.Contains(loc, "&manage=page") {
-		t.Fatalf("Location = %q", loc)
-	}
+	wantLocation(t, loc, "/dashboard?err=grant_group_lookup&manage=page&slug=page")
 	if g := grantCount(t, s, u.ID); len(g) != 0 {
 		t.Fatalf("grants = %+v", g)
 	}
@@ -83,7 +80,7 @@ func TestDashboardGrantAcceptsGroupWithLookup(t *testing.T) {
 	s.groups = fakeGroups{members: map[string]bool{}}
 	u := restrictedPage(t, s, "page")
 	loc := grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "group", "team@example.com", true)
-	wantLocation(t, loc, "/dashboard?manage=page&ok=Shared+%2Fp%2Fpage+with+team%40example.com")
+	wantLocation(t, loc, "/dashboard?email=team%40example.com&manage=page&ok=grant_added&slug=page")
 	g := grantCount(t, s, u.ID)
 	if len(g) != 1 || g[0].Kind != models.UploadGrantGroup {
 		t.Fatalf("grants = %+v", g)
@@ -95,7 +92,7 @@ func TestDashboardGrantRemovesGroupWithoutLookup(t *testing.T) {
 	u := restrictedPage(t, s, "page")
 	grant(t, s, u, models.UploadGrantGroup, "team@example.com")
 	loc := grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page/remove", "group", "team@example.com", true)
-	wantLocation(t, loc, "/dashboard?manage=page&ok=Removed+team%40example.com+from+%2Fp%2Fpage")
+	wantLocation(t, loc, "/dashboard?manage=page&ok=grant_removed&slug=page")
 	if g := grantCount(t, s, u.ID); len(g) != 0 {
 		t.Fatalf("grants = %+v", g)
 	}
@@ -105,7 +102,7 @@ func TestDashboardGrantRemoveMissing(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	loc := grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page/remove", "user", "alice@example.com", true)
-	wantLocation(t, loc, "/dashboard?err=grant+not+found&manage=page")
+	wantLocation(t, loc, "/dashboard?err=grant_not_found&manage=page&slug=page")
 }
 
 func TestDashboardGrantRejectsNonOwner(t *testing.T) {
@@ -116,7 +113,7 @@ func TestDashboardGrantRejectsNonOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	loc := grantPost(t, s, other.ID, "/dashboard/grants/page", "user", "alice@example.com", true)
-	wantLocation(t, loc, "/dashboard?err=not+owner")
+	wantLocation(t, loc, "/dashboard?err=not_owner")
 	if g := grantCount(t, s, u.ID); len(g) != 0 {
 		t.Fatalf("grants = %+v", g)
 	}
@@ -126,7 +123,7 @@ func TestDashboardGrantRejectsMissingCSRF(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	loc := grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "user", "alice@example.com", false)
-	wantLocation(t, loc, "/dashboard?err=invalid+session")
+	wantLocation(t, loc, "/dashboard?err=invalid_session")
 	if g := grantCount(t, s, u.ID); len(g) != 0 {
 		t.Fatalf("grants = %+v", g)
 	}

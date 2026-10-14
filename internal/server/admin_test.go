@@ -50,7 +50,7 @@ func TestDashboardRevokeInviteRejectsMissingInvite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse location: %v", err)
 	}
-	if got := u.Query().Get("err"); got != "bad invite" {
+	if got := u.Query().Get("err"); got != "bad_invite" {
 		t.Fatalf("err query = %q, location = %q", got, loc)
 	}
 }
@@ -68,7 +68,7 @@ func TestDashboardRevokeInviteReportsSuccessAfterUpdate(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	if rec.Header().Get("Location") != "/dashboard?ok=invite+revoked" {
+	if rec.Header().Get("Location") != "/dashboard?ok=invite_revoked" {
 		t.Fatalf("location = %q", rec.Header().Get("Location"))
 	}
 }
