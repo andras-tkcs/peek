@@ -110,7 +110,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, status, msg)
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.create", "slug="+up.Slug+" name="+up.Name+" size="+strconv.Itoa(up.Size))
+	s.auditRequest(r, owner.Name, "upload.create", auditDetail("slug", up.Slug, "name", up.Name, "size", strconv.Itoa(up.Size)))
 
 	jsonOK(w, uploadResp{Slug: up.Slug, URL: up.URL, Visibility: up.Visibility, Version: up.Version, VersionURL: up.URL + "/v/" + strconv.Itoa(up.Version)})
 }
@@ -146,7 +146,7 @@ func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, own
 		jsonError(w, status, msg)
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.version.create", "slug="+slug+" version="+strconv.Itoa(res.Version)+" size="+strconv.Itoa(res.Size))
+	s.auditRequest(r, owner.Name, "upload.version.create", auditDetail("slug", slug, "version", strconv.Itoa(res.Version), "size", strconv.Itoa(res.Size)))
 	jsonOK(w, uploadResp{Slug: slug, URL: res.URL, Visibility: u.Visibility, Version: res.Version, VersionURL: res.VersionURL})
 }
 
@@ -225,7 +225,7 @@ func (s *Server) handleDeleteUpload(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "delete failed")
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.delete", "slug="+slug+" name="+u.Name)
+	s.auditRequest(r, owner.Name, "upload.delete", auditDetail("slug", slug, "name", u.Name))
 	jsonOK(w, map[string]any{"deleted": slug})
 }
 
@@ -267,11 +267,10 @@ func (s *Server) handleSetVisibility(w http.ResponseWriter, r *http.Request) {
 }
 
 func visibilityAuditDetail(slug, visibility string) string {
-	detail := "slug=" + slug + " visibility=" + visibility
 	if visibility == models.UploadVisibilityPassword {
-		detail += " password=updated"
+		return auditDetail("slug", slug, "visibility", visibility, "password", "updated")
 	}
-	return detail
+	return auditDetail("slug", slug, "visibility", visibility)
 }
 
 func (s *Server) handleDeleteAllByOwner(w http.ResponseWriter, r *http.Request) {
@@ -292,6 +291,6 @@ func (s *Server) handleDeleteAllByOwner(w http.ResponseWriter, r *http.Request) 
 		}
 		deleted++
 	}
-	s.auditRequest(r, owner.Name, "upload.delete_all", "count="+strconv.Itoa(deleted))
+	s.auditRequest(r, owner.Name, "upload.delete_all", auditDetail("count", strconv.Itoa(deleted)))
 	jsonOK(w, map[string]any{"deleted": deleted})
 }

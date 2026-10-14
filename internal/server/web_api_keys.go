@@ -36,7 +36,7 @@ func apiKeyLimitKey(accountID int64) string {
 }
 
 func apiKeyAuditDetail(id int64, name string) string {
-	return "id=" + strconv.FormatInt(id, 10) + " name=" + name
+	return auditDetail("id", strconv.FormatInt(id, 10), "name", name)
 }
 
 func validAPIKeyName(name string) bool {

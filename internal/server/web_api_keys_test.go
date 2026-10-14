@@ -328,7 +328,7 @@ func TestDashboardAPIKeyNeverLoggedOrAudited(t *testing.T) {
 		}
 		actions[action] = detail
 	}
-	want := "id=" + strconv.FormatInt(kid, 10) + " name=QA runner"
+	want := "id=" + strconv.FormatInt(kid, 10) + ` name="QA runner"`
 	for _, action := range []string{"token.create", "token.regenerate", "token.revoke"} {
 		if actions[action] != want {
 			t.Fatalf("audit %s detail = %q, want %q", action, actions[action], want)

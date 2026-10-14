@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -219,4 +222,55 @@ func TestRetentionPrunesOldVersionsButKeepsLatest(t *testing.T) {
 	if _, err := store.GetUpload(ctx, "versioned"); err != nil {
 		t.Fatalf("page should survive: %v", err)
 	}
+}
+
+func TestAuditDetailQuotesUnsafeValues(t *testing.T) {
+	tests := []struct {
+		in   []string
+		want string
+	}{
+		{[]string{"slug", "page", "name", "Q3 plan", "size", "42"}, `slug=page name="Q3 plan" size=42`},
+		{[]string{"name", "x size=999 slug=evil"}, `name="x size=999 slug=evil"`},
+		{[]string{"name", "a\nb"}, `name="a\nb"`},
+		{[]string{"name", `say "hi"`}, `name="say \"hi\""`},
+		{[]string{"name", `back\slash`}, `name="back\\slash"`},
+		{[]string{"name", ""}, `name=""`},
+		{[]string{"name", "café"}, `name=café`},
+		{[]string{"name", "a b"}, `name="a b"`},
+		{[]string{"slug"}, `slug=""`},
+	}
+	for _, tt := range tests {
+		if got := auditDetail(tt.in...); got != tt.want {
+			t.Errorf("auditDetail(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestAPIUploadAuditQuotesName(t *testing.T) {
+	s, tok := newHandlerTestServer(t)
+	body := "<!DOCTYPE html><html><body></body></html>"
+	rec := doRequest(t, s, http.MethodPost, "/api/upload?visibility=public&filename="+url.QueryEscape("x size=1 slug=evil.html"), strings.NewReader(body), asBearer(tok), func(r *http.Request) { r.Header.Set("Content-Type", "text/html") })
+	if rec.Code != http.StatusOK && rec.Code != http.StatusCreated {
+		t.Fatalf("upload status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Slug string `json:"slug"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || resp.Slug == "" {
+		t.Fatalf("decode slug: %v: %s", err, rec.Body.String())
+	}
+	entries, err := s.store.ListAuditLog(context.Background(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "slug=" + resp.Slug + ` name="x size=1 slug=evil.html" size=` + strconv.Itoa(len(body))
+	for _, e := range entries {
+		if e.Action == "upload.create" {
+			if e.Detail != want {
+				t.Fatalf("detail = %q, want %q", e.Detail, want)
+			}
+			return
+		}
+	}
+	t.Fatal("no upload.create audit entry")
 }
