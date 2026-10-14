@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS comments (
 	author_cookie TEXT NOT NULL,
 	body TEXT NOT NULL,
 	version INTEGER NOT NULL DEFAULT 1,
+	account_id INTEGER,
 	created_at INTEGER NOT NULL
 );
 

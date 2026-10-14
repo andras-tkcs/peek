@@ -26,6 +26,7 @@ type commentOut struct {
 	Text       string `json:"element_text"`
 	AnchorKind string `json:"anchor_kind"`
 	Author     string `json:"author"`
+	Verified   bool   `json:"verified"`
 	Body       string `json:"body"`
 	CreatedAt  int64  `json:"created_at"`
 	Version    int    `json:"version"`
@@ -89,11 +90,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]commentOut, 0, len(list))
 	for _, c := range list {
-		out = append(out, commentOut{
-			ID: c.ID, Selector: c.ElementSelector, Text: c.ElementText,
-			AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
-			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(), Version: c.Version,
-		})
+		out = append(out, commentOutFrom(c))
 	}
 	jsonOK(w, out)
 }
@@ -128,13 +125,20 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, status, msg)
 		return
 	}
-	in.Name = strings.TrimSpace(in.Name)
-	if len(in.Name) > 100 {
-		jsonError(w, http.StatusRequestEntityTooLarge, "field too long")
-		return
-	}
-	if in.Name == "" {
-		in.Name = "anonymous"
+	var accountID int64
+	if a, ok := s.webAuth(r); ok {
+		// A signed-in viewer always comments as their account; a typed name is ignored.
+		in.Name = commentAccountName(a)
+		accountID = a.ID
+	} else {
+		in.Name = strings.TrimSpace(in.Name)
+		if len(in.Name) > 100 {
+			jsonError(w, http.StatusRequestEntityTooLarge, "field too long")
+			return
+		}
+		if in.Name == "" {
+			in.Name = "anonymous"
+		}
 	}
 
 	vid := s.visitorID(w, r)
@@ -145,7 +149,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		s.setNameCookie(w, in.Name)
 	}
 
-	if _, err := s.store.AddComment(r.Context(), u.ID, version, in.Selector, in.Text, in.AnchorKind, in.Name, s.commentVisitorHash(vid), in.Body); err != nil {
+	if _, err := s.store.AddComment(r.Context(), u.ID, version, in.Selector, in.Text, in.AnchorKind, in.Name, s.commentVisitorHash(vid), in.Body, accountID); err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
@@ -157,11 +161,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]commentOut, 0, len(list))
 	for _, c := range list {
-		out = append(out, commentOut{
-			ID: c.ID, Selector: c.ElementSelector, Text: c.ElementText,
-			AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
-			Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(), Version: c.Version,
-		})
+		out = append(out, commentOutFrom(c))
 	}
 	jsonOK(w, out)
 }
@@ -229,17 +229,30 @@ func (s *Server) handleAddAccountComment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	c, err := s.store.AddComment(r.Context(), u.ID, version, in.Selector, in.Text, in.AnchorKind, owner.Name,
-		s.commentVisitorHash("account:"+strconv.FormatInt(owner.AccountID, 10)), in.Body)
+		s.commentVisitorHash("account:"+strconv.FormatInt(owner.AccountID, 10)), in.Body, owner.AccountID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
 	s.auditRequest(r, owner.Name, "comment.create", "slug="+slug)
-	jsonOK(w, commentOut{
+	jsonOK(w, commentOutFrom(c))
+}
+
+func commentOutFrom(c models.Comment) commentOut {
+	return commentOut{
 		ID: c.ID, Selector: c.ElementSelector, Text: c.ElementText,
 		AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
-		Author:     c.AuthorName, Body: c.Body, CreatedAt: c.CreatedAt.Unix(),
-	})
+		Author:     c.AuthorName, Verified: c.AccountID != 0,
+		Body: c.Body, CreatedAt: c.CreatedAt.Unix(), Version: c.Version,
+	}
+}
+
+// commentAccountName is the author name shown for a signed-in account.
+func commentAccountName(a *models.Account) string {
+	if name := strings.TrimSpace(a.Name); name != "" {
+		return name
+	}
+	return a.Email
 }
 
 func normalizeCommentAnchorKind(selector, text, kind string) (string, bool) {

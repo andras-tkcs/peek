@@ -113,7 +113,7 @@
           @click="c.selector && locateComment(c)">
         <div class="flex items-center gap-2 mb-1">
           <span x-show="c.number" class="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-primary-foreground text-[11px] font-semibold shrink-0 align-middle" :style="{ backgroundColor: c.authorColor }" x-text="c.number"></span>
-          <span class="text-xs text-muted-foreground"><strong class="font-semibold" :style="{ color: c.authorText }" x-text="c.name"></strong> &middot; <span x-text="c.created_human"></span></span>
+          <span class="text-xs text-muted-foreground"><strong class="font-semibold" :style="{ color: c.authorText }" x-text="c.name"></strong> <span x-show="c.verified" class="hn-comment-verified text-[11px] font-medium text-muted-foreground whitespace-nowrap" title="Posted by a signed-in Peek account">&#x2713; signed in</span> &middot; <span x-text="c.created_human"></span></span>
         </div>
         <div x-show="c.scope" class="inline-block text-[11px] px-2 py-0.5 mb-1.5 rounded-md" :style="{ backgroundColor: c.authorSoft, color: c.authorText }" x-text="c.scope"></div>
         <div x-show="c.target" class="text-xs mb-1.5 break-words" :style="{ color: c.authorText }" x-text="c.target"></div>
