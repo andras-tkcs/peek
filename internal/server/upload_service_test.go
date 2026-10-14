@@ -86,3 +86,13 @@ func TestAPIUploadRejectsLongName(t *testing.T) {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestSetCovUploadHTTPErrorFallbacks(t *testing.T) {
+	if status, msg := uploadHTTPError(errors.New("boom")); status != http.StatusInternalServerError || msg != "upload failed" {
+		t.Fatalf("non-upload error = %d %q", status, msg)
+	}
+	err := &uploads.Error{Kind: uploads.ErrorKind("something_new"), Message: "unmapped"}
+	if status, msg := uploadHTTPError(err); status != http.StatusInternalServerError || msg != "unmapped" {
+		t.Fatalf("unknown kind = %d %q", status, msg)
+	}
+}
