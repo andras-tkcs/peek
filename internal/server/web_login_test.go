@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/andras-tkcs/peek/internal/db"
@@ -149,5 +150,118 @@ func TestHandleLoginReturns429WhenAccountThrottled(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "Too many requests. Try again shortly.") {
 		t.Fatalf("body = %s", rec.Body.String())
+	}
+}
+
+func TestLoginWithPasswordRunsOneBcryptCompareOnEveryFailure(t *testing.T) {
+	var calls atomic.Int64
+	orig := passwordCompare
+	passwordCompare = func(hash, password []byte) error {
+		calls.Add(1)
+		return bcrypt.CompareHashAndPassword(hash, password)
+	}
+	t.Cleanup(func() { passwordCompare = orig })
+
+	hash, err := bcrypt.GenerateFromPassword([]byte("right"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	attempt := func(s *Server, email, pw string) error {
+		req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(url.Values{"email": {email}, "password": {pw}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		_, _, err := s.loginWithPassword(req)
+		return err
+	}
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, s *Server)
+		email string
+		pw    string
+		check func(t *testing.T, err error)
+		calls int64
+	}{
+		{name: "unknown email", email: "nobody@example.test", pw: "right", calls: 1},
+		{name: "account without password", email: "user@example.test", pw: "right", calls: 1,
+			setup: func(t *testing.T, s *Server) {
+				if _, err := s.store.CreateAccount(ctx, "user@example.test", "User", false); err != nil {
+					t.Fatal(err)
+				}
+			}},
+		{name: "wrong password", email: "user@example.test", pw: "wrong", calls: 1,
+			setup: func(t *testing.T, s *Server) {
+				if _, err := s.store.CreateAccountWithPassword(ctx, "user@example.test", "User", string(hash), false); err != nil {
+					t.Fatal(err)
+				}
+			}},
+		{name: "disabled account, right password", email: "user@example.test", pw: "right", calls: 1,
+			setup: func(t *testing.T, s *Server) {
+				a, err := s.store.CreateAccountWithPassword(ctx, "user@example.test", "User", string(hash), false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := s.store.SetAccountDisabled(ctx, a.ID, true); err != nil {
+					t.Fatal(err)
+				}
+			},
+			check: func(t *testing.T, err error) {
+				if err == nil || err.Error() != "account disabled" {
+					t.Fatalf("err = %v, want account disabled", err)
+				}
+			}},
+		{name: "off-domain, right password", email: "user@other.test", pw: "right", calls: 1,
+			setup: func(t *testing.T, s *Server) {
+				if _, err := s.store.CreateAccountWithPassword(ctx, "user@other.test", "User", string(hash), false); err != nil {
+					t.Fatal(err)
+				}
+				setAllowedDomainForTest(t, s, "example.test")
+			},
+			check: func(t *testing.T, err error) {
+				if !errors.Is(err, errAccountNotEligible) {
+					t.Fatalf("err = %v, want errAccountNotEligible", err)
+				}
+			}},
+		{name: "oauth required non-admin, right password", email: "user@example.test", pw: "right", calls: 1,
+			setup: func(t *testing.T, s *Server) {
+				if _, err := s.store.CreateAccountWithPassword(ctx, "user@example.test", "User", string(hash), false); err != nil {
+					t.Fatal(err)
+				}
+				enableGitHubOAuthForTest(t, s)
+			},
+			check: func(t *testing.T, err error) {
+				if err == nil || err.Error() != "oauth required" {
+					t.Fatalf("err = %v, want oauth required", err)
+				}
+			}},
+		{name: "missing password", email: "user@example.test", pw: "", calls: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, _ := newHandlerTestServer(t)
+			if tt.setup != nil {
+				tt.setup(t, s)
+			}
+			calls.Store(0)
+			err := attempt(s, tt.email, tt.pw)
+			if err == nil {
+				t.Fatal("login succeeded, want error")
+			}
+			if tt.check != nil {
+				tt.check(t, err)
+			}
+			if got := calls.Load(); got != tt.calls {
+				t.Fatalf("bcrypt comparisons = %d, want %d", got, tt.calls)
+			}
+		})
+	}
+}
+
+func TestDummyPasswordHashIsDefaultCost(t *testing.T) {
+	cost, err := bcrypt.Cost(dummyPasswordHash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cost != bcrypt.DefaultCost {
+		t.Fatalf("cost = %d, want %d", cost, bcrypt.DefaultCost)
 	}
 }
