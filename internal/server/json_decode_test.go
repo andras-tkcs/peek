@@ -51,3 +51,16 @@ func TestDecodeJSONEnforcesBodyLimit(t *testing.T) {
 		t.Fatalf("error = %v, want body limit error", err)
 	}
 }
+
+func TestDecodeJSONNonPositiveLimitUsesDefault(t *testing.T) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"`+strings.Repeat("a", smallJSONBodyLimit*2)+`"}`))
+	if err := decodeJSON(httptest.NewRecorder(), req, &body, 0); err != nil {
+		t.Fatalf("a body under the default limit failed: %v", err)
+	}
+	if len(body.Name) != smallJSONBodyLimit*2 {
+		t.Fatalf("name length = %d", len(body.Name))
+	}
+}
