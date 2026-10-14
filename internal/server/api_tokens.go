@@ -38,7 +38,7 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "db failed")
 		return
 	}
-	s.auditRequest(r, actorName(actor), "token.create", "name="+body.Name)
+	s.auditRequest(r, actorName(actor), "token.create", auditDetail("name", body.Name))
 	jsonOK(w, map[string]any{"token": t, "name": body.Name})
 }
 
@@ -85,7 +85,7 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "delete failed")
 		return
 	}
-	s.auditRequest(r, actorName(actor), "token.revoke", "id="+strconv.FormatInt(id, 10)+" name="+t.Name)
+	s.auditRequest(r, actorName(actor), "token.revoke", auditDetail("id", strconv.FormatInt(id, 10), "name", t.Name))
 	jsonOK(w, map[string]any{"revoked": id})
 }
 

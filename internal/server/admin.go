@@ -65,7 +65,7 @@ func (s *Server) handleDashboardCreateInvite(w http.ResponseWriter, r *http.Requ
 		dashboardError(w, r, "invite failed")
 		return
 	}
-	s.audit("invite created email=%q by=%s", email, owner.Name)
+	s.audit("invite created %s", auditDetail("email", email, "by", owner.Name))
 	dashboardOK(w, r, "invite created")
 }
 
@@ -91,7 +91,7 @@ func (s *Server) handleDashboardRevokeInvite(w http.ResponseWriter, r *http.Requ
 		dashboardError(w, r, "invite revoke failed")
 		return
 	}
-	s.audit("invite revoked id=%d by=%s", id, owner.Name)
+	s.audit("invite revoked %s", auditDetail("id", strconv.FormatInt(id, 10), "by", owner.Name))
 	dashboardOK(w, r, "invite revoked")
 }
 
@@ -118,7 +118,7 @@ func (s *Server) handleDashboardUserAdmin(w http.ResponseWriter, r *http.Request
 		dashboardError(w, r, "user update failed")
 		return
 	}
-	s.audit("account admin=%t id=%d by=%s", makeAdmin, id, owner.Name)
+	s.audit("account %s", auditDetail("admin", strconv.FormatBool(makeAdmin), "id", strconv.FormatInt(id, 10), "by", owner.Name))
 	dashboardOK(w, r, "user updated")
 }
 
@@ -145,7 +145,7 @@ func (s *Server) handleDashboardUserDisabled(w http.ResponseWriter, r *http.Requ
 		dashboardError(w, r, "user update failed")
 		return
 	}
-	s.audit("account disabled=%t id=%d by=%s", disabled, id, owner.Name)
+	s.audit("account %s", auditDetail("disabled", strconv.FormatBool(disabled), "id", strconv.FormatInt(id, 10), "by", owner.Name))
 	dashboardOK(w, r, "user updated")
 }
 

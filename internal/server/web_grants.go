@@ -49,7 +49,7 @@ func (s *Server) handleDashboardGrantAdd(w http.ResponseWriter, r *http.Request)
 		dashboardFlashManage(w, r, "err", "grant update failed", slug)
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.grant.add", "slug="+u.Slug+" kind="+kind+" email="+email)
+	s.auditRequest(r, owner.Name, "upload.grant.add", auditDetail("slug", u.Slug, "kind", kind, "email", email))
 	dashboardFlashManage(w, r, "ok", "Shared /p/"+slug+" with "+email, slug)
 }
 
@@ -74,6 +74,6 @@ func (s *Server) handleDashboardGrantRemove(w http.ResponseWriter, r *http.Reque
 		dashboardFlashManage(w, r, "err", "grant update failed", slug)
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.grant.remove", "slug="+u.Slug+" kind="+kind+" email="+email)
+	s.auditRequest(r, owner.Name, "upload.grant.remove", auditDetail("slug", u.Slug, "kind", kind, "email", email))
 	dashboardFlashManage(w, r, "ok", "Removed "+email+" from /p/"+slug, slug)
 }

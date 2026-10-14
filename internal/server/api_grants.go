@@ -108,7 +108,7 @@ func (s *Server) handleAddGrant(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.grant.add", "slug="+u.Slug+" kind="+body.Kind+" email="+body.Email)
+	s.auditRequest(r, owner.Name, "upload.grant.add", auditDetail("slug", u.Slug, "kind", body.Kind, "email", body.Email))
 	jsonOK(w, grantToOut(*g))
 }
 
@@ -129,6 +129,6 @@ func (s *Server) handleRemoveGrant(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.grant.remove", "slug="+u.Slug+" kind="+body.Kind+" email="+body.Email)
+	s.auditRequest(r, owner.Name, "upload.grant.remove", auditDetail("slug", u.Slug, "kind", body.Kind, "email", body.Email))
 	jsonOK(w, map[string]any{"removed": true})
 }

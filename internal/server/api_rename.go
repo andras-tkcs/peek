@@ -7,7 +7,7 @@ import (
 )
 
 func renameAuditDetail(oldSlug string, res *uploads.RenameResult) string {
-	return "slug=" + oldSlug + " new_slug=" + res.Slug + " name=" + res.Name
+	return auditDetail("slug", oldSlug, "new_slug", res.Slug, "name", res.Name)
 }
 
 func (s *Server) handleRenameUpload(w http.ResponseWriter, r *http.Request) {
