@@ -71,3 +71,13 @@ func TestUploadVersionToRenamedSlugExplains(t *testing.T) {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestDashCovRenamePersistenceFailure(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+	dashCovUpload(t, s, "page", adminID)
+	addFailTrigger(t, store, "uploads", "UPDATE")
+	rec := dashboardPost(t, s, adminID, "/dashboard/rename/page", url.Values{"name": {"A New Name"}}, true)
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err="+flashRenameFailed) {
+		t.Fatalf("Location = %q, want rename failure", loc)
+	}
+}
