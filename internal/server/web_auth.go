@@ -9,7 +9,8 @@ import (
 
 // webAuth validates the signed session cookie and returns the account.
 // The cookie holds a signed reference to the account id, so it is revocable via
-// account disablement and never carries an API credential.
+// account disablement, the allowed email domain and the OAuth-required setting,
+// and never carries an API credential.
 func (s *Server) webAuth(r *http.Request) (*models.Account, bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil || c.Value == "" {
@@ -27,17 +28,8 @@ func (s *Server) webAuth(r *http.Request) (*models.Account, bool) {
 	if err != nil {
 		return nil, false
 	}
-	if a.Disabled {
+	if s.accountActive(r.Context(), a) != nil {
 		return nil, false
-	}
-	if !s.accountAllowedByEmailDomain(r.Context(), a.Email) {
-		return nil, false
-	}
-	if s.oauthLoginRequired(r.Context()) && !a.IsAdmin {
-		hasOAuth, err := s.store.AccountHasOAuthIdentity(r.Context(), a.ID)
-		if err != nil || !hasOAuth {
-			return nil, false
-		}
 	}
 	return a, true
 }
