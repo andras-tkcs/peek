@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,6 +32,8 @@ type Config struct {
 	BaseURL   string
 	Secret    string
 	MaxUpload int64
+	// MetricsToken, when set, is the bearer token required on /metrics.
+	MetricsToken string
 
 	Storage                string
 	S3Endpoint             string
@@ -82,11 +86,17 @@ type Server struct {
 	oidcAllowPrivateIssuer   bool
 	visitQueue               chan visitEvent
 	groups                   GroupChecker
+	metricsToken             string
 }
 
 func New(cfg Config) (*Server, error) {
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, err
+	}
+	if runtime.GOOS != "windows" {
+		if info, err := os.Stat(cfg.DataDir); err == nil && info.Mode().Perm()&0o077 != 0 {
+			slog.Warn("data directory is accessible to other users; run chmod 700 on it", "dir", cfg.DataDir, "mode", fmt.Sprintf("%#o", info.Mode().Perm()))
+		}
 	}
 	if cfg.Storage == "s3" {
 		if cfg.S3Bucket == "" || cfg.S3Endpoint == "" {
@@ -150,13 +160,18 @@ func New(cfg Config) (*Server, error) {
 				return nil, err
 			}
 		}
+		if bucket, err := store.GetSetting(startupCtx, "s3_bucket"); err == nil && bucket != "" {
+			if err := objectstore.ValidateS3Bucket(bucket); err != nil {
+				return nil, fmt.Errorf("invalid s3 bucket: %w", err)
+			}
+		}
 		st = objectstore.NewS3Storage(cfg.S3AllowPrivateEndpoint, func(key string) string {
 			return decryptedStoreSetting(context.Background(), store, secret, key)
 		})
 		slog.Info("storage backend: s3 (config managed via settings API / dashboard)")
 	} else {
 		uploadsDir := filepath.Join(cfg.DataDir, "uploads")
-		if err := os.MkdirAll(uploadsDir, 0o755); err != nil {
+		if err := os.MkdirAll(uploadsDir, 0o700); err != nil {
 			return nil, err
 		}
 		st = &objectstore.FileStorage{Dir: uploadsDir}
@@ -200,6 +215,7 @@ func New(cfg Config) (*Server, error) {
 		apiKeyLimiter:           newLimiter(10, time.Minute),
 		pagePasswordFailLimiter: newLimiter(pagePasswordFailureMax, pagePasswordFailureWindow),
 		accountLoginLimiter:     newLimiter(accountLoginFailureMax, accountLoginFailureWindow),
+		metricsToken:            cfg.MetricsToken,
 		trustedProxy:            cfg.TrustedProxy,
 		trustedProxyCIDRs:       cidrs,
 		s3AllowPrivateEndpoint:  cfg.S3AllowPrivateEndpoint,

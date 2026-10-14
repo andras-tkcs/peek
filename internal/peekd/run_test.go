@@ -2,6 +2,7 @@ package peekd
 
 import (
 	"context"
+	"flag"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -350,5 +351,90 @@ func TestParseServeConfigGoogleDefaults(t *testing.T) {
 	}
 	if cfg.GoogleSAKeyFile != "" || cfg.GoogleAdminEmail != "" || cfg.GoogleGroupCacheTTL != 5*time.Minute {
 		t.Fatalf("cfg = %+v", cfg)
+	}
+}
+
+func TestParseServeConfigMetricsTokenFromEnv(t *testing.T) {
+	token := strings.Repeat("x", 16)
+	t.Setenv("PEEK_METRICS_TOKEN", token)
+	cfg, _, err := parseServeConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MetricsToken != token {
+		t.Fatalf("MetricsToken = %q", cfg.MetricsToken)
+	}
+}
+
+func TestParseServeConfigRejectsShortMetricsToken(t *testing.T) {
+	t.Setenv("PEEK_METRICS_TOKEN", "")
+	_, _, err := parseServeConfig([]string{"--metrics-token", "short"})
+	if err == nil || !strings.Contains(err.Error(), "at least 16 characters") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func writeSecretFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestGetenvSecretReadsFile(t *testing.T) {
+	t.Setenv("PEEK_SECRET", "")
+	t.Setenv("PEEK_SECRET_FILE", writeSecretFile(t, "s3cr3t\n"))
+	cfg, _, err := parseServeConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Secret != "s3cr3t" {
+		t.Fatalf("Secret = %q", cfg.Secret)
+	}
+}
+
+func TestGetenvSecretRejectsBothVarAndFile(t *testing.T) {
+	t.Setenv("PEEK_SECRET", "direct")
+	t.Setenv("PEEK_SECRET_FILE", writeSecretFile(t, "s3cr3t"))
+	_, _, err := parseServeConfig(nil)
+	if err == nil || !strings.Contains(err.Error(), "set only one of PEEK_SECRET and PEEK_SECRET_FILE") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestGetenvSecretRejectsEmptyFile(t *testing.T) {
+	t.Setenv("PEEK_SECRET", "")
+	t.Setenv("PEEK_SECRET_FILE", writeSecretFile(t, " \n"))
+	_, _, err := parseServeConfig(nil)
+	if err == nil || !strings.Contains(err.Error(), "points to an empty file") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestParseServeConfigS3SecretKeyFromFile(t *testing.T) {
+	t.Setenv("PEEK_S3_SECRET_KEY", "")
+	t.Setenv("PEEK_S3_SECRET_KEY_FILE", writeSecretFile(t, "key123\n"))
+	cfg, _, err := parseServeConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.S3SecretKey != "key123" {
+		t.Fatalf("S3SecretKey = %q", cfg.S3SecretKey)
+	}
+}
+
+func TestSecretFlagWarnings(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	fs.String("secret", "", "")
+	fs.String("s3-secret-key", "", "")
+	fs.String("addr", "", "")
+	if err := fs.Parse([]string{"--secret", "x", "--addr", ":1"}); err != nil {
+		t.Fatal(err)
+	}
+	got := secretFlagWarnings(fs)
+	if len(got) != 1 || !strings.Contains(got[0], "--secret") || !strings.Contains(got[0], "PEEK_SECRET_FILE") {
+		t.Fatalf("warnings = %v", got)
 	}
 }

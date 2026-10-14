@@ -25,6 +25,8 @@ type serveConfig struct {
 	BaseURL   string
 	Secret    string
 	MaxUpload int64
+	// MetricsToken is the bearer token required on /metrics (empty = open).
+	MetricsToken string
 
 	Storage                string
 	S3Endpoint             string
@@ -71,6 +73,18 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	fs := flag.NewFlagSet("peekd", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
+	secretDefault, err := getenvSecret("PEEK_SECRET")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
+	s3SecretKeyDefault, err := getenvSecret("PEEK_S3_SECRET_KEY")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
+	metricsTokenDefault, err := getenvSecret("PEEK_METRICS_TOKEN")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
 	maxUploadDefault, err := getenvInt64("PEEK_MAX_UPLOAD", 2<<20)
 	if err != nil {
 		return serveConfig{}, false, err
@@ -104,14 +118,16 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	dataDir := fs.String("data", getenv("PEEK_DATA", "./data"), "data directory")
 	baseURL := fs.String("base-url", getenv("PEEK_BASE_URL", "http://localhost:7700"), "public base URL")
 	maxUpload := fs.Int64("max-upload", maxUploadDefault, "max upload size in bytes (per file)")
-	secret := fs.String("secret", getenv("PEEK_SECRET", ""), "server secret for HMAC signing and encryption (auto-generated if empty)")
+	secret := fs.String("secret", secretDefault, "server secret for HMAC signing and encryption (auto-generated if empty)")
+
+	metricsToken := fs.String("metrics-token", metricsTokenDefault, "bearer token required on /metrics (empty = unauthenticated)")
 
 	storageFlag := fs.String("storage", getenv("PEEK_STORAGE", "file"), "storage backend: file or s3")
 	s3Endpoint := fs.String("s3-endpoint", getenv("PEEK_S3_ENDPOINT", ""), "S3-compatible endpoint URL")
 	s3Bucket := fs.String("s3-bucket", getenv("PEEK_S3_BUCKET", ""), "S3 bucket name")
 	s3Region := fs.String("s3-region", getenv("PEEK_S3_REGION", "us-east-1"), "S3 region")
 	s3AccessKey := fs.String("s3-access-key", getenv("PEEK_S3_ACCESS_KEY", ""), "S3 access key")
-	s3SecretKey := fs.String("s3-secret-key", getenv("PEEK_S3_SECRET_KEY", ""), "S3 secret key")
+	s3SecretKey := fs.String("s3-secret-key", s3SecretKeyDefault, "S3 secret key")
 	s3AllowPrivateEndpoint := fs.Bool("s3-allow-private-endpoint", s3AllowPrivateEndpointDefault, "allow private/link-local S3 endpoint addresses for explicit dev deployments")
 	oidcAllowPrivateIssuer := fs.Bool("oidc-allow-private-issuer", oidcAllowPrivateIssuerDefault, "allow http/private/link-local OIDC issuer URLs for explicit dev deployments")
 
@@ -128,6 +144,12 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	}
 	if *showVersion {
 		return serveConfig{}, true, nil
+	}
+	for _, w := range secretFlagWarnings(fs) {
+		fmt.Fprintln(os.Stderr, w)
+	}
+	if *metricsToken != "" && len(*metricsToken) < 16 {
+		return serveConfig{}, false, fmt.Errorf("metrics-token must be at least 16 characters")
 	}
 	cidrs, err := server.ParseTrustedProxyCIDRs(*trustedProxyCIDRs)
 	if err != nil {
@@ -156,6 +178,8 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		BaseURL:   *baseURL,
 		Secret:    *secret,
 		MaxUpload: *maxUpload,
+
+		MetricsToken: *metricsToken,
 
 		Storage:                *storageFlag,
 		S3Endpoint:             *s3Endpoint,
@@ -226,6 +250,8 @@ func runServe(cfg serveConfig) int {
 		Secret:    cfg.Secret,
 		MaxUpload: cfg.MaxUpload,
 
+		MetricsToken: cfg.MetricsToken,
+
 		Storage:                cfg.Storage,
 		S3Endpoint:             cfg.S3Endpoint,
 		S3Bucket:               cfg.S3Bucket,
@@ -246,7 +272,7 @@ func runServe(cfg serveConfig) int {
 		return 1
 	}
 
-	slog.Info("peek starting", "addr", cfg.Addr, "data", cfg.DataDir, "base_url", cfg.BaseURL)
+	slog.Info("peek starting", "addr", cfg.Addr, "data", cfg.DataDir, "base_url", cfg.BaseURL, "metrics_auth", cfg.MetricsToken != "")
 	hs := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      srv.Handler(),

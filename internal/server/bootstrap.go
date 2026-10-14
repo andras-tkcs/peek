@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -36,6 +37,9 @@ func (s *Server) setCookie(w http.ResponseWriter, c *http.Cookie) {
 func loadOrCreateSecret(path string) (string, error) {
 	if b, err := os.ReadFile(path); err == nil {
 		if len(b) >= 32 {
+			if err := os.Chmod(path, 0o600); err != nil {
+				slog.Warn("could not restrict secret file permissions", "path", path, "err", err)
+			}
 			return string(b), nil
 		}
 	} else if !os.IsNotExist(err) {

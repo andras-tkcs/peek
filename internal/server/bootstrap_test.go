@@ -3,6 +3,7 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,5 +73,30 @@ func TestLoadOrCreateSecretReportsInvalidPath(t *testing.T) {
 
 	if _, err := loadOrCreateSecret(dir); err == nil {
 		t.Fatal("expected error when secret path is a directory")
+	}
+}
+
+func TestLoadOrCreateSecretTightensExistingFileMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret.key")
+	want := strings.Repeat("ab", 32)
+	if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadOrCreateSecret(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("secret = %q, want %q", got, want)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %#o, want 0600", info.Mode().Perm())
 	}
 }
