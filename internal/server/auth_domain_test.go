@@ -181,7 +181,7 @@ func TestLoginWithPasswordRejectsDisallowedDomain(t *testing.T) {
 	}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	_, _, err = s.loginWithPassword(req)
+	_, err = s.loginWithPassword(req)
 	if !errors.Is(err, errAccountNotEligible) {
 		t.Fatalf("error = %v", err)
 	}
@@ -202,7 +202,7 @@ func TestLoginWithTokenRejectsDisallowedDomain(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(url.Values{"token": {"raw-token"}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	_, _, err = s.loginWithToken(req)
+	_, err = s.loginWithToken(req)
 	if !errors.Is(err, errAccountNotEligible) {
 		t.Fatalf("error = %v", err)
 	}

@@ -70,7 +70,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.clearSetupCode()
-	s.setWebSession(w, account.ID)
+	s.setWebSession(w, account)
 	s.auditRequest(r, account.Name, "setup.admin_created", "")
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 }

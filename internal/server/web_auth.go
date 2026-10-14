@@ -2,7 +2,6 @@ package server
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/andras-tkcs/peek/internal/models"
 )
@@ -20,12 +19,15 @@ func (s *Server) webAuth(r *http.Request) (*models.Account, bool) {
 	if !ok {
 		return nil, false
 	}
-	id, err := strconv.ParseInt(sub, 10, 64)
-	if err != nil {
+	id, epoch, ok := parseSessionSubject(sub)
+	if !ok {
 		return nil, false
 	}
 	a, err := s.store.GetAccountByID(r.Context(), id)
 	if err != nil {
+		return nil, false
+	}
+	if a.SessionEpoch != epoch {
 		return nil, false
 	}
 	if s.accountActive(r.Context(), a) != nil {

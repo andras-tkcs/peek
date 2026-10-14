@@ -99,7 +99,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	s.clearCookie(w, oauthCookieName(p.Key), "/oauth/"+p.Key)
 	s.clearCookie(w, inviteCookie, "/")
-	s.setWebSession(w, account.ID)
+	s.setWebSession(w, account)
 	s.audit("oauth login provider=%s account=%d email=%q", p.Key, account.ID, account.Email)
 	http.Redirect(w, r, s.consumeNextPath(w, r), http.StatusSeeOther)
 }
