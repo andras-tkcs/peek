@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -56,6 +57,9 @@ func SaveConfig(c *Config) error {
 	}
 	b, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
+		return err
+	}
+	if err := os.Chmod(p, 0o600); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	return os.WriteFile(p, b, 0o600)

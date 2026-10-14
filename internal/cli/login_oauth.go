@@ -9,12 +9,15 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/andras-tkcs/peek/internal/version"
 )
 
 var (
-	oauthNow         = time.Now
-	oauthSleep       = time.Sleep
-	oauthOpenBrowser = openBrowser
+	oauthNow                   = time.Now
+	oauthSleep                 = time.Sleep
+	oauthOpenBrowser           = openBrowser
+	oauthStderr      io.Writer = os.Stderr
 )
 
 func loginOAuth(cfg *Config, host string) error {
@@ -35,9 +38,14 @@ func loginOAuth(cfg *Config, host string) error {
 	if start.ExpiresIn <= 0 {
 		start.ExpiresIn = 900
 	}
-	fmt.Fprintf(os.Stderr, "Opening browser for Peek login.\nCode: %s\nURL:  %s\n", start.UserCode, start.VerificationURL)
-	if err := oauthOpenBrowser(start.VerificationURL); err != nil {
-		fmt.Fprintln(os.Stderr, "Open the URL above to continue.")
+	if err := validateBrowserURL(host, start.VerificationURL); err != nil {
+		fmt.Fprintf(oauthStderr, "Peek login.\nURL:  %q\nCode: %s\n", start.VerificationURL, start.UserCode)
+		fmt.Fprintf(oauthStderr, "Not opening the browser automatically: %v\nOpen the URL above yourself only if you trust it.\n", err)
+	} else {
+		fmt.Fprintf(oauthStderr, "Opening browser for Peek login.\nURL:  %s\nCode: %s\nType this code on that page. Never enter a code that someone else sent you.\n", start.VerificationURL, start.UserCode)
+		if err := oauthOpenBrowser(start.VerificationURL); err != nil {
+			fmt.Fprintln(oauthStderr, "Open the URL above to continue.")
+		}
 	}
 	deadline := oauthNow().Add(time.Duration(start.ExpiresIn) * time.Second)
 	for oauthNow().Before(deadline) {
@@ -90,6 +98,7 @@ func postJSONNoAuth(host, path string, in, out any) error {
 	if err != nil {
 		return err
 	}
+	req.Header.Set("User-Agent", "peek-cli/"+version.Version)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
