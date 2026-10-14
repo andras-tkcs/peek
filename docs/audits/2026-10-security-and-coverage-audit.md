@@ -1,5 +1,7 @@
 # Security and test coverage audit — 2026-10-11
 
+Status: the Critical, Medium and Low findings below are addressed by the `fix/security-hardening-coverage` change, which also raises total coverage to at least 90% with a CI gate. Info items remain open.
+
 Scope: the whole repository at `6380c6b` (server `peekd`, CLI `peek`, storage, DB, templates, CI, Docker, install script). Method: manual review of every package, cross-checked by tracing each finding to a concrete code path; one finding (S1) was confirmed with a throwaway end-to-end test. Tooling run: `go vet`, `go test -race`, coverage, `staticcheck`. `govulncheck` could not reach vuln.go.dev from the audit sandbox; CI runs it on every push.
 
 ## Summary
