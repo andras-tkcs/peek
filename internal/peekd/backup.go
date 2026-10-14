@@ -2,8 +2,10 @@ package peekd
 
 import (
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -58,9 +60,21 @@ func backupDatabase(dataDir, destPath string) error {
 	}
 	defer db.Close()
 
+	out, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return fmt.Errorf("backup destination %s already exists", destPath)
+		}
+		return fmt.Errorf("create backup file: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("create backup file: %w", err)
+	}
+
 	destURI := "file:" + destPath
 	_, err = db.Exec("VACUUM INTO ?", destURI)
 	if err != nil {
+		_ = os.Remove(destPath)
 		return fmt.Errorf("vacuum into: %w", err)
 	}
 	return nil
