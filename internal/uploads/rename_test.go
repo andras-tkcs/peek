@@ -94,7 +94,7 @@ func TestRenameDerivesNewSlug(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Slug != "new-page" || res.URL != "http://h/p/new-page" || !res.SlugChanged {
+	if !strings.HasPrefix(res.Slug, "new-page-") || len(res.Slug) != len("new-page-")+6 || res.URL != "http://h/p/"+res.Slug || !res.SlugChanged {
 		t.Fatalf("res = %+v", res)
 	}
 }

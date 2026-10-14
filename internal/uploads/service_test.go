@@ -7,6 +7,7 @@ import (
 	"io"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/andras-tkcs/peek/internal/db"
@@ -347,5 +348,46 @@ func TestCreateRejectsRestrictedWithPassword(t *testing.T) {
 	var uploadErr *Error
 	if !errors.As(err, &uploadErr) || uploadErr.Kind != KindPasswordNotAllowed {
 		t.Fatalf("error = %T %[1]v, want %q", err, KindPasswordNotAllowed)
+	}
+}
+
+func TestCreateRejectsNameOver200Characters(t *testing.T) {
+	store, owner := serviceTestStore(t)
+	defer store.Close()
+	st := newMemoryStorage()
+	svc := Service{Repository: store, Storage: st, BaseURL: "http://localhost:7700"}
+
+	_, err := svc.Create(context.Background(), CreateInput{
+		OwnerAccountID: owner.AccountID,
+		OwnerTokenID:   owner.ID,
+		Name:           strings.Repeat("a", 201),
+		Data:           []byte("<!doctype html><html></html>"),
+	})
+	var uploadErr *Error
+	if !errors.As(err, &uploadErr) {
+		t.Fatalf("error = %T %[1]v, want *uploads.Error", err)
+	}
+	if uploadErr.Kind != KindNameTooLong || uploadErr.Message != "name must be 200 characters or fewer" {
+		t.Fatalf("error = %+v", uploadErr)
+	}
+	if len(st.saved) != 0 {
+		t.Fatalf("rejected name wrote storage object: %+v", st.saved)
+	}
+}
+
+func TestCreateAcceptsNameOf200Characters(t *testing.T) {
+	store, owner := serviceTestStore(t)
+	defer store.Close()
+	svc := Service{Repository: store, Storage: newMemoryStorage(), BaseURL: "http://localhost:7700"}
+
+	_, err := svc.Create(context.Background(), CreateInput{
+		OwnerAccountID: owner.AccountID,
+		OwnerTokenID:   owner.ID,
+		Name:           strings.Repeat("é", 200),
+		Visibility:     models.UploadVisibilityPublic,
+		Data:           []byte("<!doctype html><html></html>"),
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
 	}
 }
