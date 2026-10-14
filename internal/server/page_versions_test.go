@@ -206,6 +206,45 @@ func TestRawRejectsNonIframeFetchDest(t *testing.T) {
 	}
 }
 
+func TestRawDownloadFetchDest(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	newTwoVersionPage(t, s, "rawdl", models.UploadVisibilityPublic, "")
+	src, cookies := rawSrcFromPage(t, s, "/p/rawdl")
+	dl := src + "&download=1"
+	for _, dest := range []string{"document", "empty", "iframe", ""} {
+		opts := []func(*http.Request){withCookieList(cookies)}
+		if dest != "" {
+			opts = append(opts, withFetchDest(dest))
+		}
+		rec := doRequest(t, s, http.MethodGet, dl, nil, opts...)
+		if rec.Code != http.StatusOK {
+			t.Errorf("download dest %q = %d, want 200", dest, rec.Code)
+			continue
+		}
+		if cd := rec.Header().Get("Content-Disposition"); !strings.HasPrefix(cd, "attachment") {
+			t.Errorf("download dest %q disposition = %q", dest, cd)
+		}
+		if csp := rec.Header().Get("Content-Security-Policy"); csp != rawContentCSP {
+			t.Errorf("download dest %q CSP = %q, want rawContentCSP", dest, csp)
+		}
+	}
+	for _, dest := range []string{"document", "empty"} {
+		if rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies), withFetchDest(dest)); rec.Code != http.StatusForbidden {
+			t.Errorf("non-download dest %q = %d, want 403", dest, rec.Code)
+		}
+		if rec := doRequest(t, s, http.MethodGet, dl, nil, withFetchDest(dest)); rec.Code != http.StatusForbidden {
+			t.Errorf("download dest %q without cookie = %d, want 403", dest, rec.Code)
+		}
+		bad := strings.Replace(dl, "t=", "t=x", 1)
+		if rec := doRequest(t, s, http.MethodGet, bad, nil, withCookieList(cookies), withFetchDest(dest)); rec.Code != http.StatusForbidden {
+			t.Errorf("download dest %q bad token = %d, want 403", dest, rec.Code)
+		}
+	}
+	if rec := doRequest(t, s, http.MethodGet, dl, nil, withFetchDest("frame"), withCookieList(cookies)); rec.Code != http.StatusForbidden {
+		t.Errorf("download dest frame = %d, want 403", rec.Code)
+	}
+}
+
 func TestRawTokenRequiresVisitorCookie(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	newTwoVersionPage(t, s, "rawvid", models.UploadVisibilityPublic, "")
