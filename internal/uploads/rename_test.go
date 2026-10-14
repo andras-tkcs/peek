@@ -129,3 +129,17 @@ func TestRenameReportsPersistenceFailure(t *testing.T) {
 		t.Fatalf("message = %q", e.Message)
 	}
 }
+
+type slugErrRenameRepo struct {
+	fakeRenameRepo
+}
+
+func (slugErrRenameRepo) UploadSlugExists(context.Context, string) (bool, error) {
+	return false, errors.New("lookup failed")
+}
+
+func TestRenameReportsSlugGenerationFailure(t *testing.T) {
+	repo := &slugErrRenameRepo{}
+	_, err := Rename(context.Background(), repo, "http://h", RenameInput{CurrentSlug: "old", CurrentName: "old", Name: "New Page"})
+	requireKind(t, err, KindSlugGeneration)
+}

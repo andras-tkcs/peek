@@ -19,6 +19,7 @@ type memoryStorage struct {
 	saved     map[string][]byte
 	deleted   []string
 	deleteErr error
+	saveErr   error
 }
 
 func newMemoryStorage() *memoryStorage {
@@ -26,6 +27,9 @@ func newMemoryStorage() *memoryStorage {
 }
 
 func (m *memoryStorage) Save(_ context.Context, slug string, data []byte) error {
+	if m.saveErr != nil {
+		return m.saveErr
+	}
 	m.saved[slug] = append([]byte(nil), data...)
 	return nil
 }
@@ -389,5 +393,121 @@ func TestCreateAcceptsNameOf200Characters(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
+	}
+}
+
+type slugErrRepo struct {
+	Repository
+}
+
+func (slugErrRepo) UploadSlugExists(context.Context, string) (bool, error) {
+	return false, errors.New("lookup failed")
+}
+
+func TestErrorStrings(t *testing.T) {
+	if got := (&Error{Kind: KindEmptyFile, Message: "empty file"}).Error(); got != "empty file" {
+		t.Fatalf("Error() = %q", got)
+	}
+	inner := errors.New("disk")
+	ce := &CleanupError{Slug: "abc", Err: inner}
+	if got := ce.Error(); got != "cleanup storage object abc: disk" {
+		t.Fatalf("CleanupError() = %q", got)
+	}
+	if !errors.Is(ce, inner) {
+		t.Fatal("CleanupError should unwrap")
+	}
+}
+
+func TestCreateRejectsBadInputAndReportsFailures(t *testing.T) {
+	store, owner := serviceTestStore(t)
+	defer store.Close()
+	ctx := context.Background()
+	html := []byte("<!doctype html><html></html>")
+	base := CreateInput{OwnerAccountID: owner.AccountID, OwnerTokenID: owner.ID, Name: "x", Visibility: "public", Data: html}
+
+	cases := []struct {
+		name string
+		svc  Service
+		mod  func(*CreateInput)
+		kind ErrorKind
+	}{
+		{"empty data", Service{Repository: store, Storage: newMemoryStorage()}, func(in *CreateInput) { in.Data = nil }, KindEmptyFile},
+		{"not html", Service{Repository: store, Storage: newMemoryStorage()}, func(in *CreateInput) { in.Data = []byte("plain text") }, KindInvalidHTML},
+		{"slug failure", Service{Repository: slugErrRepo{store}, Storage: newMemoryStorage()}, func(*CreateInput) {}, KindSlugGeneration},
+		{"save failure", Service{Repository: store, Storage: &memoryStorage{saved: map[string][]byte{}, saveErr: errors.New("full")}}, func(*CreateInput) {}, KindStorageWrite},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := base
+			tc.mod(&in)
+			_, err := tc.svc.Create(ctx, in)
+			var ue *Error
+			if !errors.As(err, &ue) || ue.Kind != tc.kind {
+				t.Fatalf("err = %v, want kind %s", err, tc.kind)
+			}
+		})
+	}
+
+	t.Run("empty name defaults to page", func(t *testing.T) {
+		in := base
+		in.Name = "  "
+		res, err := Service{Repository: store, Storage: newMemoryStorage()}.Create(ctx, in)
+		if err != nil || res.Name != "page" {
+			t.Fatalf("res=%+v err=%v", res, err)
+		}
+	})
+}
+
+func TestAddVersionRejectsAndReportsFailures(t *testing.T) {
+	store, _ := serviceTestStore(t)
+	defer store.Close()
+	ctx := context.Background()
+	html := []byte("<!doctype html><html></html>")
+
+	for name, tc := range map[string]struct {
+		svc  Service
+		data []byte
+		kind ErrorKind
+	}{
+		"empty":        {Service{Repository: store, Storage: newMemoryStorage()}, nil, KindEmptyFile},
+		"not html":     {Service{Repository: store, Storage: newMemoryStorage()}, []byte("plain"), KindInvalidHTML},
+		"save failure": {Service{Repository: store, Storage: &memoryStorage{saved: map[string][]byte{}, saveErr: errors.New("full")}}, html, KindStorageWrite},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := tc.svc.AddVersion(ctx, AddVersionInput{UploadID: 1, Slug: "page", Data: tc.data})
+			var ue *Error
+			if !errors.As(err, &ue) || ue.Kind != tc.kind {
+				t.Fatalf("err = %v, want kind %s", err, tc.kind)
+			}
+		})
+	}
+
+	t.Run("cleanup failure is joined", func(t *testing.T) {
+		st := newMemoryStorage()
+		st.deleteErr = errors.New("rm failed")
+		svc := Service{Repository: failingVersionRepo{Repository: store, err: errors.New("db down")}, Storage: st}
+		_, err := svc.AddVersion(ctx, AddVersionInput{UploadID: 1, Slug: "page", Data: html})
+		var ce *CleanupError
+		var ue *Error
+		if !errors.As(err, &ce) || !errors.As(err, &ue) || ue.Kind != KindPersistenceFailure {
+			t.Fatalf("err = %v, want persistence failure joined with cleanup error", err)
+		}
+	})
+}
+
+func TestStoreErrorKinds(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		kind ErrorKind
+	}{
+		{uploadquota.ErrTotalExceeded, KindTotalQuotaExceeded},
+		{uploadquota.ErrOwnerCountExceeded, KindOwnerCountExceeded},
+		{uploadquota.ErrOwnerStorageExceeded, KindOwnerStorageExceeded},
+		{errors.New("other"), KindPersistenceFailure},
+	} {
+		var ue *Error
+		if !errors.As(storeError(tc.err), &ue) || ue.Kind != tc.kind {
+			t.Fatalf("storeError(%v) kind = %v, want %s", tc.err, ue, tc.kind)
+		}
 	}
 }

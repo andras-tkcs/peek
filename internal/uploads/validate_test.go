@@ -243,3 +243,9 @@ func TestRandomSlugString(t *testing.T) {
 		t.Fatalf("two random slugs are equal: %q", a)
 	}
 }
+
+func TestMin(t *testing.T) {
+	if min(1, 2) != 1 || min(2, 1) != 1 || min(3, 3) != 3 {
+		t.Fatal("min returned the wrong value")
+	}
+}
