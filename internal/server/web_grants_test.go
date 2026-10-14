@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/andras-tkcs/peek/internal/models"
@@ -126,5 +128,37 @@ func TestDashboardGrantRejectsMissingCSRF(t *testing.T) {
 	wantLocation(t, loc, "/dashboard?err=invalid_session")
 	if g := grantCount(t, s, u.ID); len(g) != 0 {
 		t.Fatalf("grants = %+v", g)
+	}
+}
+
+func TestDashCovGrantGuardsAndFailures(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+	dashCovUpload(t, s, "page", adminID)
+
+	for _, suffix := range []string{"", "/remove"} {
+		if rec := doRequest(t, s, http.MethodPost, "/dashboard/grants/page"+suffix, nil); rec.Header().Get("Location") != "/login" {
+			t.Fatalf("anonymous Location = %q", rec.Header().Get("Location"))
+		}
+		rec := dashboardPost(t, s, adminID, "/dashboard/grants/missing"+suffix, url.Values{"kind": {"user"}, "email": {"a@example.test"}}, true)
+		assertDashboardRedirect(t, rec, "/dashboard?err="+flashNotFound)
+	}
+
+	rec := dashboardPost(t, s, adminID, "/dashboard/grants/page/remove", url.Values{"kind": {"bogus"}, "email": {"a@example.test"}}, true)
+	if rec.Code != http.StatusSeeOther || !strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("remove with bad kind = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+
+	if _, err := store.Exec(`INSERT INTO upload_grants(upload_id,kind,email,created_by_account_id,created_at) SELECT id,'user','b@example.test',?,0 FROM uploads WHERE slug='page'`, adminID); err != nil {
+		t.Fatal(err)
+	}
+	addFailTrigger(t, store, "upload_grants", "INSERT")
+	addFailTrigger(t, store, "upload_grants", "DELETE")
+	rec = dashboardPost(t, s, adminID, "/dashboard/grants/page", url.Values{"kind": {"user"}, "email": {"a@example.test"}}, true)
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err="+flashGrantFailed) {
+		t.Fatalf("add failure Location = %q", loc)
+	}
+	rec = dashboardPost(t, s, adminID, "/dashboard/grants/page/remove", url.Values{"kind": {"user"}, "email": {"b@example.test"}}, true)
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err="+flashGrantFailed) {
+		t.Fatalf("remove failure Location = %q", loc)
 	}
 }

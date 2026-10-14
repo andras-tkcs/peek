@@ -183,3 +183,10 @@ func TestDashboardShowsSignOutOtherSessions(t *testing.T) {
 		t.Fatalf("status %d, button missing", rec.Code)
 	}
 }
+
+func TestDashCovSessionsRevokeStoreFailure(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+	addFailTrigger(t, store, "accounts", "UPDATE")
+	rec := dashboardPost(t, s, adminID, "/dashboard/sessions/revoke", url.Values{}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashSessionsRevokeFailed)
+}

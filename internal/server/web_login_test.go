@@ -291,3 +291,126 @@ func TestLoginSetsEpochSessionCookie(t *testing.T) {
 		t.Fatalf("subject = %q, want %q", got, want)
 	}
 }
+
+func dashCovLoginPost(t *testing.T, s *Server, form url.Values, withCSRF bool) *httptest.ResponseRecorder {
+	t.Helper()
+	opts := []func(*http.Request){func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") }}
+	if withCSRF {
+		form.Set("csrf", "csrf-token")
+		opts = append(opts, func(r *http.Request) { r.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"}) })
+	}
+	return doRequest(t, s, http.MethodPost, "/login", strings.NewReader(form.Encode()), opts...)
+}
+
+func TestDashCovLoginSetupRedirectAndCSRF(t *testing.T) {
+	s, store, _, _ := newFaultServer(t)
+
+	rec := dashCovLoginPost(t, s, url.Values{"method": {"password"}}, false)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Invalid session.") {
+		t.Fatalf("invalid CSRF login = %d", rec.Code)
+	}
+
+	real := secureRandomRead
+	secureRandomRead = func([]byte) (int, error) { return 0, errors.New("rand failed") }
+	rec = dashCovLoginPost(t, s, url.Values{"method": {"password"}}, true)
+	secureRandomRead = real
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("csrf rand failure = %d, want 500", rec.Code)
+	}
+
+	rec = dashCovLoginPost(t, s, url.Values{"method": {"bogus"}}, true)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Invalid credentials.") {
+		t.Fatalf("unsupported method = %d", rec.Code)
+	}
+
+	if _, err := store.Exec("DELETE FROM accounts"); err != nil {
+		t.Fatal(err)
+	}
+	rec = doRequest(t, s, http.MethodGet, "/login", nil)
+	assertDashboardRedirect(t, rec, "/setup")
+}
+
+func TestDashCovLoginWithTokenFailures(t *testing.T) {
+	s, store, _, _ := newFaultServer(t)
+	ctx := context.Background()
+	user, err := s.store.CreateAccount(ctx, "user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.CreateTokenForAccount(ctx, "user-token", user.ID, "k"); err != nil {
+		t.Fatal(err)
+	}
+	try := func(tok string) error {
+		req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(url.Values{"token": {tok}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		_, err := s.loginWithToken(req)
+		return err
+	}
+	if try("") == nil {
+		t.Fatal("empty token accepted")
+	}
+	if try("nope") == nil {
+		t.Fatal("unknown token accepted")
+	}
+	if _, err := store.Exec("UPDATE accounts SET disabled=1 WHERE id=?", user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if try("user-token") == nil {
+		t.Fatal("disabled account accepted")
+	}
+	if _, err := store.Exec("UPDATE accounts SET disabled=0 WHERE id=?", user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSetting(ctx, "auth_token_login_enabled", "true"); err != nil {
+		t.Fatal(err)
+	}
+	// GetToken does not read session_epoch but GetAccountByID does.
+	if _, err := store.Exec("ALTER TABLE accounts DROP COLUMN session_epoch"); err != nil {
+		t.Fatal(err)
+	}
+	if try("user-token") == nil {
+		t.Fatal("account lookup failure accepted")
+	}
+}
+
+func TestDashCovLogoutPaths(t *testing.T) {
+	s, _, accountID := newWebLoginTestServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/logout", strings.NewReader("csrf=%zz"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	s.handleLogout(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("malformed logout = %d, want 400", rec.Code)
+	}
+
+	newReq := func() *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/logout", strings.NewReader("csrf=csrf-token"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: makeWebSession(s.secret, strconv.FormatInt(accountID, 10), sessionTTL)})
+		req.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
+		return req
+	}
+
+	real := secureRandomRead
+	secureRandomRead = func([]byte) (int, error) { return 0, errors.New("rand failed") }
+	rec = httptest.NewRecorder()
+	s.handleLogout(rec, newReq())
+	secureRandomRead = real
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("logout csrf failure = %d, want 500", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	s.handleLogout(rec, newReq())
+	assertDashboardRedirect(t, rec, "/login")
+	var cleared bool
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == sessionCookie && c.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatalf("logout did not clear session cookie: %+v", rec.Result().Cookies())
+	}
+}
