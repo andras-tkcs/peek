@@ -41,6 +41,7 @@ func configSet(args []string) error {
 		return err
 	}
 	host, token := cfg.Host, cfg.Token
+	oldHost := strings.TrimRight(cfg.Host, "/")
 	var tokenStdin, usedTokenFlag bool
 	var tokenFile string
 	for i := 0; i < len(args); i++ {
@@ -92,6 +93,14 @@ func configSet(args []string) error {
 	}
 	if host == "" {
 		return fmt.Errorf("--host is required")
+	}
+	if w := plainHTTPWarning(host); w != "" {
+		fmt.Fprintln(os.Stderr, w)
+	}
+	tokenProvided := usedTokenFlag || tokenFile != "" || tokenStdin
+	if oldHost != "" && strings.TrimRight(host, "/") != oldHost && !tokenProvided && token != "" {
+		token = ""
+		fmt.Fprintf(os.Stderr, "note: host changed from %s to %s; the saved token was cleared. Run `peek login --host %s` to sign in.\n", oldHost, host, host)
 	}
 	if usedTokenFlag || tokenFile != "" || tokenStdin {
 		discovery, err := discoverAuth(host)

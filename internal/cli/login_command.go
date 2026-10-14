@@ -84,6 +84,9 @@ func cmdLogin(args []string) error {
 	if host == "" {
 		return fmt.Errorf("host is required")
 	}
+	if w := plainHTTPWarning(host); w != "" {
+		fmt.Fprintln(os.Stderr, w)
+	}
 
 	tokenMode := tokenFlag != "" || tokenFile != "" || tokenStdin || !term.IsTerminal(int(os.Stdin.Fd()))
 	discovery, discoveryErr := discoverAuth(host)

@@ -59,3 +59,29 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 	}
 	return result.out, runErr
 }
+
+func captureStderr(t *testing.T, fn func() error) (string, error) {
+	t.Helper()
+
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stderr: %v", err)
+	}
+	readDone := make(chan []byte, 1)
+	go func() {
+		data, _ := io.ReadAll(r)
+		readDone <- data
+	}()
+
+	os.Stderr = w
+	runErr := fn()
+	os.Stderr = old
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close stderr writer: %v", err)
+	}
+	out := <-readDone
+	_ = r.Close()
+	return string(out), runErr
+}

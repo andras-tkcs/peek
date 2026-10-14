@@ -88,3 +88,27 @@ func errorResponse(status int, body string) *http.Response {
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 }
+
+func TestSaveConfigTightensExistingFileMode(t *testing.T) {
+	setTestConfigHome(t)
+	p, err := configPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(p, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveConfig(&Config{Host: "https://peek.example.com", Token: "secret"}); err != nil {
+		t.Fatalf("SaveConfig: %v", err)
+	}
+	info, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("mode = %o, want 600", mode)
+	}
+}
