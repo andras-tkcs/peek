@@ -15,8 +15,18 @@ func TestDashboardRenameChangesLinkAndAudits(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	wantLocation(t, rec.Header().Get("Location"), "/dashboard?manage=quarterly-report&ok=Renamed+to+%2Fp%2Fquarterly-report")
-	got, err := s.store.GetUpload(context.Background(), "quarterly-report")
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	newSlug := loc.Query().Get("manage")
+	if !strings.HasPrefix(newSlug, "quarterly-report-") || len(newSlug) != len("quarterly-report-")+6 {
+		t.Fatalf("new slug = %q", newSlug)
+	}
+	if got := loc.Query().Get("ok"); got != "Renamed to /p/"+newSlug {
+		t.Fatalf("ok = %q", got)
+	}
+	got, err := s.store.GetUpload(context.Background(), newSlug)
 	if err != nil || got.Name != "Quarterly Report" {
 		t.Fatalf("GetUpload = %+v, %v", got, err)
 	}

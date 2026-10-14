@@ -12,7 +12,10 @@ const (
 	KindNameTooLong  ErrorKind = "name_too_long"
 )
 
-const maxNameLength = 200
+const (
+	maxNameLength      = 200
+	nameTooLongMessage = "name must be 200 characters or fewer"
+)
 
 // RenameRepository is the persistence a rename needs.
 type RenameRepository interface {
@@ -36,16 +39,17 @@ type RenameResult struct {
 }
 
 // Rename changes an upload's display name and derives its link from the new name
-// the same way upload does. The link is kept when the new name's slug form is
-// empty, equals the current slug, or equals the old name's slug form; a page's own
-// old link is taken back instead of minting a suffixed one.
+// the same way upload does (name slug plus a random suffix). The link is kept when
+// the new name's slug form is empty, equals the current slug, or equals the old
+// name's slug form; a page's own unsuffixed old link is taken back instead of
+// minting a new one.
 func Rename(ctx context.Context, repo RenameRepository, baseURL string, in RenameInput) (*RenameResult, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return nil, newError(KindNameRequired, "name is required")
 	}
 	if utf8.RuneCountInString(name) > maxNameLength {
-		return nil, newError(KindNameTooLong, "name must be 200 characters or fewer")
+		return nil, newError(KindNameTooLong, nameTooLongMessage)
 	}
 
 	slug := in.CurrentSlug

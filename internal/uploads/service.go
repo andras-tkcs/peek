@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/objectstore"
@@ -106,6 +107,9 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
 		in.Name = "page"
+	}
+	if utf8.RuneCountInString(in.Name) > maxNameLength {
+		return nil, newError(KindNameTooLong, nameTooLongMessage)
 	}
 	in.Password = strings.TrimSpace(in.Password)
 	in.Visibility = strings.TrimSpace(in.Visibility)
