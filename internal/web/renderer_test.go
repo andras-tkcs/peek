@@ -1,6 +1,7 @@
 package web
 
 import (
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -681,5 +682,55 @@ func TestPageTemplateShowsVerifiedCommentMarker(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Fatalf("page template missing %q", want)
 		}
+	}
+}
+
+func TestNewRendererNilAssetPathUsesDefault(t *testing.T) {
+	r, err := newRenderer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := r.Execute(TemplateIndex, IndexData{BaseURL: "http://h"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "http://h") {
+		t.Fatalf("body missing base url")
+	}
+}
+
+func TestExecuteUninitializedAndUnknown(t *testing.T) {
+	for _, r := range []*Renderer{nil, {}} {
+		if _, err := r.Execute(TemplateIndex, nil); err == nil || !strings.Contains(err.Error(), "not initialized") {
+			t.Fatalf("err = %v", err)
+		}
+	}
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Execute("no-such-template", nil); err == nil || !strings.Contains(err.Error(), "render no-such-template") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRenderHTML(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	if err := r.RenderHTML(rec, 418, TemplateError, ErrorData{Title: "T", Message: "M"}); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != 418 || rec.Header().Get("Content-Type") != "text/html; charset=utf-8" || !strings.Contains(rec.Body.String(), "M") {
+		t.Fatalf("code=%d ct=%q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	rec = httptest.NewRecorder()
+	if err := r.RenderHTML(rec, 200, "no-such-template", nil); err == nil {
+		t.Fatal("expected error")
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatal("nothing should be written on render error")
 	}
 }
