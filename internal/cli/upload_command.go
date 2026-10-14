@@ -21,6 +21,8 @@ func cmdUpload(args []string) error {
 		visibility    string
 		slug          string
 		nameSet       bool
+
+		usedPasswordFlag bool
 	)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -30,6 +32,7 @@ func cmdUpload(args []string) error {
 				return fmt.Errorf("--password requires a value")
 			}
 			password = args[i+1]
+			usedPasswordFlag = true
 			i++
 		case a == "--password-stdin":
 			passwordStdin = true
@@ -65,6 +68,9 @@ func cmdUpload(args []string) error {
 		return fmt.Errorf("usage: peek upload <file.html> [--visibility public|password|private|restricted] [--password <pw>] [--name <name>] [--slug <slug>]")
 	}
 	if slug != "" {
+		if _, err := slugPath(slug); err != nil {
+			return err
+		}
 		if visibility != "" || password != "" || passwordStdin {
 			return fmt.Errorf("--slug adds a new version to an existing page; change visibility with 'peek visibility'")
 		}
@@ -95,6 +101,9 @@ func cmdUpload(args []string) error {
 	}
 	if slug == "" && visibility != "password" && password != "" {
 		return fmt.Errorf("--password is only valid with --visibility password")
+	}
+	if usedPasswordFlag {
+		fmt.Fprintln(os.Stderr, "warning: --password is exposed in your shell history and process list (ps). Prefer --password-stdin.")
 	}
 
 	cfg, err := LoadConfig()

@@ -166,3 +166,25 @@ func TestCmdRenameSendsRenameRequest(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestCmdVisibilityWarnsAboutPasswordFlag(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"visibility": "password"})
+	}))
+	defer ts.Close()
+	configureTestClient(t, ts.URL)
+
+	stderr, err := captureStderr(t, func() error {
+		_, err := captureStdout(t, func() error {
+			return cmdVisibility([]string{"page", "password", "--password", "secret"})
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("cmdVisibility: %v", err)
+	}
+	if !strings.Contains(stderr, "--password is exposed") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}

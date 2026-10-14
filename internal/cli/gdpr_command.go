@@ -11,6 +11,10 @@ func cmdExport(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: peek export <slug>")
 	}
+	seg, err := slugPath(args[0])
+	if err != nil {
+		return err
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -19,7 +23,7 @@ func cmdExport(args []string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := c.req("GET", "/api/uploads/"+args[0]+"/export", nil, "")
+	resp, err := c.req("GET", "/api/uploads/"+seg+"/export", nil, "")
 	if err != nil {
 		return err
 	}

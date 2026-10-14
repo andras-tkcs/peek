@@ -14,6 +14,10 @@ func cmdStats(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: peek stats <slug>")
 	}
+	seg, err := slugPath(args[0])
+	if err != nil {
+		return err
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -34,7 +38,7 @@ func cmdStats(args []string) error {
 			Timestamp int64  `json:"visited_at"`
 		} `json:"recent"`
 	}
-	if err := c.getJSON("/api/uploads/"+args[0]+"/stats", &st); err != nil {
+	if err := c.getJSON("/api/uploads/"+seg+"/stats", &st); err != nil {
 		return err
 	}
 	fmt.Printf("slug:            %s\n", st.Slug)
@@ -83,6 +87,10 @@ func cmdComments(args []string) error {
 	if slug == "" {
 		return errors.New(commentsUsage)
 	}
+	seg, err := slugPath(slug)
+	if err != nil {
+		return err
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -101,7 +109,7 @@ func cmdComments(args []string) error {
 		CreatedAt  int64  `json:"created_at"`
 		Version    int    `json:"version"`
 	}
-	path := "/api/uploads/" + slug + "/comments"
+	path := "/api/uploads/" + seg + "/comments"
 	if version > 0 {
 		path += "?v=" + strconv.Itoa(version)
 	}

@@ -196,3 +196,37 @@ func TestUploadWithSlugRejectsNameFlag(t *testing.T) {
 		t.Fatalf("error = %v, want %q", err, want)
 	}
 }
+
+func TestCmdUploadWarnsAboutPasswordFlag(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"slug": "page", "url": "http://example.test/p/page", "visibility": "password"})
+	}))
+	defer ts.Close()
+	configureTestClient(t, ts.URL)
+	file := filepath.Join(t.TempDir(), "page.html")
+	if err := os.WriteFile(file, []byte("<html></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stderr, err := captureStderr(t, func() error {
+		_, err := captureStdout(t, func() error {
+			return cmdUpload([]string{file, "--password", "secret"})
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("cmdUpload: %v", err)
+	}
+	if !strings.Contains(stderr, "--password is exposed") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}
+
+func TestUploadWithSlugRejectsInvalidSlug(t *testing.T) {
+	err := cmdUpload([]string{"page.html", "--slug", "../x"})
+	if err == nil || !strings.Contains(err.Error(), "invalid slug") {
+		t.Fatalf("err = %v, want invalid slug", err)
+	}
+}
