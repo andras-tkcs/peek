@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -50,6 +51,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	default:
 		err = fmt.Errorf("unsupported login method")
 	}
+	if errors.Is(err, errLoginThrottled) {
+		rateLimitError(w, r)
+		return
+	}
 	if err != nil {
 		s.renderLoginForm(w, http.StatusOK, "Invalid credentials.", r)
 		return
@@ -59,23 +64,41 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.consumeNextPath(w, r), http.StatusSeeOther)
 }
 
+var errLoginThrottled = errors.New("too many failed sign-in attempts")
+
+func loginFailureKey(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
+
+// loginWithPassword counts failures per email address, whether or not the
+// account exists, so the limiter does not reveal which accounts are real.
 func (s *Server) loginWithPassword(r *http.Request) (int64, string, error) {
 	email := strings.TrimSpace(r.FormValue("email"))
 	password := r.FormValue("password")
 	if email == "" || password == "" {
 		return 0, "", fmt.Errorf("missing credentials")
 	}
-	owner, err := s.store.GetAccountByEmail(r.Context(), email)
+	key := loginFailureKey(email)
+	if s.accountLoginLimiter.blocked(key) {
+		return 0, "", errLoginThrottled
+	}
+	id, name, err := s.checkPasswordLogin(r.Context(), email, password)
+	if err != nil {
+		s.accountLoginLimiter.recordFailure(key)
+	}
+	return id, name, err
+}
+
+func (s *Server) checkPasswordLogin(ctx context.Context, email, password string) (int64, string, error) {
+	owner, err := s.store.GetAccountByEmail(ctx, email)
 	if err != nil || owner.PasswordHash == "" {
 		return 0, "", fmt.Errorf("invalid credentials")
 	}
 	if owner.Disabled {
 		return 0, "", fmt.Errorf("account disabled")
 	}
-	if !s.accountAllowedByEmailDomain(r.Context(), owner.Email) {
+	if !s.accountAllowedByEmailDomain(ctx, owner.Email) {
 		return 0, "", errAccountNotEligible
 	}
-	if s.oauthLoginRequired(r.Context()) && !owner.IsAdmin {
+	if s.oauthLoginRequired(ctx) && !owner.IsAdmin {
 		return 0, "", fmt.Errorf("oauth required")
 	}
 	if bcrypt.CompareHashAndPassword([]byte(owner.PasswordHash), []byte(password)) != nil {
