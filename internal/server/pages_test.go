@@ -176,11 +176,13 @@ func TestHandleRawStreamsHTMLWithBridgeInjection(t *testing.T) {
 	vid := "visitor"
 	storage := &rawPageStorage{body: "<HTML><BODY><h1>Hello</h1></BODY></HTML>"}
 	s := &Server{store: store, storage: storage, secret: secret}
-	req := httptest.NewRequest(http.MethodGet, "/raw/page?t="+makeViewToken(secret, "page", vid)+"&v="+vid, nil)
+	req := httptest.NewRequest(http.MethodGet, "/raw/page/v/1?t="+makeViewToken(secret, viewSubject("page", 1), vid), nil)
 	req.SetPathValue("slug", "page")
+	req.SetPathValue("n", "1")
+	req.AddCookie(&http.Cookie{Name: visitorCookie, Value: vid})
 	rec := httptest.NewRecorder()
 
-	s.handleRaw(rec, req)
+	s.handleRawVersion(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
@@ -190,6 +192,9 @@ func TestHandleRawStreamsHTMLWithBridgeInjection(t *testing.T) {
 	}
 	if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
 		t.Fatalf("content-type = %q", got)
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); got != rawContentCSP {
+		t.Fatalf("CSP = %q, want rawContentCSP", got)
 	}
 	assertBridgeBefore(t, rec.Body.String(), "</BODY>")
 }
