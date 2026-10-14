@@ -147,6 +147,7 @@ func TestParseServeConfigMapsFlagsAndEnv(t *testing.T) {
 	t.Setenv("PEEK_ADDR", ":8800")
 	t.Setenv("PEEK_S3_REGION", "auto")
 	t.Setenv("PEEK_TRUSTED_PROXY", "true")
+	t.Setenv("PEEK_TRUSTED_PROXY_CIDRS", "10.0.0.0/8, 192.0.2.7")
 
 	cfg, showVersion, err := parseServeConfig([]string{
 		"--data", dir,
@@ -185,6 +186,41 @@ func TestParseServeConfigMapsFlagsAndEnv(t *testing.T) {
 	}
 	if !cfg.TrustedProxy {
 		t.Fatal("TrustedProxy = false")
+	}
+	if len(cfg.TrustedProxyCIDRs) != 2 || cfg.TrustedProxyCIDRs[1].String() != "192.0.2.7/32" {
+		t.Fatalf("TrustedProxyCIDRs = %v", cfg.TrustedProxyCIDRs)
+	}
+}
+
+func TestParseServeConfigDefaultsTrustedProxyCIDRsToLoopback(t *testing.T) {
+	t.Setenv("PEEK_TRUSTED_PROXY_CIDRS", "")
+	cfg, _, err := parseServeConfig([]string{"--data", t.TempDir()})
+	if err != nil {
+		t.Fatalf("parseServeConfig: %v", err)
+	}
+	var got []string
+	for _, p := range cfg.TrustedProxyCIDRs {
+		got = append(got, p.String())
+	}
+	if len(got) != 2 || got[0] != "127.0.0.0/8" || got[1] != "::1/128" {
+		t.Fatalf("TrustedProxyCIDRs = %v", got)
+	}
+}
+
+func TestParseServeConfigRejectsInvalidTrustedProxyCIDRs(t *testing.T) {
+	t.Setenv("PEEK_TRUSTED_PROXY_CIDRS", "10.0.0.0/33")
+	_, _, err := parseServeConfig([]string{"--data", t.TempDir()})
+	want := `trusted-proxy-cidrs: invalid trusted proxy CIDR "10.0.0.0/33"`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want containing %q", err, want)
+	}
+}
+
+func TestParseServeConfigRejectsEmptyTrustedProxyCIDRs(t *testing.T) {
+	_, _, err := parseServeConfig([]string{"--data", t.TempDir(), "--trusted-proxy", "--trusted-proxy-cidrs", ""})
+	want := "trusted-proxy-cidrs must list at least one CIDR when trusted-proxy is set"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want containing %q", err, want)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
@@ -34,9 +35,10 @@ type serveConfig struct {
 	S3AllowPrivateEndpoint bool
 	OIDCAllowPrivateIssuer bool
 
-	MaxTotalSize  int64
-	RetentionDays int
-	TrustedProxy  bool
+	MaxTotalSize      int64
+	RetentionDays     int
+	TrustedProxy      bool
+	TrustedProxyCIDRs []netip.Prefix
 
 	GoogleSAKeyFile     string
 	GoogleAdminEmail    string
@@ -116,6 +118,7 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	maxTotalSize := fs.Int64("max-total-size", maxTotalSizeDefault, "max total storage bytes across all uploads (0 = unlimited)")
 	retentionDays := fs.Int("retention-days", retentionDaysDefault, "auto-delete uploads older than N days (0 = off)")
 	trustedProxy := fs.Bool("trusted-proxy", trustedProxyDefault, "trust X-Forwarded-For header (set when behind a reverse proxy)")
+	trustedProxyCIDRs := fs.String("trusted-proxy-cidrs", getenv("PEEK_TRUSTED_PROXY_CIDRS", server.DefaultTrustedProxyCIDRs), "comma-separated CIDRs of reverse proxies allowed to set X-Forwarded-For (used with --trusted-proxy)")
 	googleSAKeyFile := fs.String("google-sa-key-file", getenv("PEEK_GOOGLE_SA_KEY_FILE", ""), "path to Google service account JSON key for group lookups")
 	googleAdminEmail := fs.String("google-admin-email", getenv("PEEK_GOOGLE_ADMIN_EMAIL", ""), "Google Workspace admin user to impersonate for group lookups")
 	googleGroupCacheTTL := fs.Duration("google-group-cache-ttl", googleTTLDefault, "how long Google group membership answers are cached")
@@ -125,6 +128,13 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	}
 	if *showVersion {
 		return serveConfig{}, true, nil
+	}
+	cidrs, err := server.ParseTrustedProxyCIDRs(*trustedProxyCIDRs)
+	if err != nil {
+		return serveConfig{}, false, fmt.Errorf("trusted-proxy-cidrs: %w", err)
+	}
+	if *trustedProxy && len(cidrs) == 0 {
+		return serveConfig{}, false, fmt.Errorf("trusted-proxy-cidrs must list at least one CIDR when trusted-proxy is set")
 	}
 	if err := validateServeConfig(*baseURL, *maxUpload, *storageFlag, *maxTotalSize, *retentionDays); err != nil {
 		return serveConfig{}, false, err
@@ -156,9 +166,10 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		S3AllowPrivateEndpoint: *s3AllowPrivateEndpoint,
 		OIDCAllowPrivateIssuer: *oidcAllowPrivateIssuer,
 
-		MaxTotalSize:  *maxTotalSize,
-		RetentionDays: *retentionDays,
-		TrustedProxy:  *trustedProxy,
+		MaxTotalSize:      *maxTotalSize,
+		RetentionDays:     *retentionDays,
+		TrustedProxy:      *trustedProxy,
+		TrustedProxyCIDRs: cidrs,
 
 		GoogleSAKeyFile:     *googleSAKeyFile,
 		GoogleAdminEmail:    *googleAdminEmail,
@@ -224,10 +235,11 @@ func runServe(cfg serveConfig) int {
 		S3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		OIDCAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
 
-		MaxTotalSize:  cfg.MaxTotalSize,
-		RetentionDays: cfg.RetentionDays,
-		TrustedProxy:  cfg.TrustedProxy,
-		Groups:        groupChecker,
+		MaxTotalSize:      cfg.MaxTotalSize,
+		RetentionDays:     cfg.RetentionDays,
+		TrustedProxy:      cfg.TrustedProxy,
+		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
+		Groups:            groupChecker,
 	})
 	if err != nil {
 		slog.Error("init", "err", err)

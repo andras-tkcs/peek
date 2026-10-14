@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/andras-tkcs/peek/internal/db"
@@ -42,6 +44,9 @@ type Config struct {
 	RetentionDays int
 
 	TrustedProxy bool
+	// TrustedProxyCIDRs lists the proxies allowed to set X-Forwarded-For when
+	// TrustedProxy is on. Empty means DefaultTrustedProxyCIDRs.
+	TrustedProxyCIDRs []netip.Prefix
 
 	Groups GroupChecker
 }
@@ -67,11 +72,16 @@ type Server struct {
 	cliLoginLimiter *limiter
 	apiKeyLimiter   *limiter
 
-	trustedProxy           bool
-	s3AllowPrivateEndpoint bool
-	oidcAllowPrivateIssuer bool
-	visitQueue             chan visitEvent
-	groups                 GroupChecker
+	pagePasswordFailLimiter *limiter
+	accountLoginLimiter     *limiter
+
+	trustedProxy             bool
+	trustedProxyCIDRs        []netip.Prefix
+	warnedUntrustedForwarder atomic.Bool
+	s3AllowPrivateEndpoint   bool
+	oidcAllowPrivateIssuer   bool
+	visitQueue               chan visitEvent
+	groups                   GroupChecker
 }
 
 func New(cfg Config) (*Server, error) {
@@ -158,28 +168,43 @@ func New(cfg Config) (*Server, error) {
 		slog.Warn("base URL is not https — tokens and cookies sent in clear. Use a TLS reverse proxy.", "base_url", baseURL)
 	}
 
+	cidrs := cfg.TrustedProxyCIDRs
+	if cfg.TrustedProxy && len(cidrs) == 0 {
+		cidrs = defaultTrustedProxyPrefixes()
+	}
+	if cfg.TrustedProxy {
+		names := make([]string, len(cidrs))
+		for i, p := range cidrs {
+			names[i] = p.String()
+		}
+		slog.Info("trusted proxy enabled", "cidrs", names)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	srv := &Server{
-		store:                  store,
-		secret:                 secret,
-		baseURL:                baseURL,
-		dataDir:                cfg.DataDir,
-		storage:                st,
-		renderer:               renderer,
-		secure:                 secure,
-		ctx:                    ctx,
-		cancel:                 cancel,
-		loginLimiter:           newLimiter(10, time.Minute),
-		commentLimiter:         newLimiter(30, time.Minute),
-		uploadLimiter:          newLimiter(20, time.Minute),
-		passwordLimiter:        newLimiter(10, time.Minute),
-		globalLimiter:          newLimiter(300, time.Minute),
-		cliLoginLimiter:        newLimiter(120, time.Minute),
-		apiKeyLimiter:          newLimiter(10, time.Minute),
-		trustedProxy:           cfg.TrustedProxy,
-		s3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
-		oidcAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
-		visitQueue:             make(chan visitEvent, 256),
+		store:                   store,
+		secret:                  secret,
+		baseURL:                 baseURL,
+		dataDir:                 cfg.DataDir,
+		storage:                 st,
+		renderer:                renderer,
+		secure:                  secure,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		loginLimiter:            newLimiter(10, time.Minute),
+		commentLimiter:          newLimiter(30, time.Minute),
+		uploadLimiter:           newLimiter(20, time.Minute),
+		passwordLimiter:         newLimiter(10, time.Minute),
+		globalLimiter:           newLimiter(300, time.Minute),
+		cliLoginLimiter:         newLimiter(120, time.Minute),
+		apiKeyLimiter:           newLimiter(10, time.Minute),
+		pagePasswordFailLimiter: newLimiter(pagePasswordFailureMax, pagePasswordFailureWindow),
+		accountLoginLimiter:     newLimiter(accountLoginFailureMax, accountLoginFailureWindow),
+		trustedProxy:            cfg.TrustedProxy,
+		trustedProxyCIDRs:       cidrs,
+		s3AllowPrivateEndpoint:  cfg.S3AllowPrivateEndpoint,
+		oidcAllowPrivateIssuer:  cfg.OIDCAllowPrivateIssuer,
+		visitQueue:              make(chan visitEvent, 256),
 	}
 
 	if cfg.Groups != nil {

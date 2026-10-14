@@ -24,7 +24,7 @@ func (s *Server) withMiddleware(h http.Handler) http.Handler {
 			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		}
 		// Global rate limit to protect against request floods.
-		if !s.globalLimiter.allow(s.clientIP(r)) {
+		if !s.globalLimiter.allow(s.rateLimitKey(r)) {
 			rateLimitError(w, r)
 			return
 		}
