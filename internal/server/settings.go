@@ -139,6 +139,12 @@ func (s *Server) normalizeSettingValue(key, value string) (string, error) {
 				return "", fmt.Errorf("invalid s3 endpoint: %w", err)
 			}
 		}
+	case "s3_bucket":
+		if value != "" {
+			if err := objectstore.ValidateS3Bucket(value); err != nil {
+				return "", fmt.Errorf("invalid s3 bucket: %w", err)
+			}
+		}
 	}
 	return value, nil
 }

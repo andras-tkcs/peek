@@ -147,6 +147,7 @@ func TestNormalizeSettingsValues(t *testing.T) {
 		{key: "max_uploads_per_token", value: "12", want: "12"},
 		{key: "retention_days", value: "30", want: "30"},
 		{key: "storage", value: "S3", want: "s3"},
+		{key: "s3_bucket", value: " peek ", want: "peek"},
 	}
 	for _, tt := range tests {
 		got, err := s.normalizeSettingValue(tt.key, tt.value)
@@ -442,4 +443,12 @@ func mustGetSetting(t *testing.T, store *db.Store, key string) string {
 		t.Fatal(err)
 	}
 	return got
+}
+
+func TestNormalizeSettingRejectsInvalidS3Bucket(t *testing.T) {
+	s := &Server{}
+	_, err := s.normalizeSettingValue("s3_bucket", "a/b")
+	if err == nil || !strings.Contains(err.Error(), "invalid s3 bucket") {
+		t.Fatalf("error = %v", err)
+	}
 }
