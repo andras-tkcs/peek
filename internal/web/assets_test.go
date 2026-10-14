@@ -416,3 +416,43 @@ func TestToastShowsReactiveCopy(t *testing.T) {
 		t.Fatal("setting show on the raw toast object bypasses Alpine reactivity")
 	}
 }
+
+func TestParentAppMarksVerifiedComments(t *testing.T) {
+	b, err := assetsFS.ReadFile("assets/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{`verified: comment.verified === true`, `"verified:"`} {
+		if !strings.Contains(src, want) {
+			t.Fatalf("app.js missing %q", want)
+		}
+	}
+}
+
+func TestServeAssetWithoutMatchingVersionUsesShortCache(t *testing.T) {
+	for _, target := range []string{"/bridge.js", "/bridge.js?v=stale"} {
+		rec := httptest.NewRecorder()
+		ServeAsset(rec, httptest.NewRequest(http.MethodGet, target, nil), "bridge.js")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d", target, rec.Code)
+		}
+		if got := rec.Header().Get("Cache-Control"); got != "public, max-age=3600" {
+			t.Fatalf("%s: cache-control = %q", target, got)
+		}
+	}
+}
+
+func TestServeAssetMissingEmbeddedFileIs404(t *testing.T) {
+	assetManifest["ghost.js"] = embeddedAsset{path: "assets/ghost.js", contentType: "text/javascript"}
+	t.Cleanup(func() { delete(assetManifest, "ghost.js") })
+
+	rec := httptest.NewRecorder()
+	ServeAsset(rec, httptest.NewRequest(http.MethodGet, "/ghost.js", nil), "ghost.js")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if got := AssetURL("ghost.js"); got != "/ghost.js" {
+		t.Fatalf("AssetURL = %q, want unhashed", got)
+	}
+}

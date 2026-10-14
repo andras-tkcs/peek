@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -54,6 +53,10 @@ func cmdVersions(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: peek versions <slug>")
 	}
+	seg, err := slugPath(args[0])
+	if err != nil {
+		return err
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -68,7 +71,7 @@ func cmdVersions(args []string) error {
 		CreatedAt int64  `json:"created_at"`
 		URL       string `json:"url"`
 	}
-	if err := c.getJSON("/api/uploads/"+args[0]+"/versions", &items); err != nil {
+	if err := c.getJSON("/api/uploads/"+seg+"/versions", &items); err != nil {
 		return err
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
@@ -84,6 +87,10 @@ func cmdDelete(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: peek delete <slug>")
 	}
+	seg, err := slugPath(args[0])
+	if err != nil {
+		return err
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -92,7 +99,7 @@ func cmdDelete(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := c.del("/api/uploads/"+args[0], nil); err != nil {
+	if err := c.del("/api/uploads/"+seg, nil); err != nil {
 		return err
 	}
 	fmt.Printf("deleted: %s\n", args[0])
@@ -103,10 +110,11 @@ func cmdDelete(args []string) error {
 
 func cmdVisibility(args []string) error {
 	var (
-		slug          string
-		visibility    string
-		password      string
-		passwordStdin bool
+		slug             string
+		visibility       string
+		password         string
+		passwordStdin    bool
+		usedPasswordFlag bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -115,6 +123,7 @@ func cmdVisibility(args []string) error {
 				return fmt.Errorf("--password requires a value")
 			}
 			password = args[i+1]
+			usedPasswordFlag = true
 			i++
 		case "--password-stdin":
 			passwordStdin = true
@@ -156,6 +165,13 @@ func cmdVisibility(args []string) error {
 	if visibility != "password" && password != "" {
 		return fmt.Errorf("--password is only valid with password visibility")
 	}
+	seg, err := slugPath(slug)
+	if err != nil {
+		return err
+	}
+	if usedPasswordFlag {
+		fmt.Fprintln(os.Stderr, "warning: --password is exposed in your shell history and process list (ps). Prefer --password-stdin.")
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -168,7 +184,7 @@ func cmdVisibility(args []string) error {
 	var out struct {
 		Visibility string `json:"visibility"`
 	}
-	if err := c.postJSON("/api/uploads/"+slug+"/visibility", body, &out); err != nil {
+	if err := c.postJSON("/api/uploads/"+seg+"/visibility", body, &out); err != nil {
 		return err
 	}
 	fmt.Printf("visibility: %s\n", out.Visibility)
@@ -184,6 +200,10 @@ func cmdRename(args []string) error {
 	if name == "" {
 		return fmt.Errorf("usage: peek rename <slug> <new name>")
 	}
+	seg, err := slugPath(slug)
+	if err != nil {
+		return err
+	}
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -197,7 +217,7 @@ func cmdRename(args []string) error {
 		URL  string `json:"url"`
 		Name string `json:"name"`
 	}
-	if err := c.postJSON("/api/uploads/"+url.PathEscape(slug)+"/name", map[string]any{"name": name}, &out); err != nil {
+	if err := c.postJSON("/api/uploads/"+seg+"/name", map[string]any{"name": name}, &out); err != nil {
 		return err
 	}
 	fmt.Printf("slug: %s\n", out.Slug)

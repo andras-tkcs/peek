@@ -9,7 +9,7 @@ kicker: peekd --addr :7700
 Install release binaries when you want the normal deployment path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/puemos/peek/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
 ```
 
 The release ships two binaries:
@@ -80,8 +80,10 @@ docker run -d --name peek --restart unless-stopped \
   -p 7700:7700 \
   -v peek-data:/data \
   -e PEEK_BASE_URL=https://peek.example.com \
-  ghcr.io/puemos/peek:latest
+  ghcr.io/andras-tkcs/peek:latest
 ```
+
+For production, pin a release tag (`ghcr.io/andras-tkcs/peek:<version>`) or an image digest (`ghcr.io/andras-tkcs/peek@sha256:…`).
 
 The image is scratch-based, runs as uid `65532`, exposes port `7700`, and stores server state under `/data`.
 
@@ -97,11 +99,11 @@ peek.example.com {
 }
 ```
 
-Set `--trusted-proxy` only when the proxy is controlled by you and overwrites or controls `X-Forwarded-For`. When it is not set, Peek ignores forwarded IP headers for analytics and audit fields.
+Set `--trusted-proxy` only when the proxy is controlled by you and overwrites or controls `X-Forwarded-For`. When it is not set, Peek ignores forwarded IP headers for analytics and audit fields. Peek accepts the header only from `--trusted-proxy-cidrs` (default loopback); set it to your proxy's address range when the proxy is not on the same host.
 
 Set `--base-url` / `PEEK_BASE_URL` before users create durable links. If you do not have a custom domain yet, use the stable default hostname your platform assigns from the service name, then update it before configuring OAuth or inviting users if the platform assigns a different URL.
 
-Keep `/metrics` protected at the proxy or network layer.
+Set `--metrics-token` / `PEEK_METRICS_TOKEN` (or `PEEK_METRICS_TOKEN_FILE`) to require a bearer token on `/metrics`, and keep it protected at the proxy or network layer.
 
 ## Smoke Test
 

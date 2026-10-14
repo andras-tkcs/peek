@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -52,20 +55,56 @@ func ValidateS3Endpoint(endpoint string, allowPrivateEndpoint bool) error {
 	return nil
 }
 
-// isPrivateOrMetadataIP returns true for RFC 1918, link-local, loopback (non-
-// localhost check), and cloud metadata endpoints.
+// blockedS3Prefixes are ranges never valid for a public S3 endpoint, beyond what
+// netip's IsLoopback/IsPrivate/IsLinkLocal*/IsMulticast/IsUnspecified cover.
+var blockedS3Prefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),          // "this network"
+	netip.MustParsePrefix("100.64.0.0/10"),      // CGNAT, incl. Alibaba Cloud metadata 100.100.100.200
+	netip.MustParsePrefix("169.254.169.254/32"), // cloud metadata (also link-local)
+	netip.MustParsePrefix("192.0.0.0/24"),       // IETF protocol assignments
+	netip.MustParsePrefix("198.18.0.0/15"),      // benchmarking
+	netip.MustParsePrefix("224.0.0.0/4"),        // IPv4 multicast
+	netip.MustParsePrefix("240.0.0.0/4"),        // reserved, incl. 255.255.255.255
+	netip.MustParsePrefix("::/96"),              // IPv4-compatible IPv6 (deprecated)
+	netip.MustParsePrefix("64:ff9b::/96"),       // NAT64 well-known prefix
+	netip.MustParsePrefix("64:ff9b:1::/48"),     // NAT64 local-use prefix
+	netip.MustParsePrefix("2001::/32"),          // Teredo
+	netip.MustParsePrefix("2002::/16"),          // 6to4
+	netip.MustParsePrefix("fc00::/7"),           // unique local (incl. AWS fd00:ec2::254)
+	netip.MustParsePrefix("fec0::/10"),          // deprecated site-local
+	netip.MustParsePrefix("ff00::/8"),           // IPv6 multicast
+}
+
+// isPrivateOrMetadataIP reports whether ip must not be used as an S3 endpoint
+// address unless private endpoints are explicitly allowed.
 func isPrivateOrMetadataIP(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
 		return true
 	}
-	// Cloud metadata endpoints.
-	cloudMetadata := []string{"169.254.169.254", "fd00:ec2::254"}
-	for _, addr := range cloudMetadata {
-		if mdIP := net.ParseIP(addr); mdIP != nil && ip.Equal(mdIP) {
+	addr = addr.Unmap()
+	if addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() ||
+		addr.IsLinkLocalMulticast() || addr.IsInterfaceLocalMulticast() ||
+		addr.IsMulticast() || addr.IsUnspecified() {
+		return true
+	}
+	for _, p := range blockedS3Prefixes {
+		if p.Contains(addr) {
 			return true
 		}
 	}
 	return false
+}
+
+var s3BucketPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+
+// ValidateS3Bucket accepts DNS-compatible bucket names (AWS, R2 and MinIO rules),
+// so a bucket can never inject path segments, queries or fragments into object URLs.
+func ValidateS3Bucket(bucket string) error {
+	if !s3BucketPattern.MatchString(bucket) || strings.Contains(bucket, "..") || net.ParseIP(bucket) != nil {
+		return errors.New("S3 bucket must be 3-63 lowercase letters, digits, dots or hyphens, start and end with a letter or digit, and not be an IP address")
+	}
+	return nil
 }
 
 func newS3HTTPClient(allowPrivateEndpoint bool) *http.Client {

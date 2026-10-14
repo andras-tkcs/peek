@@ -86,7 +86,7 @@ func verifyViewToken(secret, tok, slug, vid string) bool {
 		return false
 	}
 	tSlug, tVid, expStr, sig := parts[0], parts[1], parts[2], parts[3]
-	if tSlug != slug || tVid != vid {
+	if vid == "" || tSlug != slug || tVid != vid {
 		return false
 	}
 	exp, err := strconv.ParseInt(expStr, 10, 64)

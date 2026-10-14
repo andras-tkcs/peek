@@ -15,7 +15,7 @@ func (s *Server) newCSRF(w http.ResponseWriter) (string, error) {
 	s.setCookie(w, &http.Cookie{
 		Name: csrfCookie, Value: val, Path: "/",
 		MaxAge:   0,
-		SameSite: http.SameSiteStrictMode, HttpOnly: false,
+		SameSite: http.SameSiteStrictMode, HttpOnly: true,
 	})
 	return val, nil
 }

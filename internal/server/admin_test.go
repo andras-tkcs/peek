@@ -3,6 +3,9 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -50,7 +53,7 @@ func TestDashboardRevokeInviteRejectsMissingInvite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse location: %v", err)
 	}
-	if got := u.Query().Get("err"); got != "bad invite" {
+	if got := u.Query().Get("err"); got != "bad_invite" {
 		t.Fatalf("err query = %q, location = %q", got, loc)
 	}
 }
@@ -68,7 +71,7 @@ func TestDashboardRevokeInviteReportsSuccessAfterUpdate(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	if rec.Header().Get("Location") != "/dashboard?ok=invite+revoked" {
+	if rec.Header().Get("Location") != "/dashboard?ok=invite_revoked" {
 		t.Fatalf("location = %q", rec.Header().Get("Location"))
 	}
 }
@@ -123,4 +126,225 @@ func dashboardInviteRequest(s *Server, accountID int64, id string) *http.Request
 	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: makeWebSession(s.secret, strconv.FormatInt(accountID, 10), sessionTTL)})
 	req.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
 	return req
+}
+
+func TestInviteLinkSetsCookieForPendingInvite(t *testing.T) {
+	s, store, adminID, _ := admFaultAdmin(t)
+	if _, err := store.CreateInvite(context.Background(), "raw-token", "cipher", "new@example.test", adminID, time.Now().Add(inviteTTL)); err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodGet, "/invite/raw-token", nil)
+	assertDashboardRedirect(t, rec, "/login")
+	var found bool
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == inviteCookie && c.Value == "raw-token" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("invite cookie not set: %v", rec.Header()["Set-Cookie"])
+	}
+}
+
+func admFaultAdmin(t *testing.T) (*Server, *db.Store, int64, *faultStorage) {
+	t.Helper()
+	s, store, storage, adminID := newFaultServer(t)
+	return s, store, adminID, storage
+}
+
+func TestDashboardCreateInviteBranches(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, s *Server, store *db.Store)
+		form  url.Values
+		csrf  bool
+		want  string
+	}{
+		{name: "bad csrf", form: url.Values{"email": {"a@example.test"}}, csrf: false, want: "/dashboard?err=invalid_session"},
+		{name: "empty email", form: url.Values{"email": {""}}, csrf: true, want: "/dashboard?err=invite_email_required"},
+		{name: "no at sign", form: url.Values{"email": {"nobody"}}, csrf: true, want: "/dashboard?err=invite_email_required"},
+		{
+			name: "domain rejected",
+			setup: func(t *testing.T, s *Server, store *db.Store) {
+				if err := store.SetSetting(context.Background(), authAllowedEmailDomainSetting, "example.test"); err != nil {
+					t.Fatal(err)
+				}
+			},
+			form: url.Values{"email": {"a@other.test"}}, csrf: true, want: "/dashboard?err=invite_domain",
+		},
+		{
+			name: "random failure",
+			setup: func(t *testing.T, s *Server, store *db.Store) {
+				stubSecureRandomRead(t, func(b []byte) (int, error) {
+					if len(b) == 24 { // the invite token
+						return 0, errors.New("rand down")
+					}
+					return rand.Read(b)
+				})
+			},
+			form: url.Values{"email": {"a@example.test"}}, csrf: true, want: "/dashboard?err=invite_failed",
+		},
+		{
+			name:  "encrypt failure",
+			setup: func(t *testing.T, s *Server, store *db.Store) { s.secret = "zz" },
+			form:  url.Values{"email": {"a@example.test"}}, csrf: true, want: "/dashboard?err=invite_failed",
+		},
+		{
+			name:  "store failure",
+			setup: func(t *testing.T, s *Server, store *db.Store) { addFailTrigger(t, store, "invites", "INSERT") },
+			form:  url.Values{"email": {"a@example.test"}}, csrf: true, want: "/dashboard?err=invite_failed",
+		},
+		{name: "success", form: url.Values{"email": {" New@Example.test "}}, csrf: true, want: "/dashboard?ok=invite_created"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, store, _, adminID := newFaultServer(t)
+			if tt.setup != nil {
+				tt.setup(t, s, store)
+			}
+			rec := dashboardPost(t, s, adminID, "/dashboard/invites", tt.form, tt.csrf)
+			assertDashboardRedirect(t, rec, tt.want)
+		})
+	}
+}
+
+func TestDashboardAdminActionsRejectNonAdmin(t *testing.T) {
+	s, store, _, _ := newFaultServer(t)
+	user, err := store.CreateAccount(context.Background(), "user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		"/dashboard/invites",
+		"/dashboard/invites/revoke/1",
+		"/dashboard/users/1/admin",
+		"/dashboard/users/1/disabled",
+	} {
+		rec := dashboardPost(t, s, user.ID, path, url.Values{}, true)
+		assertDashboardRedirect(t, rec, "/login")
+	}
+}
+
+func TestDashboardAdminActionsRejectBadCSRF(t *testing.T) {
+	s, _, _, adminID := newFaultServer(t)
+	for _, path := range []string{
+		"/dashboard/invites/revoke/1",
+		"/dashboard/users/1/admin",
+		"/dashboard/users/1/disabled",
+	} {
+		rec := dashboardPost(t, s, adminID, path, url.Values{}, false)
+		assertDashboardRedirect(t, rec, "/dashboard?err=invalid_session")
+	}
+}
+
+func TestDashboardRevokeInviteBadIDAndStoreFailure(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+	rec := dashboardPost(t, s, adminID, "/dashboard/invites/revoke/abc", url.Values{}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err=bad_invite")
+
+	inv, err := store.CreateInvite(context.Background(), "raw", "cipher", "u@example.test", adminID, time.Now().Add(inviteTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	addFailTrigger(t, store, "invites", "UPDATE")
+	rec = dashboardPost(t, s, adminID, "/dashboard/invites/revoke/"+strconv.FormatInt(inv.ID, 10), url.Values{}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err=invite_revoke_failed")
+}
+
+func TestDashboardUserToggles(t *testing.T) {
+	for _, field := range []string{"admin", "disabled"} {
+		t.Run(field, func(t *testing.T) {
+			s, store, _, adminID := newFaultServer(t)
+			other, err := store.CreateAccount(context.Background(), "other@example.test", "Other", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			base := "/dashboard/users/%s/" + field
+
+			rec := dashboardPost(t, s, adminID, fmt.Sprintf(base, "abc"), url.Values{field: {"true"}}, true)
+			assertDashboardRedirect(t, rec, "/dashboard?err=bad_user")
+
+			// The only admin cannot lose admin rights or be disabled.
+			wantLast := "/dashboard?err=last_admin_remove"
+			if field == "disabled" {
+				wantLast = "/dashboard?err=last_admin_disable"
+			}
+			lastVal := "true"
+			if field == "admin" {
+				lastVal = "false"
+			}
+			rec = dashboardPost(t, s, adminID, fmt.Sprintf(base, strconv.FormatInt(adminID, 10)), url.Values{field: {lastVal}}, true)
+			assertDashboardRedirect(t, rec, wantLast)
+
+			otherPath := fmt.Sprintf(base, strconv.FormatInt(other.ID, 10))
+			rec = dashboardPost(t, s, adminID, otherPath, url.Values{field: {"true"}}, true)
+			assertDashboardRedirect(t, rec, "/dashboard?ok=user_updated")
+
+			addFailTrigger(t, store, "accounts", "UPDATE")
+			rec = dashboardPost(t, s, adminID, otherPath, url.Values{field: {"false"}}, true)
+			assertDashboardRedirect(t, rec, "/dashboard?err=user_update_failed")
+		})
+	}
+}
+
+func TestDashboardInviteRowsStatusesAndFailure(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+	ctx := context.Background()
+	mk := func(raw, email string, expires time.Time) int64 {
+		cipher, err := encryptSecret(s.secret, raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inv, err := store.CreateInvite(ctx, raw, cipher, email, adminID, expires)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return inv.ID
+	}
+	mk("pending-raw", "pending@example.test", time.Now().Add(time.Hour))
+	usedID := mk("used-raw", "used@example.test", time.Now().Add(time.Hour))
+	revokedID := mk("revoked-raw", "revoked@example.test", time.Now().Add(time.Hour))
+	mk("expired-raw", "expired@example.test", time.Now().Add(-time.Hour))
+	if err := store.ConsumeInvite(ctx, usedID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RevokeInvite(ctx, revokedID); err != nil {
+		t.Fatal(err)
+	}
+
+	got := map[string]inviteDashRow{}
+	for _, row := range s.dashboardInviteRows(ctx) {
+		got[row.Email] = row
+	}
+	for email, want := range map[string]string{
+		"pending@example.test": "pending",
+		"used@example.test":    "used",
+		"revoked@example.test": "revoked",
+		"expired@example.test": "expired",
+	} {
+		row, ok := got[email]
+		if !ok || row.Status != want {
+			t.Fatalf("%s row = %+v, want status %s", email, row, want)
+		}
+		if (want == "pending") != (row.Link != "" && row.CanRevoke) {
+			t.Fatalf("%s link/revoke = %q/%v", email, row.Link, row.CanRevoke)
+		}
+	}
+
+	dropTable(t, store, "invites")
+	if rows := s.dashboardInviteRows(ctx); rows != nil {
+		t.Fatalf("rows after drop = %+v, want nil", rows)
+	}
+}
+
+func TestDashboardAccountRowsListFailure(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+	rows := s.dashboardAccountRows(context.Background(), adminID)
+	if len(rows) != 1 || !rows[0].IsSelf {
+		t.Fatalf("rows = %+v", rows)
+	}
+	dropTable(t, store, "accounts")
+	if rows := s.dashboardAccountRows(context.Background(), adminID); rows != nil {
+		t.Fatalf("rows after drop = %+v, want nil", rows)
+	}
 }

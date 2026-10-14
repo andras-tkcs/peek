@@ -31,6 +31,9 @@ func TestCSRFTokenSetsCookie(t *testing.T) {
 	if len(cookies) != 1 || cookies[0].Name != csrfCookie || cookies[0].Value != token {
 		t.Fatalf("csrf cookie = %+v", cookies)
 	}
+	if !cookies[0].HttpOnly {
+		t.Fatal("csrf cookie must be HttpOnly")
+	}
 }
 
 func TestCSRFTokenReportsEntropyFailure(t *testing.T) {

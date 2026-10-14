@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 const (
@@ -17,35 +19,59 @@ func oauthCookieName(provider string) string {
 	return "hn_oauth_" + provider
 }
 
-func (s *Server) makeOAuthFlowCookie(provider, state, verifier string) string {
-	payload := base64.RawURLEncoding.EncodeToString([]byte(provider + "|" + state + "|" + verifier))
+func (s *Server) makeOAuthFlowCookie(provider, state, verifier, nonce string) string {
+	payload := base64.RawURLEncoding.EncodeToString([]byte(provider + "|" + state + "|" + verifier + "|" + nonce))
 	return makeWebSession(s.secret, payload, 10*time.Minute)
 }
 
-func (s *Server) parseOAuthFlowCookie(r *http.Request, provider string) (state, verifier string, ok bool) {
+func (s *Server) parseOAuthFlowCookie(r *http.Request, provider string) (state, verifier, nonce string, ok bool) {
 	c, err := r.Cookie(oauthCookieName(provider))
 	if err != nil || c.Value == "" {
-		return "", "", false
+		return "", "", "", false
 	}
 	payload, ok := parseSignedSubject(s.secret, c.Value)
 	if !ok {
-		return "", "", false
+		return "", "", "", false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(payload)
 	if err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
-	parts := strings.SplitN(string(raw), "|", 3)
-	if len(parts) != 3 || parts[0] != provider {
-		return "", "", false
+	parts := strings.SplitN(string(raw), "|", 4)
+	if len(parts) != 4 || parts[0] != provider || parts[3] == "" {
+		return "", "", "", false
 	}
-	return parts[1], parts[2], true
+	return parts[1], parts[2], parts[3], true
 }
 
-func (s *Server) setWebSession(w http.ResponseWriter, accountID int64) {
+// sessionSubject is the signed subject of a dashboard session cookie.
+func sessionSubject(accountID, epoch int64) string {
+	return strconv.FormatInt(accountID, 10) + ":" + strconv.FormatInt(epoch, 10)
+}
+
+// parseSessionSubject accepts "<id>:<epoch>" and the older "<id>", which
+// counts as epoch 0 so sessions from before migration 12 stay valid until the
+// account's epoch first changes. id must be > 0 and epoch >= 0.
+func parseSessionSubject(sub string) (accountID, epoch int64, ok bool) {
+	idPart, epochPart, hasEpoch := strings.Cut(sub, ":")
+	id, err := strconv.ParseInt(idPart, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, 0, false
+	}
+	if !hasEpoch {
+		return id, 0, true
+	}
+	e, err := strconv.ParseInt(epochPart, 10, 64)
+	if err != nil || e < 0 {
+		return 0, 0, false
+	}
+	return id, e, true
+}
+
+func (s *Server) setWebSession(w http.ResponseWriter, account *models.Account) {
 	s.setCookie(w, &http.Cookie{
 		Name:     sessionCookie,
-		Value:    makeWebSession(s.secret, strconv.FormatInt(accountID, 10), sessionTTL),
+		Value:    makeWebSession(s.secret, sessionSubject(account.ID, account.SessionEpoch), sessionTTL),
 		Path:     "/",
 		MaxAge:   int(sessionTTL.Seconds()),
 		SameSite: http.SameSiteStrictMode,

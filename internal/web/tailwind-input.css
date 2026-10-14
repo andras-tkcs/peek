@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@source not "../../docs";
+@source not "../../skills";
+@source not "../../**/*.md";
 
 [x-cloak] { display: none !important; }
 

@@ -10,8 +10,14 @@ import (
 )
 
 func (s *Store) CreateCLILoginDevice(ctx context.Context, deviceCode, userCode string, expiresAt time.Time) error {
-	_, err := s.ExecContext(ctx, `INSERT INTO cli_login_devices(device_hash,user_code,status,created_at,expires_at) VALUES(?,?,?,?,?)`,
-		HashToken(deviceCode), userCode, "pending", time.Now().Unix(), expiresAt.Unix())
+	return s.CreateCLILoginDeviceWithContext(ctx, deviceCode, userCode, expiresAt, "", "")
+}
+
+// CreateCLILoginDeviceWithContext stores a pending CLI login together with the
+// client IP and User-Agent of the request that started it.
+func (s *Store) CreateCLILoginDeviceWithContext(ctx context.Context, deviceCode, userCode string, expiresAt time.Time, requestIP, userAgent string) error {
+	_, err := s.ExecContext(ctx, `INSERT INTO cli_login_devices(device_hash,user_code,status,created_at,expires_at,request_ip,request_user_agent) VALUES(?,?,?,?,?,?,?)`,
+		HashToken(deviceCode), userCode, "pending", time.Now().Unix(), expiresAt.Unix(), requestIP, userAgent)
 	return err
 }
 
@@ -27,8 +33,8 @@ func (s *Store) getCLILoginWhere(ctx context.Context, where string, arg any) (*m
 	d := &models.CLILoginDevice{}
 	var accountID sql.NullInt64
 	var created, expires, consumed int64
-	err := s.QueryRowContext(ctx, `SELECT id,user_code,status,account_id,created_at,expires_at,consumed_at FROM cli_login_devices WHERE `+where, arg).
-		Scan(&d.ID, &d.UserCode, &d.Status, &accountID, &created, &expires, &consumed)
+	err := s.QueryRowContext(ctx, `SELECT id,user_code,status,account_id,created_at,expires_at,consumed_at,request_ip,request_user_agent FROM cli_login_devices WHERE `+where, arg).
+		Scan(&d.ID, &d.UserCode, &d.Status, &accountID, &created, &expires, &consumed, &d.RequestIP, &d.UserAgent)
 	if err != nil {
 		return nil, err
 	}

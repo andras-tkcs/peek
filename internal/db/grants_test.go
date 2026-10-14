@@ -144,3 +144,30 @@ func TestListUploadGrantsForUploads(t *testing.T) {
 		t.Fatalf("nil ids = %v, %v; want non-nil empty map", empty, err)
 	}
 }
+
+func TestGrantWritesAndScanErrors(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	t.Cleanup(func() { s.Close() })
+	accountID, uploadID := seedVersionUpload(t, s, "o@example.test", "g", 1)
+	if g, err := s.AddUploadGrant(ctx, uploadID, "user", "a@example.test", accountID); err != nil || g.CreatedByAccountID != accountID {
+		t.Fatalf("grant = %+v, %v", g, err)
+	}
+	if g, err := s.AddUploadGrant(ctx, uploadID, "group", "g@example.test", 0); err != nil || g.CreatedByAccountID != 0 {
+		t.Fatalf("grant without creator = %+v, %v", g, err)
+	}
+	corruptInt(t, s, "upload_grants", "created_at")
+	// The duplicate insert is a no-op, so the follow-up SELECT hits the bad row.
+	_, err := s.AddUploadGrant(ctx, uploadID, "user", "a@example.test", accountID)
+	wantErr(t, "AddUploadGrant select", err)
+	_, err = s.ListUploadGrants(ctx, uploadID)
+	wantErr(t, "ListUploadGrants", err)
+	_, err = s.ListUploadGrantsForUploads(ctx, []int64{uploadID})
+	wantErr(t, "ListUploadGrantsForUploads", err)
+
+	failOn(t, s, "upload_grants", "INSERT")
+	_, err = s.AddUploadGrant(ctx, uploadID, "user", "new@example.test", 0)
+	wantErr(t, "AddUploadGrant insert", err)
+	failOn(t, s, "upload_grants", "DELETE")
+	wantErr(t, "RemoveUploadGrant", s.RemoveUploadGrant(ctx, uploadID, "user", "a@example.test"))
+}

@@ -94,7 +94,7 @@ func TestRenameDerivesNewSlug(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Slug != "new-page" || res.URL != "http://h/p/new-page" || !res.SlugChanged {
+	if !strings.HasPrefix(res.Slug, "new-page-") || len(res.Slug) != len("new-page-")+6 || res.URL != "http://h/p/"+res.Slug || !res.SlugChanged {
 		t.Fatalf("res = %+v", res)
 	}
 }
@@ -128,4 +128,18 @@ func TestRenameReportsPersistenceFailure(t *testing.T) {
 	if e.Message != "rename failed" {
 		t.Fatalf("message = %q", e.Message)
 	}
+}
+
+type slugErrRenameRepo struct {
+	fakeRenameRepo
+}
+
+func (slugErrRenameRepo) UploadSlugExists(context.Context, string) (bool, error) {
+	return false, errors.New("lookup failed")
+}
+
+func TestRenameReportsSlugGenerationFailure(t *testing.T) {
+	repo := &slugErrRenameRepo{}
+	_, err := Rename(context.Background(), repo, "http://h", RenameInput{CurrentSlug: "old", CurrentName: "old", Name: "New Page"})
+	requireKind(t, err, KindSlugGeneration)
 }

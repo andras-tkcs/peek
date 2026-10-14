@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
+	"unicode"
 )
 
 const retentionCleanupInterval = 1 * time.Hour
@@ -117,4 +120,33 @@ func (s *Server) pruneOldVersions(ctx context.Context, cutoff time.Time) {
 	if pruned > 0 {
 		slog.Info("retention cleanup: pruned old versions", "count", pruned, "cutoff", cutoff.Format(time.DateOnly))
 	}
+}
+
+// auditDetail formats key/value pairs as space-separated key=value fields. A
+// value that is empty or contains a space, '=', '"', '\\' or a non-printable
+// rune is written with strconv.Quote, so user-supplied text (page names, token
+// names, account names) cannot forge or hide another field. Keys must be fixed
+// identifiers. An odd trailing key gets an empty value.
+func auditDetail(kv ...string) string {
+	var b strings.Builder
+	for i := 0; i < len(kv); i += 2 {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(kv[i])
+		b.WriteByte('=')
+		v := ""
+		if i+1 < len(kv) {
+			v = kv[i+1]
+		}
+		b.WriteString(auditValue(v))
+	}
+	return b.String()
+}
+
+func auditValue(v string) string {
+	if v == "" || strings.ContainsAny(v, " =\"\\") || strings.IndexFunc(v, func(r rune) bool { return !unicode.IsPrint(r) }) >= 0 {
+		return strconv.Quote(v)
+	}
+	return v
 }

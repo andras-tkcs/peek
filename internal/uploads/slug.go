@@ -3,7 +3,6 @@ package uploads
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,9 +10,13 @@ import (
 )
 
 const (
-	slugRetries   = 5
-	maxSlugLength = 60
-	clashSuffix   = 4
+	slugRetries      = 5
+	maxSlugLength    = 60
+	slugSuffixLength = 6
+	randomSlugLength = 16
+	// slugAlphabet has 32 lowercase letters and digits without 0, 1, l and o,
+	// so one random byte maps to one character without bias (b & 31).
+	slugAlphabet = "abcdefghijkmnpqrstuvwxyz23456789"
 )
 
 func slugify(name string) string {
@@ -45,20 +48,19 @@ func slugify(name string) string {
 	return s
 }
 
+// generateSlugFromName derives a link from name plus a random suffix, so a page
+// cannot be found by guessing its name. Names with no slug characters get a
+// fully random slug.
 func generateSlugFromName(ctx context.Context, name string, store slugChecker) (string, error) {
 	base := slugify(name)
 	if base == "" {
 		return generateRandomSlug(ctx, store)
 	}
-	exists, err := store.UploadSlugExists(ctx, base)
-	if err != nil {
-		return "", fmt.Errorf("check slug availability: %w", err)
-	}
-	if !exists {
-		return base, nil
+	if limit := maxSlugLength - 1 - slugSuffixLength; len(base) > limit {
+		base = strings.TrimRight(base[:limit], "-")
 	}
 	for range slugRetries {
-		suffix, err := randID(clashSuffix)
+		suffix, err := randomSlugString(slugSuffixLength)
 		if err != nil {
 			return "", err
 		}
@@ -76,7 +78,7 @@ func generateSlugFromName(ctx context.Context, name string, store slugChecker) (
 
 func generateRandomSlug(ctx context.Context, store slugChecker) (string, error) {
 	for range slugRetries {
-		s, err := randID(10)
+		s, err := randomSlugString(randomSlugLength)
 		if err != nil {
 			return "", err
 		}
@@ -95,12 +97,16 @@ type slugChecker interface {
 	UploadSlugExists(ctx context.Context, slug string) (bool, error)
 }
 
-func randID(nBytes int) (string, error) {
-	b := make([]byte, nBytes)
+// randomSlugString returns n characters from slugAlphabet using crypto/rand.
+func randomSlugString(n int) (string, error) {
+	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
+	for i := range b {
+		b[i] = slugAlphabet[b[i]&31]
+	}
+	return string(b), nil
 }
 
 func versionObjectKey(slug string) (string, error) {

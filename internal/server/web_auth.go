@@ -2,14 +2,14 @@ package server
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/andras-tkcs/peek/internal/models"
 )
 
 // webAuth validates the signed session cookie and returns the account.
 // The cookie holds a signed reference to the account id, so it is revocable via
-// account disablement and never carries an API credential.
+// account disablement, the allowed email domain and the OAuth-required setting,
+// and never carries an API credential.
 func (s *Server) webAuth(r *http.Request) (*models.Account, bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil || c.Value == "" {
@@ -19,25 +19,19 @@ func (s *Server) webAuth(r *http.Request) (*models.Account, bool) {
 	if !ok {
 		return nil, false
 	}
-	id, err := strconv.ParseInt(sub, 10, 64)
-	if err != nil {
+	id, epoch, ok := parseSessionSubject(sub)
+	if !ok {
 		return nil, false
 	}
 	a, err := s.store.GetAccountByID(r.Context(), id)
 	if err != nil {
 		return nil, false
 	}
-	if a.Disabled {
+	if a.SessionEpoch != epoch {
 		return nil, false
 	}
-	if !s.accountAllowedByEmailDomain(r.Context(), a.Email) {
+	if s.accountActive(r.Context(), a) != nil {
 		return nil, false
-	}
-	if s.oauthLoginRequired(r.Context()) && !a.IsAdmin {
-		hasOAuth, err := s.store.AccountHasOAuthIdentity(r.Context(), a.ID)
-		if err != nil || !hasOAuth {
-			return nil, false
-		}
 	}
 	return a, true
 }

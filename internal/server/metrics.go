@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -16,7 +17,25 @@ var (
 	commentsTotal atomic.Int64
 )
 
+// metricsAuthorized reports whether r may read /metrics. With no metrics token
+// configured, /metrics stays open (protect it at the proxy).
+func (s *Server) metricsAuthorized(r *http.Request) bool {
+	if s.metricsToken == "" {
+		return true
+	}
+	got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(s.metricsToken)) == 1
+}
+
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if !s.metricsAuthorized(r) {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="peek-metrics"`)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 
 	var sb strings.Builder

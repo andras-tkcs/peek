@@ -7,10 +7,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -233,5 +235,104 @@ func TestFileStorageSavesVersionKeyInSubdirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expected object to be deleted, stat err=%v", err)
+	}
+}
+
+func TestFileStorageWritesOwnerOnlyFilesAndDirs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes")
+	}
+	dir := t.TempDir()
+	store := &FileStorage{Dir: dir}
+	for _, key := range []string{"page", "versions/page/0123456789abcdef"} {
+		if err := store.Save(context.Background(), key, []byte("<html></html>")); err != nil {
+			t.Fatalf("save %s: %v", key, err)
+		}
+	}
+	want := map[string]os.FileMode{
+		filepath.Join(dir, "page.html"):                                 0o600,
+		filepath.Join(dir, "versions", "page", "0123456789abcdef.html"): 0o600,
+		filepath.Join(dir, "versions"):                                  0o700,
+		filepath.Join(dir, "versions", "page"):                          0o700,
+	}
+	for path, mode := range want {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if got := info.Mode().Perm(); got != mode {
+			t.Errorf("%s mode = %#o, want %#o", path, got, mode)
+		}
+	}
+}
+
+func TestIsPrivateOrMetadataIPBlocksReservedRanges(t *testing.T) {
+	for _, addr := range []string{
+		"127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "0.1.2.3",
+		"100.64.0.1", "100.100.100.200", "100.127.255.255", "192.0.0.1", "198.18.0.1", "198.19.255.255",
+		"224.0.0.1", "239.255.255.250", "240.0.0.1", "255.255.255.255", "::", "::1", "::a00:1",
+		"::ffff:10.0.0.1", "::ffff:169.254.169.254", "64:ff9b::a00:1", "64:ff9b::808:808", "64:ff9b:1::1",
+		"2001::1", "2002:a00:1::1", "fd00:ec2::254", "fe80::1", "fec0::1", "ff02::1",
+	} {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			t.Fatalf("bad test address %q", addr)
+		}
+		if !isPrivateOrMetadataIP(ip) {
+			t.Errorf("%s should be blocked", addr)
+		}
+	}
+}
+
+func TestIsPrivateOrMetadataIPAllowsPublicAddresses(t *testing.T) {
+	for _, addr := range []string{
+		"8.8.8.8", "1.1.1.1", "100.63.255.255", "100.128.0.0", "198.17.255.255", "198.20.0.0",
+		"223.255.255.255", "::ffff:8.8.8.8", "2606:4700:4700::1111",
+	} {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			t.Fatalf("bad test address %q", addr)
+		}
+		if isPrivateOrMetadataIP(ip) {
+			t.Errorf("%s should be allowed", addr)
+		}
+	}
+}
+
+func TestValidateS3BucketRejectsUnsafeNames(t *testing.T) {
+	for _, bucket := range []string{
+		"", "ab", "a/b", "bucket/../x", "bucket?x=1", "bucket#x", "Bucket", "my_bucket", "-bucket",
+		"bucket-", "a..b", "192.168.1.1", strings.Repeat("a", 64), "bucket%2f",
+	} {
+		if err := ValidateS3Bucket(bucket); err == nil {
+			t.Errorf("bucket %q should be rejected", bucket)
+		}
+	}
+}
+
+func TestValidateS3BucketAcceptsValidNames(t *testing.T) {
+	for _, bucket := range []string{"peek", "my-bucket.v2", "abc", strings.Repeat("a", 63)} {
+		if err := ValidateS3Bucket(bucket); err != nil {
+			t.Errorf("bucket %q should be accepted: %v", bucket, err)
+		}
+	}
+}
+
+func TestS3StorageRefusesInvalidBucketBeforeRequest(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected request %s %s", r.Method, r.URL)
+	}))
+	defer ts.Close()
+	settings := map[string]string{"s3_endpoint": ts.URL, "s3_bucket": "x/../y"}
+	s3 := NewS3Storage(true, func(key string) string { return settings[key] })
+	ctx := context.Background()
+	if err := s3.Save(ctx, "page", []byte("x")); err == nil || !strings.Contains(err.Error(), "S3 bucket must be") {
+		t.Fatalf("save error = %v, want bucket validation error", err)
+	}
+	if _, err := s3.Open(ctx, "page"); err == nil || !strings.Contains(err.Error(), "S3 bucket must be") {
+		t.Fatalf("open error = %v, want bucket validation error", err)
+	}
+	if err := s3.Delete(ctx, "page"); err == nil || !strings.Contains(err.Error(), "S3 bucket must be") {
+		t.Fatalf("delete error = %v, want bucket validation error", err)
 	}
 }

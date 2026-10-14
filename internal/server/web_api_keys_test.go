@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -11,8 +12,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 var apiKeyPattern = regexp.MustCompile("peek_[A-Za-z0-9_-]{32}")
@@ -130,7 +133,7 @@ func TestDashboardAPIKeyRevoke(t *testing.T) {
 	key, _ := createDashboardKey(t, s, id, "QA runner")
 	keys := accountKeys(t, s, id)
 	rec := dashboardPost(t, s, id, "/dashboard/api-keys/"+strconv.FormatInt(keys[0].ID, 10)+"/revoke", url.Values{}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=API+key+revoked")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=api_key_revoked")
 	if code := keyStatus(t, s, key); code != http.StatusUnauthorized {
 		t.Fatalf("revoked key = %d", code)
 	}
@@ -145,7 +148,7 @@ func TestDashboardAPIKeyRevoke(t *testing.T) {
 	}
 	keys = accountKeys(t, s, id)
 	rec = dashboardPost(t, s, id, "/dashboard/api-keys/"+strconv.FormatInt(keys[0].ID, 10)+"/revoke", url.Values{}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=API+key+revoked")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=api_key_revoked")
 	if code := keyStatus(t, s, key2); code != http.StatusUnauthorized {
 		t.Fatalf("revoked key2 = %d", code)
 	}
@@ -182,7 +185,7 @@ func TestDashboardAPIKeyRequiresCSRF(t *testing.T) {
 	kid := strconv.FormatInt(accountKeys(t, s, id)[0].ID, 10)
 	for _, path := range []string{"/dashboard/api-keys", "/dashboard/api-keys/" + kid + "/regenerate", "/dashboard/api-keys/" + kid + "/revoke"} {
 		rec := dashboardPost(t, s, id, path, url.Values{"name": {"x"}}, false)
-		assertDashboardRedirect(t, rec, "/dashboard?err=invalid+session")
+		assertDashboardRedirect(t, rec, "/dashboard?err=invalid_session")
 	}
 	if got := accountKeys(t, s, id); len(got) != 1 {
 		t.Fatalf("keys = %+v", got)
@@ -239,7 +242,7 @@ func TestDashboardAPIKeyNameValidation(t *testing.T) {
 	id := newKeyAccount(t, s, "u@example.test", false)
 	for _, name := range []string{"", "   ", strings.Repeat("a", 101), "bad\nname"} {
 		rec := dashboardPost(t, s, id, "/dashboard/api-keys", url.Values{"name": {name}}, true)
-		assertDashboardRedirect(t, rec, "/dashboard?err=API+key+name+must+be+1+to+100+characters")
+		assertDashboardRedirect(t, rec, "/dashboard?err=api_key_name")
 	}
 	if got := accountKeys(t, s, id); len(got) != 0 {
 		t.Fatalf("keys = %+v", got)
@@ -298,7 +301,7 @@ func TestDashboardAPIKeyNeverLoggedOrAudited(t *testing.T) {
 	kid := accountKeys(t, s, id)[0].ID
 	key2, _ := regenerateDashboardKey(t, s, id, kid)
 	rec := dashboardPost(t, s, id, "/dashboard/api-keys/"+strconv.FormatInt(kid, 10)+"/revoke", url.Values{}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=API+key+revoked")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=api_key_revoked")
 	if key1 == "" || key2 == "" {
 		t.Fatal("keys not captured")
 	}
@@ -328,7 +331,7 @@ func TestDashboardAPIKeyNeverLoggedOrAudited(t *testing.T) {
 		}
 		actions[action] = detail
 	}
-	want := "id=" + strconv.FormatInt(kid, 10) + " name=QA runner"
+	want := "id=" + strconv.FormatInt(kid, 10) + ` name="QA runner"`
 	for _, action := range []string{"token.create", "token.regenerate", "token.revoke"} {
 		if actions[action] != want {
 			t.Fatalf("audit %s detail = %q, want %q", action, actions[action], want)
@@ -340,4 +343,86 @@ func TestDashboardAPIKeyNeverLoggedOrAudited(t *testing.T) {
 			t.Fatal("dashboard contains key")
 		}
 	}
+}
+
+// dashCovFailRandAfter makes secureRandomRead fail from call number n on and
+// restores it when the returned func is called.
+func dashCovFailRandAfter(n int) (restore func()) {
+	real := secureRandomRead
+	calls := 0
+	secureRandomRead = func(b []byte) (int, error) {
+		calls++
+		if calls > n {
+			return 0, errors.New("rand failed")
+		}
+		return real(b)
+	}
+	return func() { secureRandomRead = real }
+}
+
+func TestDashCovAPIKeyRowFormatting(t *testing.T) {
+	now := time.Now()
+	row := dashboardAPIKeyRow(models.APIKey{
+		ID: 1, Name: "k", Hint: "abcd", CreatedAt: now,
+		LastUsedAt: now.Unix(), ExpiresAt: now.Add(-time.Hour).Unix(),
+	}, now)
+	if row.LastUsed == "Never" || !strings.HasSuffix(row.Expires, "(expired)") {
+		t.Fatalf("row = %+v", row)
+	}
+	row = dashboardAPIKeyRow(models.APIKey{ID: 2, Name: "k", CreatedAt: now, ExpiresAt: now.Add(time.Hour).Unix()}, now)
+	if row.Expires == "Never" || strings.HasSuffix(row.Expires, "(expired)") {
+		t.Fatalf("future expiry row = %+v", row)
+	}
+}
+
+func TestDashCovAPIKeyListFailure(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+	dropTable(t, store, "tokens")
+	if rows := s.dashboardAPIKeyRows(context.Background(), adminID); rows != nil {
+		t.Fatalf("rows = %v, want nil", rows)
+	}
+}
+
+func TestDashCovAPIKeyCreateRegenerateRevokeFailures(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+
+	restore := dashCovFailRandAfter(1)
+	rec := dashboardPost(t, s, adminID, "/dashboard/api-keys", url.Values{"name": {"k"}}, true)
+	restore()
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashAPIKeyCreateFailed)
+
+	key, rec := createDashboardKey(t, s, adminID, "k")
+	if key == "" {
+		t.Fatalf("create failed: %d", rec.Code)
+	}
+	keys := accountKeys(t, s, adminID)
+	id := keys[0].ID
+	path := "/dashboard/api-keys/" + strconv.FormatInt(id, 10)
+
+	restore = dashCovFailRandAfter(1)
+	rec = dashboardPost(t, s, adminID, path+"/regenerate", url.Values{}, true)
+	restore()
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashAPIKeyRegenerateFailed)
+
+	for _, p := range []string{"/dashboard/api-keys/abc/regenerate", "/dashboard/api-keys/abc/revoke"} {
+		if rec := dashboardPost(t, s, adminID, p, url.Values{}, true); rec.Code != http.StatusNotFound {
+			t.Fatalf("POST %s = %d, want 404", p, rec.Code)
+		}
+	}
+
+	s.apiKeyLimiter = newLimiter(1, time.Minute)
+	if rec := dashboardPost(t, s, adminID, path+"/regenerate", url.Values{}, true); rec.Code != http.StatusOK {
+		t.Fatalf("first regenerate = %d, want 200", rec.Code)
+	}
+	rec = dashboardPost(t, s, adminID, path+"/regenerate", url.Values{}, true)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("limited regenerate = %d, want 429", rec.Code)
+	}
+
+	if rec := doRequest(t, s, http.MethodPost, path+"/revoke", nil); rec.Header().Get("Location") != "/login" {
+		t.Fatalf("anonymous revoke Location = %q", rec.Header().Get("Location"))
+	}
+	addFailTrigger(t, store, "tokens", "DELETE")
+	rec = dashboardPost(t, s, adminID, path+"/revoke", url.Values{}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashAPIKeyRevokeFailed)
 }

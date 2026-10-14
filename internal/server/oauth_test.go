@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -281,7 +282,8 @@ func TestFetchOIDCProfileUsesVerifiedIDTokenClaims(t *testing.T) {
 		"email": "USER@Example.COM",
 		"email_verified": true,
 		"name": "OIDC User",
-		"preferred_username": "oidc-user"
+		"preferred_username": "oidc-user",
+		"nonce": "nonce-123"
 	}`
 	rawIDToken := oidctest.SignIDToken(priv, "test-key", oidc.RS256, rawClaims)
 	tok := (&oauth2.Token{AccessToken: "access-token", TokenType: "Bearer"}).WithExtra(map[string]any{"id_token": rawIDToken})
@@ -293,7 +295,7 @@ func TestFetchOIDCProfileUsesVerifiedIDTokenClaims(t *testing.T) {
 		ClientSecret: "client-secret",
 		IssuerURL:    ts.URL,
 		OIDCProvider: provider,
-	}, tok)
+	}, tok, "nonce-123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +323,7 @@ func TestOIDCCallbackWithFakeSSOServerCreatesSessionAndConsumesInvite(t *testing
 	issuerURL := "https://8.8.8.8/oidc"
 	clientID := "peek-client"
 	clientSecret := "peek-secret"
-	fake := newFakeOIDCServer(t, issuerURL, clientID, "user-123", "USER@Example.COM")
+	fake := newFakeOIDCServer(t, fakeOIDCOptions{Issuer: issuerURL, ClientID: clientID, Sub: "user-123", Email: "USER@Example.COM", EmailVerified: true, Nonce: "nonce-123"})
 	defer fake.close()
 
 	if err := s.store.SetSetting(context.Background(), "oauth_oidc_enabled", "true"); err != nil {
@@ -342,7 +344,7 @@ func TestOIDCCallbackWithFakeSSOServerCreatesSessionAndConsumesInvite(t *testing
 	req := httptest.NewRequest(http.MethodGet, "/oauth/oidc/callback?state="+state+"&code=auth-code", nil)
 	req = req.WithContext(oidc.ClientContext(req.Context(), fake.client()))
 	req.SetPathValue("provider", "oidc")
-	req.AddCookie(&http.Cookie{Name: oauthCookieName("oidc"), Value: s.makeOAuthFlowCookie("oidc", state, verifier)})
+	req.AddCookie(&http.Cookie{Name: oauthCookieName("oidc"), Value: s.makeOAuthFlowCookie("oidc", state, verifier, "nonce-123")})
 	req.AddCookie(&http.Cookie{Name: inviteCookie, Value: rawInvite})
 	rec := httptest.NewRecorder()
 
@@ -402,25 +404,39 @@ type fakeOIDCServer struct {
 	sawToken atomic.Bool
 }
 
-func newFakeOIDCServer(t *testing.T, issuer, clientID, sub, email string) *fakeOIDCServer {
+type fakeOIDCOptions struct {
+	Issuer, ClientID, Sub, Email string
+	EmailVerified                bool           // email_verified in the ID token
+	Nonce                        string         // nonce claim; "" leaves it out
+	UserInfo                     map[string]any // JSON served at /oidc/userinfo; nil answers 404
+}
+
+func newFakeOIDCServer(t *testing.T, opts fakeOIDCOptions) *fakeOIDCServer {
 	t.Helper()
+	issuer, clientID := opts.Issuer, opts.ClientID
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now()
-	rawClaims := `{
-		"iss": "` + issuer + `",
-		"aud": "` + clientID + `",
-		"sub": "` + sub + `",
-		"exp": ` + strconv.FormatInt(now.Add(time.Hour).Unix(), 10) + `,
-		"email": "` + email + `",
-		"email_verified": true,
-		"name": "OIDC User"
-	}`
+	claims := map[string]any{
+		"iss":            issuer,
+		"aud":            clientID,
+		"sub":            opts.Sub,
+		"exp":            time.Now().Add(time.Hour).Unix(),
+		"email":          opts.Email,
+		"email_verified": opts.EmailVerified,
+		"name":           "OIDC User",
+	}
+	if opts.Nonce != "" {
+		claims["nonce"] = opts.Nonce
+	}
+	rawClaims, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatal(err)
+	}
 	fake := &fakeOIDCServer{
 		issuer: issuer,
-		token:  oidctest.SignIDToken(priv, "fake-key", oidc.RS256, rawClaims),
+		token:  oidctest.SignIDToken(priv, "fake-key", oidc.RS256, string(rawClaims)),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/oidc/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
@@ -444,6 +460,13 @@ func newFakeOIDCServer(t *testing.T, issuer, clientID, sub, email string) *fakeO
 			Use:       "sig",
 		}}})
 	})
+	mux.HandleFunc("/oidc/userinfo", func(w http.ResponseWriter, r *http.Request) {
+		if opts.UserInfo == nil {
+			http.NotFound(w, r)
+			return
+		}
+		jsonOK(w, opts.UserInfo)
+	})
 	mux.HandleFunc("/oidc/token", func(w http.ResponseWriter, r *http.Request) {
 		fake.sawToken.Store(true)
 		if err := r.ParseForm(); err != nil {
@@ -463,6 +486,27 @@ func newFakeOIDCServer(t *testing.T, issuer, clientID, sub, email string) *fakeO
 	})
 	fake.server = httptest.NewServer(mux)
 	return fake
+}
+
+func fakeOIDCProviderConfig(t *testing.T, fake *fakeOIDCServer) (context.Context, *oauthProviderConfig) {
+	t.Helper()
+	ctx := oidc.ClientContext(context.Background(), fake.client())
+	provider, err := oidc.NewProvider(ctx, fake.issuer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ctx, &oauthProviderConfig{
+		authProvider: authProvider{Key: "oidc", Name: "SSO"},
+		ClientID:     "peek-client",
+		ClientSecret: "s",
+		IssuerURL:    fake.issuer,
+		Endpoint:     provider.Endpoint(),
+		OIDCProvider: provider,
+	}
+}
+
+func (f *fakeOIDCServer) idToken() *oauth2.Token {
+	return (&oauth2.Token{AccessToken: "access-token", TokenType: "Bearer"}).WithExtra(map[string]any{"id_token": f.token})
 }
 
 func (f *fakeOIDCServer) close() {
@@ -513,6 +557,13 @@ func restoreGitHubURLs(t *testing.T, base string) {
 		githubUserURL = oldUserURL
 		githubEmailsURL = oldEmailsURL
 	})
+}
+
+func restoreGoogleIssuerURL(t *testing.T, issuer string) {
+	t.Helper()
+	old := googleIssuerURL
+	googleIssuerURL = issuer
+	t.Cleanup(func() { googleIssuerURL = old })
 }
 
 func testGitHubProviderConfig() *oauthProviderConfig {
@@ -595,5 +646,270 @@ func TestCLILoginStartDoesNotRequireOAuth(t *testing.T) {
 	}
 	if out.DeviceCode == "" || out.UserCode == "" || out.VerificationURL == "" {
 		t.Fatalf("unexpected start response: %+v", out)
+	}
+}
+
+func fakeOIDCDefaults() fakeOIDCOptions {
+	return fakeOIDCOptions{Issuer: "https://8.8.8.8/oidc", ClientID: "peek-client", Sub: "user-123", Email: "id@example.com", Nonce: "nonce-123"}
+}
+
+func TestFetchOIDCProfileRejectsNonceMismatch(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		tokenNonce string
+		callNonce  string
+	}{
+		{"wrong nonce", "nonce-123", "other"},
+		{"missing claim", "", "nonce-123"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := fakeOIDCDefaults()
+			opts.EmailVerified = true
+			opts.Nonce = tc.tokenNonce
+			fake := newFakeOIDCServer(t, opts)
+			defer fake.close()
+			ctx, p := fakeOIDCProviderConfig(t, fake)
+			_, err := newTestServer(t).fetchOIDCProfile(ctx, p, fake.idToken(), tc.callNonce)
+			if !errors.Is(err, errOIDCNonceMismatch) {
+				t.Fatalf("err = %v, want errOIDCNonceMismatch", err)
+			}
+		})
+	}
+}
+
+func TestOIDCCallbackRejectsNonceMismatch(t *testing.T) {
+	s := newTestServer(t)
+	opts := fakeOIDCDefaults()
+	opts.Email, opts.EmailVerified = "user@example.com", true
+	fake := newFakeOIDCServer(t, opts)
+	defer fake.close()
+	ctx := context.Background()
+	for k, v := range map[string]string{"oauth_oidc_enabled": "true", "oauth_oidc_issuer_url": opts.Issuer, "oauth_oidc_client_id": opts.ClientID} {
+		if err := s.store.SetSetting(ctx, k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.encryptedSetSetting(ctx, "oauth_oidc_client_secret", "peek-secret"); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/oidc/callback?state=state-123&code=auth-code", nil)
+	req = req.WithContext(oidc.ClientContext(req.Context(), fake.client()))
+	req.SetPathValue("provider", "oidc")
+	req.AddCookie(&http.Cookie{Name: oauthCookieName("oidc"), Value: s.makeOAuthFlowCookie("oidc", "state-123", oauth2.GenerateVerifier(), "other")})
+	rec := httptest.NewRecorder()
+	s.handleOAuthCallback(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502; body=%s", rec.Code, rec.Body.String())
+	}
+	if c := findOAuthTestCookie(rec.Result().Cookies(), sessionCookie); c != nil && c.Value != "" {
+		t.Fatalf("session cookie issued: %+v", c)
+	}
+	if _, err := s.store.GetAccountByEmail(ctx, "user@example.com"); err == nil {
+		t.Fatal("account was created")
+	}
+}
+
+func TestFetchOIDCProfileRejectsUserInfoSubjectMismatch(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		userInfo map[string]any
+	}{
+		{"different sub", map[string]any{"sub": "someone-else", "email": "user@example.com", "email_verified": true}},
+		{"missing sub", map[string]any{"email": "user@example.com", "email_verified": true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := fakeOIDCDefaults()
+			opts.UserInfo = tc.userInfo
+			fake := newFakeOIDCServer(t, opts)
+			defer fake.close()
+			ctx, p := fakeOIDCProviderConfig(t, fake)
+			_, err := newTestServer(t).fetchOIDCProfile(ctx, p, fake.idToken(), "nonce-123")
+			if !errors.Is(err, errOIDCUserInfoSubject) {
+				t.Fatalf("err = %v, want errOIDCUserInfoSubject", err)
+			}
+		})
+	}
+}
+
+func TestFetchOIDCProfileTakesEmailAndVerifiedFromUserInfoTogether(t *testing.T) {
+	opts := fakeOIDCDefaults()
+	opts.UserInfo = map[string]any{"sub": "user-123", "email": "info@example.com", "email_verified": true}
+	fake := newFakeOIDCServer(t, opts)
+	defer fake.close()
+	ctx, p := fakeOIDCProviderConfig(t, fake)
+	profile, err := newTestServer(t).fetchOIDCProfile(ctx, p, fake.idToken(), "nonce-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Email != "info@example.com" || !profile.EmailVerified {
+		t.Fatalf("profile = %+v", profile)
+	}
+}
+
+func TestFetchOIDCProfileDoesNotMixIDEmailWithUserInfoVerified(t *testing.T) {
+	opts := fakeOIDCDefaults()
+	opts.UserInfo = map[string]any{"sub": "user-123", "email_verified": true}
+	fake := newFakeOIDCServer(t, opts)
+	defer fake.close()
+	ctx, p := fakeOIDCProviderConfig(t, fake)
+	profile, err := newTestServer(t).fetchOIDCProfile(ctx, p, fake.idToken(), "nonce-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Email != "id@example.com" || profile.EmailVerified {
+		t.Fatalf("profile = %+v", profile)
+	}
+}
+
+func TestFetchOIDCProfileRequiresIDTokenSubject(t *testing.T) {
+	opts := fakeOIDCDefaults()
+	opts.Sub = ""
+	opts.UserInfo = map[string]any{"sub": "user-123", "email": "id@example.com", "email_verified": true}
+	fake := newFakeOIDCServer(t, opts)
+	defer fake.close()
+	ctx, p := fakeOIDCProviderConfig(t, fake)
+	_, err := newTestServer(t).fetchOIDCProfile(ctx, p, fake.idToken(), "nonce-123")
+	if err == nil || !strings.Contains(err.Error(), "missing oidc subject") {
+		t.Fatalf("err = %v, want missing oidc subject", err)
+	}
+}
+
+func TestFetchGoogleProfileRequiresMatchingNonce(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer := &oidctest.Server{PublicKeys: []oidctest.PublicKey{{PublicKey: priv.Public(), KeyID: "test-key", Algorithm: oidc.RS256}}}
+	ts := httptest.NewServer(issuer)
+	defer ts.Close()
+	issuer.SetIssuer(ts.URL)
+	restoreGoogleIssuerURL(t, ts.URL)
+
+	rawClaims := `{"iss": "` + ts.URL + `", "aud": "client-id", "sub": "g-1", "exp": ` + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10) + `,
+		"email": "user@example.com", "email_verified": true, "nonce": "nonce-123"}`
+	tok := (&oauth2.Token{AccessToken: "a", TokenType: "Bearer"}).WithExtra(map[string]any{"id_token": oidctest.SignIDToken(priv, "test-key", oidc.RS256, rawClaims)})
+	p := &oauthProviderConfig{authProvider: authProvider{Key: "google"}, ClientID: "client-id"}
+	s := newTestServer(t)
+	profile, err := s.fetchGoogleProfile(context.Background(), p, tok, "nonce-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Email != "user@example.com" {
+		t.Fatalf("profile = %+v", profile)
+	}
+	if _, err := s.fetchGoogleProfile(context.Background(), p, tok, "other"); !errors.Is(err, errOIDCNonceMismatch) {
+		t.Fatalf("err = %v, want errOIDCNonceMismatch", err)
+	}
+}
+
+func TestOAuthStartSendsNonceAndStoresItInFlowCookie(t *testing.T) {
+	s := newTestServer(t)
+	opts := fakeOIDCDefaults()
+	fake := newFakeOIDCServer(t, opts)
+	defer fake.close()
+	ctx := context.Background()
+	for k, v := range map[string]string{"oauth_oidc_enabled": "true", "oauth_oidc_issuer_url": opts.Issuer, "oauth_oidc_client_id": opts.ClientID} {
+		if err := s.store.SetSetting(ctx, k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.encryptedSetSetting(ctx, "oauth_oidc_client_secret", "peek-secret"); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/oidc/start", nil)
+	req = req.WithContext(oidc.ClientContext(req.Context(), fake.client()))
+	req.SetPathValue("provider", "oidc")
+	rec := httptest.NewRecorder()
+	s.handleOAuthStart(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := loc.Query()
+	if q.Get("nonce") == "" || q.Get("state") == "" || q.Get("code_challenge") == "" {
+		t.Fatalf("authorization URL missing params: %s", loc)
+	}
+	c := findOAuthTestCookie(rec.Result().Cookies(), oauthCookieName("oidc"))
+	if c == nil {
+		t.Fatal("flow cookie not set")
+	}
+	req2 := httptest.NewRequest(http.MethodGet, "/oauth/oidc/callback", nil)
+	req2.AddCookie(c)
+	state, _, nonce, ok := s.parseOAuthFlowCookie(req2, "oidc")
+	if !ok || nonce != q.Get("nonce") || state != q.Get("state") {
+		t.Fatalf("cookie parse ok=%v state=%q nonce=%q, query=%v", ok, state, nonce, q)
+	}
+}
+
+func TestOAuthStartOmitsNonceForGitHub(t *testing.T) {
+	s := newTestServer(t)
+	ctx := context.Background()
+	if err := s.store.SetSetting(ctx, "oauth_github_enabled", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.SetSetting(ctx, "oauth_github_client_id", "gh-client"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.encryptedSetSetting(ctx, "oauth_github_client_secret", "gh-secret"); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/github/start", nil)
+	req.SetPathValue("provider", "github")
+	rec := httptest.NewRecorder()
+	s.handleOAuthStart(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loc.Query().Has("nonce") {
+		t.Fatalf("github URL carries nonce: %s", loc)
+	}
+}
+
+func TestParseOAuthFlowCookie(t *testing.T) {
+	s := newTestServer(t)
+	parse := func(value, provider string) (string, string, string, bool) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{Name: oauthCookieName("oidc"), Value: value})
+		return s.parseOAuthFlowCookie(req, provider)
+	}
+	good := s.makeOAuthFlowCookie("oidc", "st", "ver", "non")
+	flip := func(v string) string {
+		b := []byte(v)
+		i := len(b) - 1
+		if b[i] == 'A' {
+			b[i] = 'B'
+		} else {
+			b[i] = 'A'
+		}
+		return string(b)
+	}
+	legacy := makeWebSession(s.secret, base64.RawURLEncoding.EncodeToString([]byte("oidc|s|v")), time.Minute)
+	emptyNonce := s.makeOAuthFlowCookie("oidc", "st", "ver", "")
+	for _, tc := range []struct {
+		name, value, provider string
+		ok                    bool
+	}{
+		{"round trip", good, "oidc", true},
+		{"provider mismatch", good, "google", false},
+		{"tampered", flip(good), "oidc", false},
+		{"legacy three part", legacy, "oidc", false},
+		{"empty nonce", emptyNonce, "oidc", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st, ver, non, ok := parse(tc.value, tc.provider)
+			if ok != tc.ok {
+				t.Fatalf("ok = %v, want %v", ok, tc.ok)
+			}
+			if ok && (st != "st" || ver != "ver" || non != "non") {
+				t.Fatalf("got %q %q %q", st, ver, non)
+			}
+		})
 	}
 }

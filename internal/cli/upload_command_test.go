@@ -196,3 +196,106 @@ func TestUploadWithSlugRejectsNameFlag(t *testing.T) {
 		t.Fatalf("error = %v, want %q", err, want)
 	}
 }
+
+func TestCmdUploadWarnsAboutPasswordFlag(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"slug": "page", "url": "http://example.test/p/page", "visibility": "password"})
+	}))
+	defer ts.Close()
+	configureTestClient(t, ts.URL)
+	file := filepath.Join(t.TempDir(), "page.html")
+	if err := os.WriteFile(file, []byte("<html></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stderr, err := captureStderr(t, func() error {
+		_, err := captureStdout(t, func() error {
+			return cmdUpload([]string{file, "--password", "secret"})
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("cmdUpload: %v", err)
+	}
+	if !strings.Contains(stderr, "--password is exposed") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}
+
+func TestUploadWithSlugRejectsInvalidSlug(t *testing.T) {
+	err := cmdUpload([]string{"page.html", "--slug", "../x"})
+	if err == nil || !strings.Contains(err.Error(), "invalid slug") {
+		t.Fatalf("err = %v, want invalid slug", err)
+	}
+}
+
+func TestCovUploadFlagAndValidationErrors(t *testing.T) {
+	configureTestClient(t, "http://127.0.0.1:1")
+	file := filepath.Join(t.TempDir(), "p.html")
+	if err := os.WriteFile(file, []byte("<html></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string][]string{
+		"password value":     {"--password"},
+		"name value":         {"--name"},
+		"visibility value":   {"--visibility"},
+		"slug value":         {"--slug"},
+		"unknown flag":       {"--nope"},
+		"two files":          {file, file},
+		"no file":            {},
+		"slug and password":  {file, "--slug", "demo", "--password", "x"},
+		"slug and name":      {file, "--slug", "demo", "--name", "n"},
+		"invalid visibility": {file, "--visibility", "weird"},
+		"password and stdin": {file, "--password", "x", "--password-stdin"},
+		"password required":  {file},
+		"password mismatch":  {file, "--visibility", "public", "--password", "x"},
+		"missing file":       {filepath.Join(t.TempDir(), "nope.html"), "--visibility", "public"},
+		"directory as file":  {t.TempDir(), "--visibility", "public"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := captureStdout(t, func() error { return cmdUpload(args) }); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestCovUploadStdinPassword(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "p.html")
+	if err := os.WriteFile(file, []byte("<html></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withStdin(t, "\n")
+	configureTestClient(t, "http://127.0.0.1:1")
+	if err := cmdUpload([]string{file, "--password-stdin"}); err == nil || !strings.Contains(err.Error(), "no password") {
+		t.Fatalf("expected empty stdin error, got %v", err)
+	}
+
+	ts := covFake(t, map[string]string{"/api/upload": `{"slug":"s","url":"http://x/p/s","visibility":"password","version":1}`}, nil)
+	configureTestClient(t, ts.URL)
+	withStdin(t, "pw")
+	out, err := captureStdout(t, func() error { return cmdUpload([]string{file, "--password-stdin"}) })
+	if err != nil || !strings.Contains(out, "slug:     s") {
+		t.Fatalf("upload: %q %v", out, err)
+	}
+}
+
+func TestCovUploadEnvFailures(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "p.html")
+	if err := os.WriteFile(file, []byte("<html></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	covEnvFailures(t, func() error { return cmdUpload([]string{file, "--visibility", "public"}) })
+}
+
+func TestCovFileNameWithoutExtFallsBackToPage(t *testing.T) {
+	if got := fileNameWithoutExt(".html"); got != "page" {
+		t.Fatalf("got %q", got)
+	}
+	if got := fileNameWithoutExt("dir/noext"); got != "noext" {
+		t.Fatalf("got %q", got)
+	}
+}

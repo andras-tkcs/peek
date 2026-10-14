@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	webui "github.com/andras-tkcs/peek/internal/web"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -147,6 +148,7 @@ func TestNormalizeSettingsValues(t *testing.T) {
 		{key: "max_uploads_per_token", value: "12", want: "12"},
 		{key: "retention_days", value: "30", want: "30"},
 		{key: "storage", value: "S3", want: "s3"},
+		{key: "s3_bucket", value: " peek ", want: "peek"},
 	}
 	for _, tt := range tests {
 		got, err := s.normalizeSettingValue(tt.key, tt.value)
@@ -194,7 +196,7 @@ func TestNormalizeOIDCIssuerAllowsPrivateWithExplicitOptIn(t *testing.T) {
 	}
 }
 
-func TestDashboardSettingsInvalidS3EndpointRedirectEscapesQuery(t *testing.T) {
+func TestDashboardSettingsInvalidS3EndpointRendersInlineError(t *testing.T) {
 	store, err := db.Open(filepath.Join(t.TempDir(), "peek.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -205,7 +207,11 @@ func TestDashboardSettingsInvalidS3EndpointRedirectEscapesQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{store: store, secret: strings.Repeat("0", 64)}
+	renderer, err := webui.NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{store: store, renderer: renderer, secret: strings.Repeat("0", 64)}
 
 	form := url.Values{
 		"csrf":        {"csrf-token"},
@@ -219,20 +225,14 @@ func TestDashboardSettingsInvalidS3EndpointRedirectEscapesQuery(t *testing.T) {
 
 	s.handleDashboardSettings(rec, req)
 
-	if rec.Code != http.StatusSeeOther {
+	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	loc := rec.Header().Get("Location")
-	u, err := url.Parse(loc)
-	if err != nil {
-		t.Fatalf("parse redirect location %q: %v", loc, err)
+	if loc := rec.Header().Get("Location"); loc != "" {
+		t.Fatalf("Location = %q, want inline render", loc)
 	}
-	got := u.Query().Get("err")
-	if !strings.HasPrefix(got, "invalid s3 endpoint: ") {
-		t.Fatalf("err query = %q", got)
-	}
-	if strings.Contains(loc, " ") {
-		t.Fatalf("redirect location contains raw space: %q", loc)
+	if !strings.Contains(rec.Body.String(), "invalid s3 endpoint: ") {
+		t.Fatalf("body missing inline error: %s", rec.Body.String())
 	}
 }
 
@@ -253,7 +253,11 @@ func TestDashboardSettingsRejectsInvalidValuesBeforeWriting(t *testing.T) {
 	if err := store.SetSetting(context.Background(), "max_upload", "1024"); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{store: store, secret: strings.Repeat("0", 64)}
+	renderer, err := webui.NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{store: store, renderer: renderer, secret: strings.Repeat("0", 64)}
 
 	form := url.Values{
 		"csrf":       {"csrf-token"},
@@ -267,16 +271,11 @@ func TestDashboardSettingsRejectsInvalidValuesBeforeWriting(t *testing.T) {
 
 	s.handleDashboardSettings(rec, req)
 
-	if rec.Code != http.StatusSeeOther {
+	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	loc := rec.Header().Get("Location")
-	u, err := url.Parse(loc)
-	if err != nil {
-		t.Fatalf("parse redirect location %q: %v", loc, err)
-	}
-	if got := u.Query().Get("err"); got != "max_upload must be a positive integer" {
-		t.Fatalf("err query = %q, location = %q", got, loc)
+	if !strings.Contains(rec.Body.String(), "max_upload must be a positive integer") {
+		t.Fatalf("body missing inline error: %s", rec.Body.String())
 	}
 	if got := mustGetSetting(t, store, "auth_token_login_enabled"); got != "true" {
 		t.Fatalf("auth_token_login_enabled was partially updated to %q", got)
@@ -430,7 +429,7 @@ func TestDashboardSettingsRejectsMalformedForm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse redirect location %q: %v", loc, err)
 	}
-	if got := u.Query().Get("err"); got != "invalid session" {
+	if got := u.Query().Get("err"); got != "invalid_session" {
 		t.Fatalf("err query = %q, location = %q", got, loc)
 	}
 }
@@ -442,4 +441,263 @@ func mustGetSetting(t *testing.T, store *db.Store, key string) string {
 		t.Fatal(err)
 	}
 	return got
+}
+
+func TestNormalizeSettingRejectsInvalidS3Bucket(t *testing.T) {
+	s := &Server{}
+	_, err := s.normalizeSettingValue("s3_bucket", "a/b")
+	if err == nil || !strings.Contains(err.Error(), "invalid s3 bucket") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func setCovSettingsRows(t *testing.T, s *Server, token string) (int, []settingsRow) {
+	t.Helper()
+	rec := doRequest(t, s, http.MethodGet, "/api/settings", nil, asBearer(token))
+	var rows []settingsRow
+	if rec.Code == http.StatusOK {
+		if err := json.NewDecoder(rec.Body).Decode(&rows); err != nil {
+			t.Fatalf("decode settings: %v", err)
+		}
+	}
+	return rec.Code, rows
+}
+
+func TestSetCovGetSettingsLabelsUnknownKeysAndMasksSecrets(t *testing.T) {
+	s, token := newHandlerTestServer(t)
+	ctx := context.Background()
+	if err := s.store.SetSetting(ctx, "zz_custom", "custom"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.encryptedSetSetting(ctx, "s3_secret_key", "hunter2"); err != nil {
+		t.Fatal(err)
+	}
+	code, rows := setCovSettingsRows(t, s, token)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	byKey := map[string]settingsRow{}
+	for _, r := range rows {
+		byKey[r.Key] = r
+	}
+	if r := byKey["zz_custom"]; r.Label != "zz_custom" || r.Value != "custom" {
+		t.Fatalf("unknown key row = %+v", r)
+	}
+	if r := byKey["s3_secret_key"]; r.Value != "••••" {
+		t.Fatalf("secret row value = %q, want mask", r.Value)
+	}
+}
+
+func TestSetCovGetSettingsDBFailure(t *testing.T) {
+	s, token := newHandlerTestServer(t)
+	dropTable(t, s.store, "settings")
+	if code, _ := setCovSettingsRows(t, s, token); code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", code)
+	}
+}
+
+func TestSetCovUpdateSettingsAPIErrors(t *testing.T) {
+	s, token := newHandlerTestServer(t)
+	post := func(body string, opts ...func(*http.Request)) *httptest.ResponseRecorder {
+		return doRequest(t, s, http.MethodPut, "/api/settings", strings.NewReader(body), opts...)
+	}
+	if rec := post(`{}`); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous status = %d", rec.Code)
+	}
+	// The handler itself also refuses a request that carries no API token.
+	direct := httptest.NewRecorder()
+	s.handleUpdateSettings(direct, httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{}`)))
+	if direct.Code != http.StatusInternalServerError {
+		t.Fatalf("direct anonymous status = %d", direct.Code)
+	}
+	if rec := post(`{not json`, asBearer(token), withJSON()); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "bad json") {
+		t.Fatalf("bad json: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := post(`{"retention_days":"30"}`, asBearer(token), withJSON()); rec.Code != http.StatusOK {
+		t.Fatalf("valid update: %d %s", rec.Code, rec.Body.String())
+	}
+	addFailTrigger(t, s.store, "settings", "UPDATE")
+	addFailTrigger(t, s.store, "settings", "INSERT")
+	if rec := post(`{"retention_days":"31"}`, asBearer(token), withJSON()); rec.Code != http.StatusInternalServerError {
+		t.Fatalf("write failure: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSetCovNormalizeSettingValue(t *testing.T) {
+	s := &Server{}
+	tests := []struct {
+		key, value string
+		want       string
+		wantErr    string
+	}{
+		{"nope", "x", "", "unknown setting: nope"},
+		{"auth_token_login_enabled", "maybe", "", "must be a boolean"},
+		{"auth_token_login_enabled", " Off ", "", ""},
+		{"auth_token_login_enabled", "YES", "true", ""},
+		{"max_upload", "abc", "", "must be an integer"},
+		{"max_upload", "", "", "must be an integer"},
+		{"max_upload", "-1", "", "positive integer"},
+		{"max_upload", "5", "5", ""},
+		{"max_total_size", "x", "", "must be an integer"},
+		{"max_total_size", "-5", "", "non-negative integer"},
+		{"max_total_size", "0", "0", ""},
+		{"max_storage_per_token", "-2", "", "non-negative integer"},
+		{"retention_days", "x", "", "non-negative integer"},
+		{"retention_days", "", "", "non-negative integer"},
+		{"retention_days", "-1", "", "non-negative integer"},
+		{"retention_days", "7", "7", ""},
+		{"max_uploads_per_token", "3", "3", ""},
+		{"oauth_oidc_issuer_url", "", "", ""},
+		{"oauth_oidc_issuer_url", "ftp://issuer.example.com", "", "http"},
+		{"storage", "FILE", "file", ""},
+		{"storage", "tape", "", "must be file or s3"},
+		{"s3_endpoint", "", "", ""},
+		{"s3_endpoint", "http://127.0.0.1:9", "", "invalid s3 endpoint"},
+		{"s3_bucket", "", "", ""},
+		{"s3_bucket", "Bad_Bucket", "", "invalid s3 bucket"},
+		{"s3_region", " auto ", "auto", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
+			got, err := s.normalizeSettingValue(tc.key, tc.value)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("got %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestSetCovDashboardMegabytesToBytes(t *testing.T) {
+	for _, tc := range []struct{ in, want, wantErr string }{
+		{"abc", "", "must be an integer"},
+		{"", "", "must be an integer"},
+		{"-3", "-3", ""},
+		{"2", strconv.FormatInt(2*dashboardMegabyte, 10), ""},
+		{strconv.FormatInt(maxDashboardMegabytes+1, 10), "", "too large"},
+	} {
+		got, err := dashboardMegabytesToBytes("max_upload", tc.in)
+		if tc.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("%q: err = %v", tc.in, err)
+			}
+			continue
+		}
+		if err != nil || got != tc.want {
+			t.Fatalf("%q: got %q, %v", tc.in, got, err)
+		}
+	}
+	if _, err := normalizeNonNegativeInt64Setting("k", "x"); err == nil {
+		t.Fatal("expected parse error")
+	}
+	if _, err := normalizePositiveInt64Setting("k", "x"); err == nil {
+		t.Fatal("expected parse error")
+	}
+}
+
+func TestSetCovDashboardSettingsErrorPaths(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newViewer(t, s, "setcov-admin@example.test", "Admin", true)
+	user := newViewer(t, s, "setcov-user@example.test", "User", false)
+	ctx := context.Background()
+
+	rec := dashboardPost(t, s, user.ID, "/dashboard/settings", url.Values{}, true)
+	assertDashboardRedirect(t, rec, "/login")
+
+	rec = dashboardPost(t, s, admin.ID, "/dashboard/settings", url.Values{"oauth_google_enabled": {"maybe"}}, true)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "must be a boolean") {
+		t.Fatalf("bool error: %d", rec.Code)
+	}
+
+	rec = dashboardPost(t, s, admin.ID, "/dashboard/settings", url.Values{"max_upload_mb": {"abc"}}, true)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_upload must be an integer") {
+		t.Fatalf("megabyte error: %d", rec.Code)
+	}
+
+	// A blank secret keeps the stored value.
+	if err := s.encryptedSetSetting(ctx, "s3_secret_key", "keep-me"); err != nil {
+		t.Fatal(err)
+	}
+	rec = dashboardPost(t, s, admin.ID, "/dashboard/settings", url.Values{"s3_secret_key": {""}, "s3_bucket": {"mybucket"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?ok=settings_saved")
+	if got := s.settingString(ctx, "s3_secret_key"); got != "keep-me" {
+		t.Fatalf("secret = %q", got)
+	}
+	if got := s.settingString(ctx, "s3_bucket"); got != "mybucket" {
+		t.Fatalf("bucket = %q", got)
+	}
+
+	addFailTrigger(t, s.store, "settings", "UPDATE")
+	addFailTrigger(t, s.store, "settings", "INSERT")
+	rec = dashboardPost(t, s, admin.ID, "/dashboard/settings", url.Values{"s3_bucket": {"other"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err=settings_failed")
+}
+
+func TestSetCovDashboardSettingsHelpers(t *testing.T) {
+	s, _, _, _ := newFaultServer(t)
+	dropTable(t, s.store, "settings")
+	m := s.dashboardSettingsMap(context.Background())
+	if len(m) != len(settingsMeta) {
+		t.Fatalf("map has %d keys, want %d", len(m), len(settingsMeta))
+	}
+	if m["max_upload"] != "" {
+		t.Fatalf("max_upload = %q", m["max_upload"])
+	}
+
+	if got := dashboardSettingMegabytes(map[string]string{"max_upload": "1"}, "max_upload"); got != 1 {
+		t.Fatalf("1 byte rounds up to %d MB, want 1", got)
+	}
+	if got := dashboardSettingMegabytes(map[string]string{"max_upload": strconv.FormatInt(dashboardMegabyte, 10)}, "max_upload"); got != 1 {
+		t.Fatalf("exact MB = %d", got)
+	}
+	if got := dashboardSettingMegabytes(map[string]string{"max_upload": "0"}, "max_upload"); got != 0 {
+		t.Fatalf("zero = %d", got)
+	}
+	if got := dashboardSettingInt64(map[string]string{"retention_days": "junk"}, "retention_days"); got != 0 {
+		t.Fatalf("bad value = %d", got)
+	}
+	if got := dashboardSettingInt64(map[string]string{"retention_days": "-4"}, "retention_days"); got != 0 {
+		t.Fatalf("negative value = %d", got)
+	}
+	if !settingValueBool(" Yes ") || settingValueBool("nope") {
+		t.Fatal("settingValueBool mismatch")
+	}
+	if maxInt64(5, 3) != 5 || maxInt64(3, 5) != 5 {
+		t.Fatal("maxInt64 mismatch")
+	}
+	panel := dashboardSettingsPanel(map[string]string{"oauth_github_client_secret": "stored"})
+	if secret := panel.Auth.GitHub.ClientSecret; secret.Value != "" || !strings.Contains(secret.Description, "leave blank") {
+		t.Fatalf("panel secret row = %+v", secret)
+	}
+	rows := dashboardSettingsRows(map[string]string{"zz_extra": "v", "s3_secret_key": "secret"})
+	var sawExtra, sawSecret bool
+	for _, r := range rows {
+		if r.Key == "zz_extra" && r.Label == "zz_extra" && r.Value == "v" {
+			sawExtra = true
+		}
+		if r.Key == "s3_secret_key" && r.Value == "" && strings.Contains(r.Description, "leave blank") {
+			sawSecret = true
+		}
+	}
+	if !sawExtra || !sawSecret {
+		t.Fatalf("rows extra=%v secret=%v", sawExtra, sawSecret)
+	}
+}
+
+func TestSetCovDashboardSubmittedSettingValue(t *testing.T) {
+	v, ok, err := dashboardSubmittedSettingValue("max_upload", map[string][]string{"max_upload_mb": {"2"}})
+	if err != nil || !ok || v != strconv.FormatInt(2*dashboardMegabyte, 10) {
+		t.Fatalf("mb form: %q %v %v", v, ok, err)
+	}
+	if _, ok, _ := dashboardSubmittedSettingValue("retention_days", nil); ok {
+		t.Fatal("missing key reported as submitted")
+	}
+	if v, ok, _ := dashboardSubmittedSettingValue("retention_days", map[string][]string{"retention_days": {}}); !ok || v != "" {
+		t.Fatalf("empty values: %q %v", v, ok)
+	}
 }

@@ -43,8 +43,12 @@ func (s *S3Storage) objectKey(slug string) (string, error) {
 	return "uploads/" + name, nil
 }
 
-func (s *S3Storage) objectURL(key string) string {
-	return strings.TrimRight(s.endpoint(), "/") + "/" + s.bucket() + "/" + key
+func (s *S3Storage) objectURL(key string) (string, error) {
+	bucket := s.bucket()
+	if err := ValidateS3Bucket(bucket); err != nil {
+		return "", err
+	}
+	return strings.TrimRight(s.endpoint(), "/") + "/" + bucket + "/" + key, nil
 }
 
 func (s *S3Storage) Save(ctx context.Context, slug string, data []byte) error {
@@ -83,7 +87,10 @@ func (s *S3Storage) httpClient() *http.Client {
 }
 
 func (s *S3Storage) putObject(ctx context.Context, key string, data []byte) error {
-	url := s.objectURL(key)
+	url, err := s.objectURL(key)
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(data))
 	if err != nil {
 		return err
@@ -102,7 +109,10 @@ func (s *S3Storage) putObject(ctx context.Context, key string, data []byte) erro
 }
 
 func (s *S3Storage) getObject(ctx context.Context, key string) (*http.Response, error) {
-	url := s.objectURL(key)
+	url, err := s.objectURL(key)
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -125,7 +135,10 @@ func (s *S3Storage) getObject(ctx context.Context, key string) (*http.Response, 
 }
 
 func (s *S3Storage) deleteObject(ctx context.Context, key string) error {
-	url := s.objectURL(key)
+	url, err := s.objectURL(key)
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
 		return err

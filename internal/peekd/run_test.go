@@ -2,6 +2,7 @@ package peekd
 
 import (
 	"context"
+	"flag"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -147,6 +148,7 @@ func TestParseServeConfigMapsFlagsAndEnv(t *testing.T) {
 	t.Setenv("PEEK_ADDR", ":8800")
 	t.Setenv("PEEK_S3_REGION", "auto")
 	t.Setenv("PEEK_TRUSTED_PROXY", "true")
+	t.Setenv("PEEK_TRUSTED_PROXY_CIDRS", "10.0.0.0/8, 192.0.2.7")
 
 	cfg, showVersion, err := parseServeConfig([]string{
 		"--data", dir,
@@ -185,6 +187,41 @@ func TestParseServeConfigMapsFlagsAndEnv(t *testing.T) {
 	}
 	if !cfg.TrustedProxy {
 		t.Fatal("TrustedProxy = false")
+	}
+	if len(cfg.TrustedProxyCIDRs) != 2 || cfg.TrustedProxyCIDRs[1].String() != "192.0.2.7/32" {
+		t.Fatalf("TrustedProxyCIDRs = %v", cfg.TrustedProxyCIDRs)
+	}
+}
+
+func TestParseServeConfigDefaultsTrustedProxyCIDRsToLoopback(t *testing.T) {
+	t.Setenv("PEEK_TRUSTED_PROXY_CIDRS", "")
+	cfg, _, err := parseServeConfig([]string{"--data", t.TempDir()})
+	if err != nil {
+		t.Fatalf("parseServeConfig: %v", err)
+	}
+	var got []string
+	for _, p := range cfg.TrustedProxyCIDRs {
+		got = append(got, p.String())
+	}
+	if len(got) != 2 || got[0] != "127.0.0.0/8" || got[1] != "::1/128" {
+		t.Fatalf("TrustedProxyCIDRs = %v", got)
+	}
+}
+
+func TestParseServeConfigRejectsInvalidTrustedProxyCIDRs(t *testing.T) {
+	t.Setenv("PEEK_TRUSTED_PROXY_CIDRS", "10.0.0.0/33")
+	_, _, err := parseServeConfig([]string{"--data", t.TempDir()})
+	want := `trusted-proxy-cidrs: invalid trusted proxy CIDR "10.0.0.0/33"`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want containing %q", err, want)
+	}
+}
+
+func TestParseServeConfigRejectsEmptyTrustedProxyCIDRs(t *testing.T) {
+	_, _, err := parseServeConfig([]string{"--data", t.TempDir(), "--trusted-proxy", "--trusted-proxy-cidrs", ""})
+	want := "trusted-proxy-cidrs must list at least one CIDR when trusted-proxy is set"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want containing %q", err, want)
 	}
 }
 
@@ -314,5 +351,172 @@ func TestParseServeConfigGoogleDefaults(t *testing.T) {
 	}
 	if cfg.GoogleSAKeyFile != "" || cfg.GoogleAdminEmail != "" || cfg.GoogleGroupCacheTTL != 5*time.Minute {
 		t.Fatalf("cfg = %+v", cfg)
+	}
+}
+
+func TestParseServeConfigMetricsTokenFromEnv(t *testing.T) {
+	token := strings.Repeat("x", 16)
+	t.Setenv("PEEK_METRICS_TOKEN", token)
+	cfg, _, err := parseServeConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MetricsToken != token {
+		t.Fatalf("MetricsToken = %q", cfg.MetricsToken)
+	}
+}
+
+func TestParseServeConfigRejectsShortMetricsToken(t *testing.T) {
+	t.Setenv("PEEK_METRICS_TOKEN", "")
+	_, _, err := parseServeConfig([]string{"--metrics-token", "short"})
+	if err == nil || !strings.Contains(err.Error(), "at least 16 characters") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func writeSecretFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestGetenvSecretReadsFile(t *testing.T) {
+	t.Setenv("PEEK_SECRET", "")
+	t.Setenv("PEEK_SECRET_FILE", writeSecretFile(t, "s3cr3t\n"))
+	cfg, _, err := parseServeConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Secret != "s3cr3t" {
+		t.Fatalf("Secret = %q", cfg.Secret)
+	}
+}
+
+func TestGetenvSecretRejectsBothVarAndFile(t *testing.T) {
+	t.Setenv("PEEK_SECRET", "direct")
+	t.Setenv("PEEK_SECRET_FILE", writeSecretFile(t, "s3cr3t"))
+	_, _, err := parseServeConfig(nil)
+	if err == nil || !strings.Contains(err.Error(), "set only one of PEEK_SECRET and PEEK_SECRET_FILE") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestGetenvSecretRejectsEmptyFile(t *testing.T) {
+	t.Setenv("PEEK_SECRET", "")
+	t.Setenv("PEEK_SECRET_FILE", writeSecretFile(t, " \n"))
+	_, _, err := parseServeConfig(nil)
+	if err == nil || !strings.Contains(err.Error(), "points to an empty file") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestParseServeConfigS3SecretKeyFromFile(t *testing.T) {
+	t.Setenv("PEEK_S3_SECRET_KEY", "")
+	t.Setenv("PEEK_S3_SECRET_KEY_FILE", writeSecretFile(t, "key123\n"))
+	cfg, _, err := parseServeConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.S3SecretKey != "key123" {
+		t.Fatalf("S3SecretKey = %q", cfg.S3SecretKey)
+	}
+}
+
+func TestSecretFlagWarnings(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	fs.String("secret", "", "")
+	fs.String("s3-secret-key", "", "")
+	fs.String("addr", "", "")
+	if err := fs.Parse([]string{"--secret", "x", "--addr", ":1"}); err != nil {
+		t.Fatal(err)
+	}
+	got := secretFlagWarnings(fs)
+	if len(got) != 1 || !strings.Contains(got[0], "--secret") || !strings.Contains(got[0], "PEEK_SECRET_FILE") {
+		t.Fatalf("warnings = %v", got)
+	}
+}
+
+func TestRunVersionReturnsZero(t *testing.T) {
+	if got := Run([]string{"--version"}); got != 0 {
+		t.Fatalf("Run --version = %d, want 0", got)
+	}
+}
+
+func TestRunUnknownFlagReturnsUsageError(t *testing.T) {
+	if got := Run([]string{"--nope"}); got != 2 {
+		t.Fatalf("Run --nope = %d, want 2", got)
+	}
+}
+
+func TestRunDispatchesHealthcheck(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+	if got := Run([]string{"healthcheck", "--addr", ts.URL}); got != 0 {
+		t.Fatalf("Run healthcheck = %d, want 0", got)
+	}
+}
+
+func TestRunDispatchesBackup(t *testing.T) {
+	dataDir := seedBackupSource(t)
+	dest := filepath.Join(t.TempDir(), "snap.db")
+	if got := Run([]string{"backup", "--data", dataDir, dest}); got != 0 {
+		t.Fatalf("Run backup = %d, want 0", got)
+	}
+}
+
+func TestParseServeConfigRejectsEveryBadEnvSource(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing")
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"s3 secret file", map[string]string{"PEEK_S3_SECRET_KEY_FILE": missing}, "PEEK_S3_SECRET_KEY_FILE"},
+		{"metrics token file", map[string]string{"PEEK_METRICS_TOKEN_FILE": missing}, "PEEK_METRICS_TOKEN_FILE"},
+		{"secret file", map[string]string{"PEEK_SECRET_FILE": missing}, "PEEK_SECRET_FILE"},
+		{"s3 private endpoint", map[string]string{"PEEK_S3_ALLOW_PRIVATE_ENDPOINT": "maybe"}, "PEEK_S3_ALLOW_PRIVATE_ENDPOINT must be a boolean"},
+		{"oidc private issuer", map[string]string{"PEEK_OIDC_ALLOW_PRIVATE_ISSUER": "maybe"}, "PEEK_OIDC_ALLOW_PRIVATE_ISSUER must be a boolean"},
+		{"max total size", map[string]string{"PEEK_MAX_TOTAL_SIZE": "lots"}, "PEEK_MAX_TOTAL_SIZE must be an integer"},
+		{"retention days", map[string]string{"PEEK_RETENTION_DAYS": "forever"}, "PEEK_RETENTION_DAYS must be an integer"},
+		{"google ttl", map[string]string{"PEEK_GOOGLE_GROUP_CACHE_TTL": "soon"}, "invalid PEEK_GOOGLE_GROUP_CACHE_TTL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+			_, _, err := parseServeConfig(nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseServeConfigRejectsUnknownFlag(t *testing.T) {
+	if _, _, err := parseServeConfig([]string{"--nope"}); err == nil {
+		t.Fatal("expected flag parse error")
+	}
+}
+
+func TestParseServeConfigVersionFlag(t *testing.T) {
+	_, showVersion, err := parseServeConfig([]string{"--version"})
+	if err != nil || !showVersion {
+		t.Fatalf("showVersion = %v, err = %v", showVersion, err)
+	}
+}
+
+func TestParseServeConfigAcceptsMetricsTokenFlag(t *testing.T) {
+	cfg, _, err := parseServeConfig([]string{"--data", t.TempDir(), "--metrics-token", "0123456789abcdef"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MetricsToken != "0123456789abcdef" {
+		t.Fatalf("MetricsToken = %q", cfg.MetricsToken)
 	}
 }

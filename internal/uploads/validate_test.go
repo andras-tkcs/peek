@@ -63,8 +63,13 @@ func TestGenerateSlugUniqueness(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if slug == "" || len(slug) < 8 {
-			t.Fatalf("expected non-empty slug, got %q", slug)
+		if slug == "" || len(slug) != randomSlugLength {
+			t.Fatalf("expected %d-char slug, got %q", randomSlugLength, slug)
+		}
+		for _, c := range slug {
+			if !strings.ContainsRune(slugAlphabet, c) {
+				t.Fatalf("char %q not in alphabet: %q", c, slug)
+			}
 		}
 	})
 	t.Run("retries then free", func(t *testing.T) {
@@ -151,22 +156,36 @@ func TestGenerateSlugFromName(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if slug != "my-cool-page" {
-			t.Fatalf("expected my-cool-page, got %q", slug)
+		if !strings.HasPrefix(slug, "my-cool-page-") || len(slug) != len("my-cool-page-")+6 {
+			t.Fatalf("expected my-cool-page-<6 chars>, got %q", slug)
+		}
+		for _, c := range slug[len("my-cool-page-"):] {
+			if !strings.ContainsRune(slugAlphabet, c) {
+				t.Fatalf("suffix char %q not in alphabet: %q", c, slug)
+			}
 		}
 	})
-	t.Run("clash appends suffix", func(t *testing.T) {
-		mock := &mockSlugChecker{existing: map[string]bool{"my-cool-page": true}}
+	t.Run("taken suffix is retried", func(t *testing.T) {
+		mock := &mockSlugChecker{returnErrorAfter: 3}
 		slug, err := generateSlugFromName(context.Background(), "My Cool Page", mock)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.HasPrefix(slug, "my-cool-page-") {
-			t.Fatalf("expected clash suffix, got %q", slug)
+		if !strings.HasPrefix(slug, "my-cool-page-") || len(slug) != len("my-cool-page-")+6 {
+			t.Fatalf("expected my-cool-page-<6 chars>, got %q", slug)
 		}
-		suffix := slug[len("my-cool-page-"):]
-		if len(suffix) < 4 {
-			t.Fatalf("suffix too short: %q", suffix)
+		if mock.counter != 3 {
+			t.Fatalf("counter = %d, want 3", mock.counter)
+		}
+	})
+	t.Run("long name is truncated before suffix", func(t *testing.T) {
+		mock := &mockSlugChecker{existing: map[string]bool{}}
+		slug, err := generateSlugFromName(context.Background(), strings.Repeat("a", 80), mock)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(slug) > maxSlugLength || !strings.HasPrefix(slug, strings.Repeat("a", 53)+"-") {
+			t.Fatalf("slug = %q", slug)
 		}
 	})
 	t.Run("empty name falls back to random", func(t *testing.T) {
@@ -199,4 +218,34 @@ func TestGenerateSlugFromName(t *testing.T) {
 			t.Fatalf("expected fallback random slug, got %q", slug)
 		}
 	})
+}
+
+func TestRandomSlugString(t *testing.T) {
+	a, err := randomSlugString(16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := randomSlugString(16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{a, b} {
+		if len(s) != 16 {
+			t.Fatalf("len(%q) = %d", s, len(s))
+		}
+		for _, c := range s {
+			if !strings.ContainsRune(slugAlphabet, c) {
+				t.Fatalf("char %q not in alphabet: %q", c, s)
+			}
+		}
+	}
+	if a == b {
+		t.Fatalf("two random slugs are equal: %q", a)
+	}
+}
+
+func TestMin(t *testing.T) {
+	if min(1, 2) != 1 || min(2, 1) != 1 || min(3, 3) != 3 {
+		t.Fatal("min returned the wrong value")
+	}
 }

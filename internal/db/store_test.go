@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -171,10 +173,10 @@ func TestAddListComments(t *testing.T) {
 		t.Fatalf("create upload: %v", err)
 	}
 	up, _ := s.GetUpload(context.Background(), "slug2")
-	if _, err := s.AddComment(context.Background(), up.ID, 1, "#id", "text", "text", "Alice", "cookie-a", "comment body"); err != nil {
+	if _, err := s.AddComment(context.Background(), up.ID, 1, "#id", "text", "text", "Alice", "cookie-a", "comment body", 0); err != nil {
 		t.Fatalf("add comment: %v", err)
 	}
-	if _, err := s.AddComment(context.Background(), up.ID, 1, "#id2", "text2", "element", "Bob", "cookie-b", "second"); err != nil {
+	if _, err := s.AddComment(context.Background(), up.ID, 1, "#id2", "text2", "element", "Bob", "cookie-b", "second", 0); err != nil {
 		t.Fatalf("add comment: %v", err)
 	}
 	comments, err := s.ListComments(context.Background(), up.ID, 0)
@@ -204,7 +206,7 @@ func TestAddCommentReturnsStoredComment(t *testing.T) {
 		t.Fatalf("create upload: %v", err)
 	}
 	up, _ := s.GetUpload(ctx, "slug3")
-	c, err := s.AddComment(ctx, up.ID, 1, "#id", "text", "text", "Alice", "cookie-a", "comment body")
+	c, err := s.AddComment(ctx, up.ID, 1, "#id", "text", "text", "Alice", "cookie-a", "comment body", 0)
 	if err != nil {
 		t.Fatalf("add comment: %v", err)
 	}
@@ -672,10 +674,10 @@ func TestListCommentsFiltersByVersion(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 	up := seedVersionTestUpload(t, s, "verc")
-	if _, err := s.AddComment(ctx, up.ID, 1, "#a", "a", "text", "Alice", "ca", "on v1"); err != nil {
+	if _, err := s.AddComment(ctx, up.ID, 1, "#a", "a", "text", "Alice", "ca", "on v1", 0); err != nil {
 		t.Fatalf("add v1 comment: %v", err)
 	}
-	if _, err := s.AddComment(ctx, up.ID, 2, "#b", "b", "text", "Bob", "cb", "on v2"); err != nil {
+	if _, err := s.AddComment(ctx, up.ID, 2, "#b", "b", "text", "Bob", "cb", "on v2", 0); err != nil {
 		t.Fatalf("add v2 comment: %v", err)
 	}
 	all, err := s.ListComments(ctx, up.ID, 0)
@@ -708,5 +710,140 @@ func TestRecordVisitStoresVersion(t *testing.T) {
 	}
 	if len(visits) != 1 || visits[0].Version != 3 {
 		t.Fatalf("visits = %+v, want one with Version 3", visits)
+	}
+}
+
+func assertMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Errorf("%s mode = %#o, want %#o", path, got, want)
+	}
+}
+
+func TestOpenCreatesDatabaseOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes")
+	}
+	path := filepath.Join(t.TempDir(), "peek.db")
+	store, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer store.Close()
+	assertMode(t, path, 0o600)
+	for _, p := range []string{path + "-wal", path + "-shm"} {
+		if _, err := os.Stat(p); err == nil {
+			assertMode(t, p, 0o600)
+		}
+	}
+}
+
+func TestOpenTightensExistingDatabaseMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes")
+	}
+	path := filepath.Join(t.TempDir(), "peek.db")
+	store, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	store, err = Open(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer store.Close()
+	assertMode(t, path, 0o600)
+}
+
+func TestCommentAccountIDRoundTrip(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	acct, err := s.CreateAccount(ctx, "ada@example.test", "Ada", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateToken(ctx, "owner", "owner", false, 0); err != nil {
+		t.Fatal(err)
+	}
+	tok, _ := s.GetToken(ctx, "owner")
+	if err := s.CreateUploadChecked(ctx, "slug-acct", tok.AccountID, tok.ID, "page.html", 0, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	up, _ := s.GetUpload(ctx, "slug-acct")
+	signed, err := s.AddComment(ctx, up.ID, 1, "", "", "page", "Ada", "c1", "signed", acct.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	typed, err := s.AddComment(ctx, up.ID, 1, "", "", "page", "Ada", "c2", "typed", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if signed.AccountID != acct.ID || typed.AccountID != 0 {
+		t.Fatalf("returned account ids: %d %d", signed.AccountID, typed.AccountID)
+	}
+	list, err := s.ListComments(ctx, up.ID, 0)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("list: %v %+v", err, list)
+	}
+	byID := map[int64]int64{}
+	for _, c := range list {
+		byID[c.ID] = c.AccountID
+	}
+	if byID[signed.ID] != acct.ID || byID[typed.ID] != 0 {
+		t.Fatalf("listed account ids: %+v", byID)
+	}
+}
+
+func TestMigrationAddsCommentAccountID(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "peek.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateToken(ctx, "owner", "owner", false, 0); err != nil {
+		t.Fatal(err)
+	}
+	tok, _ := s.GetToken(ctx, "owner")
+	if err := s.CreateUploadChecked(ctx, "slug-mig", tok.AccountID, tok.ID, "page.html", 0, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	up, _ := s.GetUpload(ctx, "slug-mig")
+	if _, err := s.AddComment(ctx, up.ID, 1, "", "", "page", "Ada", "c", "old", tok.AccountID); err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`ALTER TABLE comments DROP COLUMN account_id`,
+		`DELETE FROM schema_migrations WHERE id=13`,
+	} {
+		if _, err := s.Exec(stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if exists, _, err := s.columnInfo("comments", "account_id"); err != nil || !exists {
+		t.Fatalf("account_id column: exists=%v err=%v", exists, err)
+	}
+	list, err := s.ListComments(ctx, up.ID, 0)
+	if err != nil || len(list) != 1 || list[0].AccountID != 0 {
+		t.Fatalf("list: %v %+v", err, list)
 	}
 }

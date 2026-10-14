@@ -91,7 +91,7 @@ func TestDashboardRendersGenericSuccessFlash(t *testing.T) {
 	}
 	s := &Server{store: store, renderer: renderer, secret: strings.Repeat("0", 64)}
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard?ok=settings+saved", nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard?ok=settings_saved", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: makeWebSession(s.secret, strconv.FormatInt(account.ID, 10), sessionTTL)})
 	rec := httptest.NewRecorder()
 
@@ -281,6 +281,57 @@ func TestDashboardUploadPassesVisibility(t *testing.T) {
 	if len(list) != 1 || list[0].Visibility != "private" {
 		t.Fatalf("uploads = %+v", list)
 	}
+	if loc := rec.Header().Get("Location"); loc != "/dashboard?uploaded="+list[0].Slug {
+		t.Fatalf("Location = %q", loc)
+	}
+}
+
+func TestDashboardIgnoresFreeTextFlash(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	viewer, err := s.store.CreateAccount(context.Background(), "viewer@example.test", "Viewer", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doRequest(t, s, http.MethodGet,
+		"/dashboard?err=Your+session+expired.+Call+IT&ok=Pay+now&uploaded=https%3A%2F%2Fevil.example%2Fx",
+		nil, asSession(s, viewer.ID))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, banned := range []string{"Call IT", "Pay now", "evil.example", "Uploaded! Share link:"} {
+		if strings.Contains(body, banned) {
+			t.Fatalf("dashboard rendered %q from the query string", banned)
+		}
+	}
+}
+
+func TestDashboardUploadedFlashShowsOwnUploadLink(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := newTwoVersionPage(t, s, "page", models.UploadVisibilityPublic, "")
+
+	rec := doRequest(t, s, http.MethodGet, "/dashboard?uploaded=page", nil, asSession(s, u.OwnerAccountID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Uploaded! Share link:") || !strings.Contains(body, s.baseURL+"/p/page") {
+		t.Fatalf("owner dashboard missing share link: %s", body)
+	}
+
+	other, err := s.store.CreateAccount(context.Background(), "other@example.test", "Other", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = doRequest(t, s, http.MethodGet, "/dashboard?uploaded=page", nil, asSession(s, other.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "Uploaded! Share link:") {
+		t.Fatal("another account's dashboard rendered the upload link")
+	}
 }
 
 func TestDashboardDeleteReportsDatabaseDeleteFailureAfterStorageDelete(t *testing.T) {
@@ -301,7 +352,7 @@ func TestDashboardDeleteReportsDatabaseDeleteFailureAfterStorageDelete(t *testin
 	if err != nil {
 		t.Fatalf("parse location: %v", err)
 	}
-	if got := u.Query().Get("err"); got != "delete failed" {
+	if got := u.Query().Get("err"); got != "delete_failed" {
 		t.Fatalf("err query = %q, location = %q", got, loc)
 	}
 	if len(storage.deleted) != 1 || storage.deleted[0] != "page" {
@@ -328,7 +379,7 @@ func TestDashboardDeleteStopsWhenStorageDeleteFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse location: %v", err)
 	}
-	if got := u.Query().Get("err"); got != "delete failed" {
+	if got := u.Query().Get("err"); got != "delete_failed" {
 		t.Fatalf("err query = %q, location = %q", got, loc)
 	}
 	if len(storage.deleted) != 1 || storage.deleted[0] != "page" {
@@ -434,7 +485,7 @@ func TestDashboardVisibilitySetsPasswordAndAudits(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}, "password": {"pw"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=Password+updated+for+%2Fp%2Fpage")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=password_updated&slug=page")
 	got, err := s.store.GetUpload(context.Background(), "page")
 	if err != nil {
 		t.Fatalf("get upload: %v", err)
@@ -464,7 +515,7 @@ func TestDashboardVisibilityMakesPublic(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"public"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=%2Fp%2Fpage+is+now+public")
+	assertDashboardRedirect(t, rec, "/dashboard?ok=visibility_set&slug=page")
 	got, err := s.store.GetUpload(context.Background(), "page")
 	if err != nil {
 		t.Fatalf("get upload: %v", err)
@@ -478,7 +529,7 @@ func TestDashboardVisibilityRejectsPasswordWithoutValue(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=password+visibility+requires+a+password")
+	assertDashboardRedirect(t, rec, "/dashboard?err=upload_password_required")
 	assertVisibilityUnchanged(t, s, "page")
 }
 
@@ -490,7 +541,7 @@ func TestDashboardVisibilityRejectsNonOwner(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	rec := dashboardPost(t, s, other.ID, "/dashboard/visibility/page", url.Values{"visibility": {"public"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=not+owner")
+	assertDashboardRedirect(t, rec, "/dashboard?err=not_owner")
 	assertVisibilityUnchanged(t, s, "page")
 }
 
@@ -498,7 +549,7 @@ func TestDashboardVisibilityRejectsMissingCSRF(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"public"}}, false)
-	assertDashboardRedirect(t, rec, "/dashboard?err=invalid+session")
+	assertDashboardRedirect(t, rec, "/dashboard?err=invalid_session")
 	assertVisibilityUnchanged(t, s, "page")
 }
 
@@ -517,7 +568,7 @@ func TestDashboardVisibilityRestrictedReopensDialog(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := newTwoVersionPage(t, s, "page", "public", "")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"restricted"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?manage=page&ok=%2Fp%2Fpage+is+now+restricted")
+	assertDashboardRedirect(t, rec, "/dashboard?manage=page&ok=visibility_set&slug=page")
 }
 
 func TestDashboardListsGrantsInAccessDialog(t *testing.T) {
@@ -546,5 +597,217 @@ func TestDashboardListsGrantsInAccessDialog(t *testing.T) {
 	s.groups = fakeGroups{members: map[string]bool{}}
 	if body := get(); !strings.Contains(body, `<option value="group">Google group</option>`) {
 		t.Fatal("dashboard missing group option")
+	}
+}
+
+// dashCovUpload seeds an upload owned by ownerID on s.
+func dashCovUpload(t *testing.T, s *Server, slug string, ownerID int64) {
+	t.Helper()
+	if err := s.store.CreateUploadChecked(context.Background(), slug, ownerID, 0, slug+".html", 42, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// dashCovUser creates a non-admin account.
+func dashCovUser(t *testing.T, s *Server, email string) int64 {
+	t.Helper()
+	a, err := s.store.CreateAccount(context.Background(), email, email, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a.ID
+}
+
+// dashCovMultipart posts a multipart form to /dashboard/upload with a valid
+// CSRF cookie. file may be nil.
+func dashCovMultipart(t *testing.T, s *Server, accountID int64, fields map[string]string, filename string, file []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	for k, v := range fields {
+		if err := mw.WriteField(k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if file != nil {
+		fw, err := mw.CreateFormFile("file", filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write(file); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return doRequest(t, s, http.MethodPost, "/dashboard/upload", &body,
+		func(r *http.Request) { r.Header.Set("Content-Type", mw.FormDataContentType()) },
+		asSession(s, accountID),
+		func(r *http.Request) { r.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"}) })
+}
+
+func TestDashCovDashboardRedirects(t *testing.T) {
+	s, store, _, _ := newFaultServer(t)
+
+	rec := doRequest(t, s, http.MethodGet, "/dashboard", nil)
+	assertDashboardRedirect(t, rec, "/login")
+
+	rec = doRequest(t, s, http.MethodGet, "/dashboard/stats/page", nil)
+	assertDashboardRedirect(t, rec, "/login")
+
+	if _, err := store.Exec("DELETE FROM accounts"); err != nil {
+		t.Fatal(err)
+	}
+	rec = doRequest(t, s, http.MethodGet, "/dashboard", nil)
+	assertDashboardRedirect(t, rec, "/setup")
+}
+
+func TestDashCovDashboardRendersFlashErrorAndGrantFailure(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+	dashCovUpload(t, s, "page", adminID)
+
+	rec := doRequest(t, s, http.MethodGet, "/dashboard?err="+flashNotFound, nil, asSession(s, adminID))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), flashMessages[flashNotFound]) {
+		t.Fatalf("status = %d, flash error not rendered", rec.Code)
+	}
+
+	dropTable(t, store, "upload_grants")
+	rec = doRequest(t, s, http.MethodGet, "/dashboard", nil, asSession(s, adminID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d after grants table drop", rec.Code)
+	}
+}
+
+func TestDashCovDashboardCSRFGenerationFailure(t *testing.T) {
+	s, _, _, adminID := newFaultServer(t)
+	stubSecureRandomRead(t, func([]byte) (int, error) { return 0, errors.New("rand failed") })
+	rec := doRequest(t, s, http.MethodGet, "/dashboard", nil, asSession(s, adminID))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+}
+
+func TestDashCovUploadFailurePaths(t *testing.T) {
+	s, _, storage, adminID := newFaultServer(t)
+	good := map[string]string{"csrf": "csrf-token", "mode": "paste", "html": "<html></html>", "visibility": "public"}
+
+	if rec := doRequest(t, s, http.MethodPost, "/dashboard/upload", nil); rec.Header().Get("Location") != "/login" {
+		t.Fatalf("anonymous upload Location = %q", rec.Header().Get("Location"))
+	}
+
+	rec := doRequest(t, s, http.MethodPost, "/dashboard/upload", strings.NewReader("x"), asSession(s, adminID),
+		func(r *http.Request) { r.Header.Set("Content-Type", "multipart/form-data") })
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashFormInvalid)
+
+	bad := map[string]string{"csrf": "wrong", "mode": "paste", "html": "<html></html>"}
+	rec = dashCovMultipart(t, s, adminID, bad, "", nil)
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashInvalidSession)
+
+	realRead := secureRandomRead
+	secureRandomRead = func([]byte) (int, error) { return 0, errors.New("rand failed") }
+	rec = dashCovMultipart(t, s, adminID, good, "", nil)
+	secureRandomRead = realRead
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("csrf rand failure status = %d", rec.Code)
+	}
+
+	rec = dashCovMultipart(t, s, adminID, map[string]string{"csrf": "csrf-token", "mode": "paste", "html": "  "}, "", nil)
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashNoHTML)
+
+	rec = dashCovMultipart(t, s, adminID, map[string]string{"csrf": "csrf-token"}, "", nil)
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashNoFile)
+
+	big := bytes.Repeat([]byte("a"), (2<<20)+10)
+	rec = dashCovMultipart(t, s, adminID, map[string]string{"csrf": "csrf-token"}, "big.html", big)
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashFileTooLarge)
+
+	rec = dashCovMultipart(t, s, adminID, map[string]string{"csrf": "csrf-token", "visibility": "public"}, "from-file.html", []byte("<html>file</html>"))
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/dashboard?uploaded=") {
+		t.Fatalf("file upload = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	rec = dashCovMultipart(t, s, adminID, good, "", nil)
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/dashboard?uploaded=") {
+		t.Fatalf("paste upload = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	list, err := s.store.ListAllUploads(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, u := range list {
+		names[u.Name] = true
+	}
+	if !names["pasted"] || !names["from-file.html"] {
+		t.Fatalf("default names not applied: %v", names)
+	}
+
+	storage.saveErr = errors.New("disk full")
+	rec = dashCovMultipart(t, s, adminID, good, "", nil)
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/dashboard?err=") {
+		t.Fatalf("storage failure = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+func TestDashCovDeleteAndVisibilityGuards(t *testing.T) {
+	s, store, _, adminID := newFaultServer(t)
+	userID := dashCovUser(t, s, "user@example.test")
+	otherID := dashCovUser(t, s, "other@example.test")
+	dashCovUpload(t, s, "page", userID)
+
+	for _, op := range []string{"delete", "visibility"} {
+		path := "/dashboard/" + op + "/page"
+		if rec := doRequest(t, s, http.MethodPost, path, nil); rec.Header().Get("Location") != "/login" {
+			t.Fatalf("%s anonymous Location = %q", op, rec.Header().Get("Location"))
+		}
+		rec := dashboardPost(t, s, userID, path, url.Values{}, false)
+		assertDashboardRedirect(t, rec, "/dashboard?err="+flashInvalidSession)
+		rec = dashboardPost(t, s, userID, "/dashboard/"+op+"/missing", url.Values{}, true)
+		assertDashboardRedirect(t, rec, "/dashboard?err="+flashNotFound)
+		rec = dashboardPost(t, s, otherID, path, url.Values{}, true)
+		assertDashboardRedirect(t, rec, "/dashboard?err="+flashNotOwner)
+	}
+
+	addFailTrigger(t, store, "uploads", "UPDATE")
+	rec := dashboardPost(t, s, userID, "/dashboard/visibility/page", url.Values{"visibility": {"private"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err="+flashVisibilityFailed)
+	_ = adminID
+}
+
+func TestDashCovStatsGuardsAndFailures(t *testing.T) {
+	s, store, _, _ := newFaultServer(t)
+	userID := dashCovUser(t, s, "user@example.test")
+	otherID := dashCovUser(t, s, "other@example.test")
+	dashCovUpload(t, s, "page", userID)
+
+	rec := doRequest(t, s, http.MethodGet, "/dashboard/stats/page", nil, asSession(s, otherID))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("non-owner stats = %d, want 404", rec.Code)
+	}
+
+	// Without visits the sparkline is all zero.
+	rec = doRequest(t, s, http.MethodGet, "/dashboard/stats/page", nil, asSession(s, userID))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "0 visits last 7 days") {
+		t.Fatalf("empty stats = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Dropping a column RecentVisits selects (but CountVisits does not) fails
+	// only the recent-visits query.
+	if _, err := store.Exec("ALTER TABLE visits DROP COLUMN user_agent"); err != nil {
+		t.Fatal(err)
+	}
+	rec = doRequest(t, s, http.MethodGet, "/dashboard/stats/page", nil, asSession(s, userID))
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "stats could not be loaded") {
+		t.Fatalf("recent failure = %d", rec.Code)
+	}
+}
+
+func TestDashCovStatsSparklineEdges(t *testing.T) {
+	if got := statsSparkline(nil); !strings.HasPrefix(got.LinePath, "M 2.0 54.0") {
+		t.Fatalf("empty sparkline path = %q", got.LinePath)
+	}
+	got := statsSparkline([]bucket{{Count: 1}})
+	if got.Summary != "1 visit last 7 days" {
+		t.Fatalf("summary = %q", got.Summary)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
@@ -24,6 +25,8 @@ type serveConfig struct {
 	BaseURL   string
 	Secret    string
 	MaxUpload int64
+	// MetricsToken is the bearer token required on /metrics (empty = open).
+	MetricsToken string
 
 	Storage                string
 	S3Endpoint             string
@@ -34,9 +37,10 @@ type serveConfig struct {
 	S3AllowPrivateEndpoint bool
 	OIDCAllowPrivateIssuer bool
 
-	MaxTotalSize  int64
-	RetentionDays int
-	TrustedProxy  bool
+	MaxTotalSize      int64
+	RetentionDays     int
+	TrustedProxy      bool
+	TrustedProxyCIDRs []netip.Prefix
 
 	GoogleSAKeyFile     string
 	GoogleAdminEmail    string
@@ -69,6 +73,18 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	fs := flag.NewFlagSet("peekd", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
+	secretDefault, err := getenvSecret("PEEK_SECRET")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
+	s3SecretKeyDefault, err := getenvSecret("PEEK_S3_SECRET_KEY")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
+	metricsTokenDefault, err := getenvSecret("PEEK_METRICS_TOKEN")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
 	maxUploadDefault, err := getenvInt64("PEEK_MAX_UPLOAD", 2<<20)
 	if err != nil {
 		return serveConfig{}, false, err
@@ -102,20 +118,23 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	dataDir := fs.String("data", getenv("PEEK_DATA", "./data"), "data directory")
 	baseURL := fs.String("base-url", getenv("PEEK_BASE_URL", "http://localhost:7700"), "public base URL")
 	maxUpload := fs.Int64("max-upload", maxUploadDefault, "max upload size in bytes (per file)")
-	secret := fs.String("secret", getenv("PEEK_SECRET", ""), "server secret for HMAC signing and encryption (auto-generated if empty)")
+	secret := fs.String("secret", secretDefault, "server secret for HMAC signing and encryption (auto-generated if empty)")
+
+	metricsToken := fs.String("metrics-token", metricsTokenDefault, "bearer token required on /metrics (empty = unauthenticated)")
 
 	storageFlag := fs.String("storage", getenv("PEEK_STORAGE", "file"), "storage backend: file or s3")
 	s3Endpoint := fs.String("s3-endpoint", getenv("PEEK_S3_ENDPOINT", ""), "S3-compatible endpoint URL")
 	s3Bucket := fs.String("s3-bucket", getenv("PEEK_S3_BUCKET", ""), "S3 bucket name")
 	s3Region := fs.String("s3-region", getenv("PEEK_S3_REGION", "us-east-1"), "S3 region")
 	s3AccessKey := fs.String("s3-access-key", getenv("PEEK_S3_ACCESS_KEY", ""), "S3 access key")
-	s3SecretKey := fs.String("s3-secret-key", getenv("PEEK_S3_SECRET_KEY", ""), "S3 secret key")
+	s3SecretKey := fs.String("s3-secret-key", s3SecretKeyDefault, "S3 secret key")
 	s3AllowPrivateEndpoint := fs.Bool("s3-allow-private-endpoint", s3AllowPrivateEndpointDefault, "allow private/link-local S3 endpoint addresses for explicit dev deployments")
 	oidcAllowPrivateIssuer := fs.Bool("oidc-allow-private-issuer", oidcAllowPrivateIssuerDefault, "allow http/private/link-local OIDC issuer URLs for explicit dev deployments")
 
 	maxTotalSize := fs.Int64("max-total-size", maxTotalSizeDefault, "max total storage bytes across all uploads (0 = unlimited)")
 	retentionDays := fs.Int("retention-days", retentionDaysDefault, "auto-delete uploads older than N days (0 = off)")
 	trustedProxy := fs.Bool("trusted-proxy", trustedProxyDefault, "trust X-Forwarded-For header (set when behind a reverse proxy)")
+	trustedProxyCIDRs := fs.String("trusted-proxy-cidrs", getenv("PEEK_TRUSTED_PROXY_CIDRS", server.DefaultTrustedProxyCIDRs), "comma-separated CIDRs of reverse proxies allowed to set X-Forwarded-For (used with --trusted-proxy)")
 	googleSAKeyFile := fs.String("google-sa-key-file", getenv("PEEK_GOOGLE_SA_KEY_FILE", ""), "path to Google service account JSON key for group lookups")
 	googleAdminEmail := fs.String("google-admin-email", getenv("PEEK_GOOGLE_ADMIN_EMAIL", ""), "Google Workspace admin user to impersonate for group lookups")
 	googleGroupCacheTTL := fs.Duration("google-group-cache-ttl", googleTTLDefault, "how long Google group membership answers are cached")
@@ -125,6 +144,19 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	}
 	if *showVersion {
 		return serveConfig{}, true, nil
+	}
+	for _, w := range secretFlagWarnings(fs) {
+		fmt.Fprintln(os.Stderr, w)
+	}
+	if *metricsToken != "" && len(*metricsToken) < 16 {
+		return serveConfig{}, false, fmt.Errorf("metrics-token must be at least 16 characters")
+	}
+	cidrs, err := server.ParseTrustedProxyCIDRs(*trustedProxyCIDRs)
+	if err != nil {
+		return serveConfig{}, false, fmt.Errorf("trusted-proxy-cidrs: %w", err)
+	}
+	if *trustedProxy && len(cidrs) == 0 {
+		return serveConfig{}, false, fmt.Errorf("trusted-proxy-cidrs must list at least one CIDR when trusted-proxy is set")
 	}
 	if err := validateServeConfig(*baseURL, *maxUpload, *storageFlag, *maxTotalSize, *retentionDays); err != nil {
 		return serveConfig{}, false, err
@@ -147,6 +179,8 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		Secret:    *secret,
 		MaxUpload: *maxUpload,
 
+		MetricsToken: *metricsToken,
+
 		Storage:                *storageFlag,
 		S3Endpoint:             *s3Endpoint,
 		S3Bucket:               *s3Bucket,
@@ -156,9 +190,10 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		S3AllowPrivateEndpoint: *s3AllowPrivateEndpoint,
 		OIDCAllowPrivateIssuer: *oidcAllowPrivateIssuer,
 
-		MaxTotalSize:  *maxTotalSize,
-		RetentionDays: *retentionDays,
-		TrustedProxy:  *trustedProxy,
+		MaxTotalSize:      *maxTotalSize,
+		RetentionDays:     *retentionDays,
+		TrustedProxy:      *trustedProxy,
+		TrustedProxyCIDRs: cidrs,
 
 		GoogleSAKeyFile:     *googleSAKeyFile,
 		GoogleAdminEmail:    *googleAdminEmail,
@@ -215,6 +250,8 @@ func runServe(cfg serveConfig) int {
 		Secret:    cfg.Secret,
 		MaxUpload: cfg.MaxUpload,
 
+		MetricsToken: cfg.MetricsToken,
+
 		Storage:                cfg.Storage,
 		S3Endpoint:             cfg.S3Endpoint,
 		S3Bucket:               cfg.S3Bucket,
@@ -224,17 +261,18 @@ func runServe(cfg serveConfig) int {
 		S3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		OIDCAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
 
-		MaxTotalSize:  cfg.MaxTotalSize,
-		RetentionDays: cfg.RetentionDays,
-		TrustedProxy:  cfg.TrustedProxy,
-		Groups:        groupChecker,
+		MaxTotalSize:      cfg.MaxTotalSize,
+		RetentionDays:     cfg.RetentionDays,
+		TrustedProxy:      cfg.TrustedProxy,
+		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
+		Groups:            groupChecker,
 	})
 	if err != nil {
 		slog.Error("init", "err", err)
 		return 1
 	}
 
-	slog.Info("peek starting", "addr", cfg.Addr, "data", cfg.DataDir, "base_url", cfg.BaseURL)
+	slog.Info("peek starting", "addr", cfg.Addr, "data", cfg.DataDir, "base_url", cfg.BaseURL, "metrics_auth", cfg.MetricsToken != "")
 	hs := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      srv.Handler(),

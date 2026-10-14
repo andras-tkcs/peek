@@ -261,3 +261,166 @@ func TestMigrationAddsTokenHintLastUsed(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCreateAccountTokenExpiringStoresExpiry(t *testing.T) {
+	ctx := context.Background()
+	s := openTokenTestStore(t)
+	a, err := s.CreateAccount(ctx, "a@example.test", "a", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp := time.Now().Add(time.Hour).Unix()
+	if _, err := s.CreateAccountTokenExpiring(ctx, a.ID, "future-token-0123456789", "future", exp); err != nil {
+		t.Fatal(err)
+	}
+	tk, err := s.GetToken(ctx, "future-token-0123456789")
+	if err != nil || tk.ExpiresAt != exp {
+		t.Fatalf("GetToken = %+v, %v", tk, err)
+	}
+	keys, err := s.ListAccountTokens(ctx, a.ID)
+	if err != nil || len(keys) != 1 || keys[0].ExpiresAt != exp {
+		t.Fatalf("ListAccountTokens = %+v, %v", keys, err)
+	}
+	if _, err := s.CreateAccountTokenExpiring(ctx, a.ID, "past-token-0123456789", "past", time.Now().Add(-time.Minute).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetToken(ctx, "past-token-0123456789"); err == nil {
+		t.Fatal("expired token was returned")
+	}
+}
+
+func TestIsHashed(t *testing.T) {
+	good := HashToken("x")
+	if !isHashed(good) {
+		t.Fatalf("hash %q not recognised", good)
+	}
+	for _, bad := range []string{"", "short", good + "0", good[:63] + "G", good[:63] + "Z"} {
+		if isHashed(bad) {
+			t.Fatalf("%q recognised as a hash", bad)
+		}
+	}
+}
+
+func TestTokenCountsAndLookups(t *testing.T) {
+	ctx := context.Background()
+	s := openTokenTestStore(t)
+	if err := s.CreateToken(ctx, "admin-token-0001", " admin ", true, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateToken(ctx, "user-token-0002", "user", false, 0); err != nil {
+		t.Fatal(err)
+	}
+	acct, _ := s.CreateAccount(ctx, "a@example.test", "a", false)
+	if err := s.CreateTokenForAccount(ctx, "acct-token-0003", acct.ID, "  "); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := s.CreateAccountToken(ctx, acct.ID, "acct-token-0004", ""); err != nil || id == 0 {
+		t.Fatalf("empty name token = %d, %v", id, err)
+	}
+	if n, err := s.CountTokens(ctx); err != nil || n != 4 {
+		t.Fatalf("CountTokens = %d, %v", n, err)
+	}
+	if n, err := s.CountAdminTokens(ctx); err != nil || n != 1 {
+		t.Fatalf("CountAdminTokens = %d, %v", n, err)
+	}
+	list, err := s.ListTokens(ctx)
+	if err != nil || len(list) != 4 || list[0].Name != "admin" || !list[0].IsAdmin {
+		t.Fatalf("ListTokens = %+v, %v", list, err)
+	}
+	byID, err := s.GetTokenByID(ctx, list[1].ID)
+	if err != nil || byID.Name != "user" {
+		t.Fatalf("GetTokenByID = %+v, %v", byID, err)
+	}
+	if _, err := s.GetTokenByID(ctx, 9999); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("unknown id err = %v", err)
+	}
+	keys, err := s.ListAccountTokens(ctx, acct.ID)
+	if err != nil || len(keys) != 2 {
+		t.Fatalf("ListAccountTokens = %+v, %v", keys, err)
+	}
+	var sawDefault bool
+	for _, k := range keys {
+		sawDefault = sawDefault || k.Name == "API token"
+	}
+	if !sawDefault {
+		t.Fatalf("default token name missing: %+v", keys)
+	}
+	if err := s.DeleteToken(ctx, list[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteToken(ctx, list[1].ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("second delete err = %v", err)
+	}
+}
+
+func TestDeleteTokenCheckedProtectsLastAdminToken(t *testing.T) {
+	ctx := context.Background()
+	s := openTokenTestStore(t)
+	if err := s.CreateToken(ctx, "admin-token-0001", "admin", true, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateToken(ctx, "user-token-0002", "user", false, 0); err != nil {
+		t.Fatal(err)
+	}
+	admin, _ := s.GetToken(ctx, "admin-token-0001")
+	user, _ := s.GetToken(ctx, "user-token-0002")
+	if _, err := s.DeleteTokenChecked(ctx, admin.ID); !errors.Is(err, ErrLastAdmin) {
+		t.Fatalf("last admin token err = %v", err)
+	}
+	if _, err := s.DeleteTokenChecked(ctx, 9999); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("unknown token err = %v", err)
+	}
+	got, err := s.DeleteTokenChecked(ctx, user.ID)
+	if err != nil || got.Name != "user" {
+		t.Fatalf("delete user token = %+v, %v", got, err)
+	}
+}
+
+func TestTokenWritesFailMidTransaction(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name, table, op string
+		call            func(s *Store, accountID, tokenID int64) error
+	}{
+		{"CreateToken account insert", "accounts", "INSERT", func(s *Store, _, _ int64) error { return s.CreateToken(ctx, "new-token-0009", "n", false, 0) }},
+		{"CreateToken token insert", "tokens", "INSERT", func(s *Store, _, _ int64) error { return s.CreateToken(ctx, "new-token-0009", "n", false, 0) }},
+		{"RegenerateAccountToken update", "tokens", "UPDATE", func(s *Store, a, k int64) error {
+			_, err := s.RegenerateAccountToken(ctx, a, k, "regen-token-0009")
+			return err
+		}},
+		{"DeleteAccountToken detach", "uploads", "UPDATE", func(s *Store, a, k int64) error { _, err := s.DeleteAccountToken(ctx, a, k); return err }},
+		{"DeleteAccountToken delete", "tokens", "DELETE", func(s *Store, a, k int64) error { _, err := s.DeleteAccountToken(ctx, a, k); return err }},
+		{"DeleteTokenChecked detach", "uploads", "UPDATE", func(s *Store, _, k int64) error { _, err := s.DeleteTokenChecked(ctx, k); return err }},
+		{"DeleteTokenChecked delete", "tokens", "DELETE", func(s *Store, _, k int64) error { _, err := s.DeleteTokenChecked(ctx, k); return err }},
+		{"TouchTokenLastUsed", "tokens", "UPDATE", func(s *Store, _, k int64) error { return s.TouchTokenLastUsed(ctx, k, time.Now()) }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openTokenTestStore(t)
+			acct, _ := s.CreateAccount(ctx, "a@example.test", "a", false)
+			id, err := s.CreateAccountToken(ctx, acct.ID, "seed-token-0001", "seed")
+			if err != nil {
+				t.Fatal(err)
+			}
+			insertTokenUpload(t, s, acct.ID, id) // row-level triggers need a row to fire on
+			failOn(t, s, c.table, c.op)
+			wantErr(t, c.name, c.call(s, acct.ID, id))
+		})
+	}
+}
+
+func TestTokenScanErrors(t *testing.T) {
+	ctx := context.Background()
+	s := openTokenTestStore(t)
+	acct, _ := s.CreateAccount(ctx, "a@example.test", "a", false)
+	id, _ := s.CreateAccountToken(ctx, acct.ID, "seed-token-0001", "seed")
+	corruptInt(t, s, "tokens", "created_at")
+	_, err := s.ListTokens(ctx)
+	wantErr(t, "ListTokens", err)
+	_, err = s.GetTokenByID(ctx, id)
+	wantErr(t, "GetTokenByID", err)
+	_, err = s.ListAccountTokens(ctx, acct.ID)
+	wantErr(t, "ListAccountTokens", err)
+	_, err = s.DeleteTokenChecked(ctx, id)
+	wantErr(t, "DeleteTokenChecked", err)
+}

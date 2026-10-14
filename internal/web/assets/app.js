@@ -35,7 +35,7 @@
     const byAuthor = new Map();
     let colorIndex = 0;
     return comments.map((comment, index) => {
-      const author = comment.author || "anonymous";
+      const author = (comment.verified === true ? "verified:" : "guest:") + (comment.author || "anonymous");
       if (!byAuthor.has(author)) {
         byAuthor.set(author, AUTHOR_PALETTE[colorIndex % AUTHOR_PALETTE.length]);
         colorIndex++;
@@ -50,6 +50,7 @@
       ...comment,
       number: comment.selector ? index + 1 : 0,
       name: comment.author || "anonymous",
+      verified: comment.verified === true,
       scope: comment.anchor_kind === "text" ? "Text" : (comment.anchor_kind === "element" ? "Element" : "Page"),
       target: comment.element_text || comment.selector || "",
       created_human: created && !Number.isNaN(created.getTime()) ? created.toLocaleString() : "",
@@ -513,7 +514,7 @@
           text = JSON.stringify(this.comments, null, 2);
         } else {
           for (const c of this.comments) {
-            text += "## " + (c.name || "anonymous") + " (" + c.created_human + ")\n";
+            text += "## " + (c.name || "anonymous") + (c.verified ? " (signed in)" : "") + " (" + c.created_human + ")\n";
             if (c.target) text += "> on: " + c.target + "\n";
             text += "\n" + c.body + "\n\n---\n\n";
           }

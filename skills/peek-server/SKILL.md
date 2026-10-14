@@ -25,14 +25,18 @@ The server binary is `peekd`. Get it from a release or build from source.
 
 ```sh
 # Download a release archive (contains both peekd and peek), then:
-curl -sSL https://github.com/puemos/peek/releases/latest/download/peek_<version>_linux_amd64.tar.gz | tar xz
+VERSION=vX.Y.Z   # pick from https://github.com/andras-tkcs/peek/releases
+curl -fsSLO "https://github.com/andras-tkcs/peek/releases/download/${VERSION}/peek_${VERSION}_linux_amd64.tar.gz"
+curl -fsSLO "https://github.com/andras-tkcs/peek/releases/download/${VERSION}/checksums.txt"
+sha256sum --ignore-missing -c checksums.txt
+tar xzf "peek_${VERSION}_linux_amd64.tar.gz"
 sudo mv peek_*/peekd peek_*/peek /usr/local/bin/
 ```
 
 Or build from source (needs Go):
 
 ```sh
-git clone https://github.com/puemos/peek && cd peek
+git clone https://github.com/andras-tkcs/peek && cd peek
 go build -o bin/peekd ./cmd/peekd
 go build -o bin/peek  ./cmd/peek
 ```
@@ -53,8 +57,10 @@ https://peek.example.com`.
 docker run -d --name peek -p 7700:7700 \
   -v peek-data:/data \
   -e PEEK_BASE_URL=https://peek.example.com \
-  ghcr.io/puemos/peek:latest
+  ghcr.io/andras-tkcs/peek:latest
 ```
+
+For production, pin a release tag (`ghcr.io/andras-tkcs/peek:<version>`) or an image digest (`ghcr.io/andras-tkcs/peek@sha256:…`).
 
 The image runs as uid `65532` and stores the SQLite DB, uploads, and generated
 secret under `/data`. If bind-mounting a host directory, make it writable by
@@ -68,16 +74,18 @@ uid `65532`.
 | `--data` | `PEEK_DATA` | `./data` | Data dir (db + uploads + secret) |
 | `--base-url` | `PEEK_BASE_URL` | `http://localhost:7700` | Public base URL in share links. **Use `https://…` in production** — it enables `Secure` cookies + HSTS. |
 | `--max-upload` | `PEEK_MAX_UPLOAD` | `2097152` (2 MiB) | Max upload size in bytes |
-| `--secret` | `PEEK_SECRET` | *(stored in data dir)* | HMAC/encryption secret. Set explicitly when multiple instances must share signed cookies/settings. |
+| `--secret` | `PEEK_SECRET` | *(stored in data dir)* | HMAC/encryption secret. Set explicitly when multiple instances must share signed cookies/settings. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--max-total-size` | `PEEK_MAX_TOTAL_SIZE` | `0` | Total upload storage limit in bytes (`0` = unlimited) |
 | `--retention-days` | `PEEK_RETENTION_DAYS` | `0` | Auto-delete uploads older than N days (`0` = off) |
 | `--trusted-proxy` | `PEEK_TRUSTED_PROXY` | `false` | Trust `X-Forwarded-For` for analytics/audit IPs. Enable only behind your reverse proxy. |
+| `--trusted-proxy-cidrs` | `PEEK_TRUSTED_PROXY_CIDRS` | `127.0.0.0/8,::1/128` | Proxies allowed to set `X-Forwarded-For` (with `--trusted-proxy`) |
+| `--metrics-token` | `PEEK_METRICS_TOKEN` | *(empty)* | Bearer token (at least 16 characters) required on `/metrics`. Or `PEEK_METRICS_TOKEN_FILE` with the path to a file. |
 | `--storage` | `PEEK_STORAGE` | `file` | Storage backend: `file` or `s3` |
 | `--s3-endpoint` | `PEEK_S3_ENDPOINT` | *(empty)* | S3-compatible endpoint URL |
 | `--s3-bucket` | `PEEK_S3_BUCKET` | *(empty)* | S3 bucket name |
 | `--s3-region` | `PEEK_S3_REGION` | `us-east-1` | S3 region |
 | `--s3-access-key` | `PEEK_S3_ACCESS_KEY` | *(empty)* | S3 access key |
-| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | *(empty)* | S3 secret key, encrypted in settings after initialization |
+| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | *(empty)* | S3 secret key, encrypted in settings after initialization. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--google-sa-key-file` | `PEEK_GOOGLE_SA_KEY_FILE` | *(empty)* | Service account JSON key (domain-wide delegation) for Google group grants. Needs `--google-admin-email`. Not in the SQLite backup. |
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | *(empty)* | Workspace admin user to impersonate |
 | `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | Group membership cache lifetime (1s to 1h) |
@@ -162,8 +170,10 @@ PEEK_DATA=./data peekd backup ./peek-backup.db
 ```
 
 `/healthz` is liveness, `/readyz` checks database reachability, and `/metrics`
-emits Prometheus text metrics. Protect `/metrics` at the reverse proxy if the
-server is reachable from untrusted networks.
+emits Prometheus text metrics. Set `--metrics-token` (or
+`PEEK_METRICS_TOKEN_FILE`) to require `Authorization: Bearer <token>` on
+`/metrics`, or protect it at the reverse proxy if the server is reachable from
+untrusted networks.
 
 ## Deployment
 
@@ -178,7 +188,7 @@ peek.example.com {
 
 Run `peekd` with `--base-url https://peek.example.com` so links and cookie flags
 are correct. If your proxy forwards `X-Forwarded-For` and you want those client
-IPs used for analytics/audit logs, also set `--trusted-proxy`; otherwise Peek
+IPs used for analytics/audit logs, also set `--trusted-proxy`, and `--trusted-proxy-cidrs` if the proxy does not connect from localhost; otherwise Peek
 intentionally ignores forwarded IP headers. Back up the `data/` directory — it
 holds the DB, uploads, and the signing secret.
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # install.sh — install the `peek` CLI from a GitHub release.
 #
-#   curl -fsSL https://raw.githubusercontent.com/puemos/peek/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
 #
 # Environment overrides:
 #   PEEK_VERSION       release tag to install (default: latest)
@@ -11,7 +11,7 @@
 # releases page or build from source — see the peek-server skill / README.
 set -eu
 
-REPO="puemos/peek"
+REPO="andras-tkcs/peek"
 BIN="peek"
 
 err() { echo "install.sh: $*" >&2; exit 1; }
@@ -52,17 +52,44 @@ if [ -z "$version" ]; then
     | grep '"tag_name"' | head -n1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
   [ -n "$version" ] || err "could not resolve the latest release; set PEEK_VERSION"
 fi
+case "$version" in
+  v[0-9]*) ;;
+  *) err "invalid version '$version' (expected a release tag like v1.2.3)" ;;
+esac
+case "$version" in
+  *[!A-Za-z0-9._-]*) err "invalid version '$version'" ;;
+esac
 
 name="peek_${version}_${os}_${arch}"
 url="https://github.com/$REPO/releases/download/${version}/${name}.tar.gz"
 
-# --- download & extract --------------------------------------------------------
+# --- download, verify & extract ------------------------------------------------
+sums_url="https://github.com/$REPO/releases/download/${version}/checksums.txt"
+
 tmp=$(mktemp -d 2>/dev/null || mktemp -d -t peek)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 echo "Downloading $name ..."
-download "$url" "$tmp/peek.tar.gz" || err "download failed: $url"
-tar -xzf "$tmp/peek.tar.gz" -C "$tmp" || err "extract failed"
+download "$url" "$tmp/${name}.tar.gz" || err "download failed: $url"
+download "$sums_url" "$tmp/checksums.txt" \
+  || err "download failed: $sums_url (releases published before checksums.txt existed cannot be verified; pick a newer PEEK_VERSION)"
+
+awk -v f="${name}.tar.gz" '$2 == f || $2 == "*" f' "$tmp/checksums.txt" > "$tmp/expected.sha256"
+[ "$(wc -l < "$tmp/expected.sha256" | tr -d ' ')" = "1" ] \
+  || err "checksums.txt has no single entry for ${name}.tar.gz"
+
+if have sha256sum; then
+  (cd "$tmp" && sha256sum -c expected.sha256 >/dev/null 2>&1) \
+    || err "checksum mismatch for ${name}.tar.gz; refusing to install"
+elif have shasum; then
+  (cd "$tmp" && shasum -a 256 -c expected.sha256 >/dev/null 2>&1) \
+    || err "checksum mismatch for ${name}.tar.gz; refusing to install"
+else
+  err "need sha256sum or shasum to verify the download"
+fi
+echo "Verified SHA-256 checksum."
+
+tar -xzf "$tmp/${name}.tar.gz" -C "$tmp" || err "extract failed"
 
 src="$tmp/$name/$BIN"
 [ -f "$src" ] || src="$tmp/$BIN"          # tolerate a flat archive layout

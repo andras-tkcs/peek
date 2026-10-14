@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/andras-tkcs/peek/internal/db"
 	"github.com/andras-tkcs/peek/internal/models"
+	webui "github.com/andras-tkcs/peek/internal/web"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -140,7 +142,11 @@ func TestDashboardSettingsRejectsDomainThatWouldLockOutAdminsBeforeWriting(t *te
 	if err := store.SetSetting(context.Background(), "max_upload", "1024"); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{store: store, secret: strings.Repeat("0", 64)}
+	renderer, err := webui.NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{store: store, renderer: renderer, secret: strings.Repeat("0", 64)}
 	form := url.Values{
 		"csrf":                        {"csrf-token"},
 		authAllowedEmailDomainSetting: {"other.com"},
@@ -154,7 +160,7 @@ func TestDashboardSettingsRejectsDomainThatWouldLockOutAdminsBeforeWriting(t *te
 
 	s.handleDashboardSettings(rec, req)
 
-	if rec.Code != http.StatusSeeOther {
+	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	if got := mustGetSetting(t, store, "max_upload"); got != "1024" {
@@ -180,7 +186,7 @@ func TestLoginWithPasswordRejectsDisallowedDomain(t *testing.T) {
 	}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	_, _, err = s.loginWithPassword(req)
+	_, err = s.loginWithPassword(req)
 	if !errors.Is(err, errAccountNotEligible) {
 		t.Fatalf("error = %v", err)
 	}
@@ -201,34 +207,36 @@ func TestLoginWithTokenRejectsDisallowedDomain(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(url.Values{"token": {"raw-token"}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	_, _, err = s.loginWithToken(req)
+	_, err = s.loginWithToken(req)
 	if !errors.Is(err, errAccountNotEligible) {
 		t.Fatalf("error = %v", err)
 	}
 }
 
-func TestDirectAPITokenAuthIgnoresAllowedEmailDomain(t *testing.T) {
-	store := newAuthTestStore(t, "automation-token", "automation", false)
-	if err := store.SetSetting(context.Background(), authAllowedEmailDomainSetting, "example.com"); err != nil {
+func TestDirectAPITokenAuthHonoursAllowedEmailDomain(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	newAccountWithToken(t, s, "user@other.test", "other-token-0123", false)
+	newAccountWithToken(t, s, "user@example.test", "ok-token-0123", false)
+	if err := s.store.SetSetting(context.Background(), authAllowedEmailDomainSetting, "example.test"); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{store: store}
-	called := false
-	handler := s.authToken(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		jsonOK(w, map[string]string{"status": "ok"})
-	})
-	req := httptest.NewRequest(http.MethodGet, "/api/uploads", nil)
-	req.Header.Set("Authorization", "Bearer automation-token")
-	rec := httptest.NewRecorder()
 
-	handler(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer("other-token-0123"))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("off-domain status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	if !called {
-		t.Fatal("handler was not called")
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["error"] != "account email domain is not allowed" {
+		t.Fatalf("error = %q", body["error"])
+	}
+	if rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer("ok-token-0123")); rec.Code != http.StatusOK {
+		t.Fatalf("on-domain status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if tokenLastUsed(t, s, "other-token-0123").Valid {
+		t.Fatal("refused token recorded a use")
 	}
 }
 
@@ -282,7 +290,7 @@ func TestDashboardCreateInviteRejectsDisallowedDomain(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	loc := rec.Header().Get("Location")
-	if !strings.Contains(loc, "email+must+match+allowed+domain") {
+	if loc != "/dashboard?err=invite_domain" {
 		t.Fatalf("location = %q", loc)
 	}
 }
@@ -315,5 +323,40 @@ func TestCLILoginPollRejectsDisallowedDomain(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"status":"denied"`) {
 		t.Fatalf("body = %s", rec.Body.String())
+	}
+}
+
+func TestSetCovNormalizeAllowedEmailDomainRejectsInvalidCharacters(t *testing.T) {
+	for _, in := range []string{"exa_mple.com", "exa mple.com", "ex*ample.com", "exämple.com"} {
+		if _, err := normalizeAllowedEmailDomain(in); err == nil {
+			t.Fatalf("%q accepted", in)
+		}
+	}
+}
+
+func TestSetCovValidateAllowedEmailDomainUpdateAccountLookupFailure(t *testing.T) {
+	s, _, _, _ := newFaultServer(t)
+	_ = s.store.Close()
+	err := s.validateAllowedEmailDomainUpdate(context.Background(), map[string]string{authAllowedEmailDomainSetting: "example.test"})
+	if err == nil || !strings.Contains(err.Error(), "account lookup failed") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestSetCovAccountActiveOAuthIdentityLookupFailure(t *testing.T) {
+	s, _, _, _ := newFaultServer(t)
+	enableGitHubOAuthForTest(t, s)
+	user, err := s.store.CreateAccount(context.Background(), "setcov-user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropTable(t, s.store, "oauth_identities")
+	if err := s.accountActive(context.Background(), user); err == nil || errors.Is(err, errOAuthRequired) {
+		t.Fatalf("err = %v, want lookup error", err)
+	}
+	rec := httptest.NewRecorder()
+	writeTokenPolicyError(rec, errors.New("lookup failed"))
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "account check failed") {
+		t.Fatalf("policy error response = %d %s", rec.Code, rec.Body.String())
 	}
 }

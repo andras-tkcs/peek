@@ -78,3 +78,21 @@ func TestLogUploadErrorReportsCleanupFailureOnly(t *testing.T) {
 		t.Fatalf("cleanup slug was not logged: %s", logs.String())
 	}
 }
+
+func TestAPIUploadRejectsLongName(t *testing.T) {
+	s, tok := newHandlerTestServer(t)
+	rec := doRequest(t, s, http.MethodPost, "/api/upload?visibility=public&filename="+strings.Repeat("a", 201), strings.NewReader("<!doctype html><html></html>"), asBearer(tok), func(r *http.Request) { r.Header.Set("Content-Type", "text/html") })
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "name must be 200 characters or fewer") {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSetCovUploadHTTPErrorFallbacks(t *testing.T) {
+	if status, msg := uploadHTTPError(errors.New("boom")); status != http.StatusInternalServerError || msg != "upload failed" {
+		t.Fatalf("non-upload error = %d %q", status, msg)
+	}
+	err := &uploads.Error{Kind: uploads.ErrorKind("something_new"), Message: "unmapped"}
+	if status, msg := uploadHTTPError(err); status != http.StatusInternalServerError || msg != "unmapped" {
+		t.Fatalf("unknown kind = %d %q", status, msg)
+	}
+}

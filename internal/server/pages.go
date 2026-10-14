@@ -121,7 +121,7 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 	vid := s.visitorID(w, r)
 	s.recordVisit(r, u, vid, version)
 
-	rawURL := "/raw/" + slug + "/v/" + strconv.Itoa(version) + "?t=" + makeViewToken(s.secret, viewSubject(slug, version), vid) + "&v=" + vid
+	rawURL := "/raw/" + slug + "/v/" + strconv.Itoa(version) + "?t=" + makeViewToken(s.secret, viewSubject(slug, version), vid)
 	d := pageData{
 		Name: u.Name, Slug: slug,
 		RawURL: rawURL, FrameURL: frameURL(rawURL, r.URL.RawQuery), Visibility: u.Visibility,
@@ -178,12 +178,18 @@ func (s *Server) handlePagePassword(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, pagePath, http.StatusSeeOther)
 		return
 	}
+	failKey := strconv.FormatInt(u.ID, 10) // upload id: stable across renames
+	if s.pagePasswordFailLimiter.blocked(failKey) {
+		rateLimitError(w, r)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		s.renderWebError(w, http.StatusBadRequest, "Bad request", "The password form could not be read.")
 		return
 	}
 	pw := r.FormValue("password")
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(pw)) != nil {
+		s.pagePasswordFailLimiter.recordFailure(failKey)
 		s.renderHTML(w, http.StatusUnauthorized, webui.TemplateGate, webui.GateData{Slug: slug, Action: pagePath + querysuffix(r), Error: true})
 		return
 	}
@@ -205,43 +211,35 @@ func (s *Server) setPageAuthCookie(w http.ResponseWriter, u *models.Upload) {
 	})
 }
 
-// rawViewerID resolves the visitor id a raw view token is bound to.
+// rawViewerID returns the visitor id from the HttpOnly hn_vid cookie. The raw URL
+// alone is never a credential: without the cookie that /p set, it is refused.
 func rawViewerID(r *http.Request) string {
-	vid := r.URL.Query().Get("v")
-	if vid == "" {
-		// Fall back to cookie-based vid for backward compat.
-		if c, err := r.Cookie(visitorCookie); err == nil {
-			vid = c.Value
-		}
+	if c, err := r.Cookie(visitorCookie); err == nil {
+		return c.Value
 	}
-	return vid
+	return ""
 }
 
-// handleRaw serves the latest version for tokens minted before versioned raw
-// URLs existed; those tokens are bound to the bare slug.
-func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	u, err := s.store.GetUpload(r.Context(), slug)
-	if err != nil {
-		http.NotFound(w, r)
-		return
+// rawFetchAllowed reports whether a /raw request may be served. Browsers that send
+// Sec-Fetch-Dest must be loading the page into an iframe; a top-level navigation
+// ("document"), fetch ("empty") or any other destination is refused. Requests
+// without the header (older browsers, non-browser clients) still need a valid
+// view token and visitor cookie. A download=1 request is the toolbar's top-level
+// attachment link, so it may also arrive as "document" or "empty"; the response
+// is an attachment and the token, cookie and access checks still apply.
+func rawFetchAllowed(r *http.Request) bool {
+	dest := r.Header.Get("Sec-Fetch-Dest")
+	if dest == "" || dest == "iframe" {
+		return true
 	}
-	// Require a valid view token (issued by /p) so /raw cannot be hot-linked
-	// or used to bypass the password gate. The token is bound to the visitor
-	// id so a shared raw URL won't work for a different viewer.
-	if !verifyViewToken(s.secret, r.URL.Query().Get("t"), slug, rawViewerID(r)) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	ver, err := s.store.GetUploadVersion(r.Context(), u.ID, u.LatestVersion)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	s.serveRawObject(w, r, slug, u.Name, ver.ObjectKey)
+	return r.URL.Query().Get("download") == "1" && (dest == "document" || dest == "empty")
 }
 
 func (s *Server) handleRawVersion(w http.ResponseWriter, r *http.Request) {
+	if !rawFetchAllowed(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	slug := r.PathValue("slug")
 	n, err := strconv.Atoi(r.PathValue("n"))
 	if err != nil || n < 1 {
@@ -257,6 +255,12 @@ func (s *Server) handleRawVersion(w http.ResponseWriter, r *http.Request) {
 	u, err := s.store.GetUpload(r.Context(), slug)
 	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+	// Re-check access on every load so a visibility, password or grant change
+	// applies to raw URLs minted before it.
+	if !s.viewerCanAccessUpload(r, u) {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	ver, err := s.store.GetUploadVersion(r.Context(), u.ID, n)
@@ -306,6 +310,7 @@ func (s *Server) serveDownload(w http.ResponseWriter, r *http.Request, slug, nam
 	defer rc.Close()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", rawContentCSP)
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": downloadFilename(name, slug)}))
 	if _, err := io.Copy(w, rc); err != nil {
 		slog.Error("write download response", "slug", slug, "err", err)
@@ -323,21 +328,28 @@ func downloadFilename(name, slug string) string {
 	return name
 }
 
+// rawSandbox is the sandbox applied to uploaded HTML. It must stay identical to
+// the sandbox attribute of #hn-frame in internal/web/templates/page.gohtml;
+// TestRawSandboxMatchesIframeAttribute enforces this.
+const rawSandbox = "allow-scripts allow-popups"
+
+// rawContentCSP starts with "sandbox allow-scripts allow-popups" and lets uploaded HTML run inline scripts/styles and load remote
+// resources. The sandbox directive gives the document an opaque origin even when
+// /raw is opened as a top-level page, so it can never act as Peek's origin.
+const rawContentCSP = "sandbox " + rawSandbox + "; " +
+	"default-src 'none'; " +
+	"script-src 'unsafe-inline' 'unsafe-eval' https: http: data: blob:; " +
+	"style-src 'unsafe-inline' https: http:; " +
+	"img-src https: http: data: blob:; " +
+	"media-src https: http: data: blob:; " +
+	"font-src https: http: data:; " +
+	"connect-src https: http:; " +
+	"frame-ancestors 'self'"
+
 func writeRawHTML(w http.ResponseWriter, slug string, body io.Reader, insertOffset int64) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	// Allow the user's HTML to run inline scripts/styles & load resources, but
-	// only permit embedding by our own origin. The iframe sandbox already
-	// gives it an opaque origin so it cannot touch the server or parent.
-	w.Header().Set("Content-Security-Policy",
-		"default-src 'none'; "+
-			"script-src 'unsafe-inline' 'unsafe-eval' https: http: data: blob:; "+
-			"style-src 'unsafe-inline' https: http:; "+
-			"img-src https: http: data: blob:; "+
-			"media-src https: http: data: blob:; "+
-			"font-src https: http: data:; "+
-			"connect-src https: http:; "+
-			"frame-ancestors 'self'")
+	w.Header().Set("Content-Security-Policy", rawContentCSP)
 	if insertOffset > 0 {
 		if _, err := io.CopyN(w, body, insertOffset); err != nil {
 			slog.Error("write raw html response", "slug", slug, "err", err)

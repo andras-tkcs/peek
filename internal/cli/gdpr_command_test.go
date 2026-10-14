@@ -56,3 +56,31 @@ func TestCmdExportReturnsAPIError(t *testing.T) {
 		t.Fatalf("stdout = %q", out)
 	}
 }
+
+func TestCovExportAndDeleteAllErrors(t *testing.T) {
+	configureTestClient(t, "http://127.0.0.1:1")
+	for name, fn := range map[string]func() error{
+		"export arity":     func() error { return cmdExport(nil) },
+		"export slug":      func() error { return cmdExport([]string{"bad/slug"}) },
+		"delete-all arity": func() error { return cmdDeleteAll([]string{"x"}) },
+	} {
+		if err := fn(); err == nil {
+			t.Fatalf("%s: expected error", name)
+		}
+	}
+	t.Run("export env", func(t *testing.T) {
+		covEnvFailures(t, func() error { return cmdExport([]string{"demo"}) })
+	})
+	t.Run("delete-all env", func(t *testing.T) {
+		covEnvFailures(t, func() error { return cmdDeleteAll(nil) })
+	})
+}
+
+func TestCovDeleteAllPrintsCount(t *testing.T) {
+	ts := covFake(t, map[string]string{"/api/uploads-by-owner": `{"deleted":3}`}, nil)
+	configureTestClient(t, ts.URL)
+	out, err := captureStdout(t, func() error { return cmdDeleteAll(nil) })
+	if err != nil || !strings.Contains(out, "deleted 3 uploads") {
+		t.Fatalf("got %q %v", out, err)
+	}
+}

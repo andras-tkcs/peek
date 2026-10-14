@@ -2,12 +2,15 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/andras-tkcs/peek/internal/models"
 	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
@@ -38,71 +41,124 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		accountID int64
-		actorName string
-		err       error
+		account *models.Account
+		err     error
 	)
 	switch r.FormValue("method") {
 	case "password":
-		accountID, actorName, err = s.loginWithPassword(r)
+		account, err = s.loginWithPassword(r)
 	case "token":
-		accountID, actorName, err = s.loginWithToken(r)
+		account, err = s.loginWithToken(r)
 	default:
 		err = fmt.Errorf("unsupported login method")
+	}
+	if errors.Is(err, errLoginThrottled) {
+		rateLimitError(w, r)
+		return
 	}
 	if err != nil {
 		s.renderLoginForm(w, http.StatusOK, "Invalid credentials.", r)
 		return
 	}
-	s.setWebSession(w, accountID)
-	s.auditRequest(r, actorName, "login.success", "")
+	s.setWebSession(w, account)
+	s.auditRequest(r, account.Name, "login.success", "")
 	http.Redirect(w, r, s.consumeNextPath(w, r), http.StatusSeeOther)
 }
 
-func (s *Server) loginWithPassword(r *http.Request) (int64, string, error) {
+// passwordCompare is bcrypt.CompareHashAndPassword; tests swap it to count calls.
+var passwordCompare = bcrypt.CompareHashAndPassword
+
+// dummyPasswordHash is a bcrypt hash of a constant at bcrypt.DefaultCost, made
+// once on first use. Failed logins compare against it so they take as long as a
+// real comparison.
+var dummyPasswordHash = sync.OnceValue(func() []byte {
+	h, err := bcrypt.GenerateFromPassword([]byte("peek-dummy-password-for-timing"), bcrypt.DefaultCost)
+	if err != nil {
+		panic("generate dummy password hash: " + err.Error())
+	}
+	return h
+})
+
+// checkPassword runs exactly one bcrypt comparison: against hash when it is
+// set, otherwise against dummyPasswordHash (and then always fails).
+func checkPassword(hash, password string) bool {
+	if hash == "" {
+		_ = passwordCompare(dummyPasswordHash(), []byte(password))
+		return false
+	}
+	return passwordCompare([]byte(hash), []byte(password)) == nil
+}
+
+var errLoginThrottled = errors.New("too many failed sign-in attempts")
+
+func loginFailureKey(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
+
+// loginWithPassword counts failures per email address, whether or not the
+// account exists, so the limiter does not reveal which accounts are real.
+func (s *Server) loginWithPassword(r *http.Request) (*models.Account, error) {
 	email := strings.TrimSpace(r.FormValue("email"))
 	password := r.FormValue("password")
 	if email == "" || password == "" {
-		return 0, "", fmt.Errorf("missing credentials")
+		return nil, fmt.Errorf("missing credentials")
 	}
-	owner, err := s.store.GetAccountByEmail(r.Context(), email)
-	if err != nil || owner.PasswordHash == "" {
-		return 0, "", fmt.Errorf("invalid credentials")
+	key := loginFailureKey(email)
+	if s.accountLoginLimiter.blocked(key) {
+		return nil, errLoginThrottled
 	}
-	if owner.Disabled {
-		return 0, "", fmt.Errorf("account disabled")
+	account, err := s.checkPasswordLogin(r.Context(), email, password)
+	if err != nil {
+		s.accountLoginLimiter.recordFailure(key)
 	}
-	if !s.accountAllowedByEmailDomain(r.Context(), owner.Email) {
-		return 0, "", errAccountNotEligible
-	}
-	if s.oauthLoginRequired(r.Context()) && !owner.IsAdmin {
-		return 0, "", fmt.Errorf("oauth required")
-	}
-	if bcrypt.CompareHashAndPassword([]byte(owner.PasswordHash), []byte(password)) != nil {
-		return 0, "", fmt.Errorf("invalid credentials")
-	}
-	return owner.ID, owner.Name, nil
+	return account, err
 }
 
-func (s *Server) loginWithToken(r *http.Request) (int64, string, error) {
+func (s *Server) checkPasswordLogin(ctx context.Context, email, password string) (*models.Account, error) {
+	owner, err := s.store.GetAccountByEmail(ctx, email)
+	hash := ""
+	if err == nil {
+		hash = owner.PasswordHash
+	}
+	// Exactly one bcrypt comparison on every path, so response time does not
+	// reveal which accounts exist. Policy errors are only reachable with the
+	// correct password.
+	if !checkPassword(hash, password) {
+		return nil, fmt.Errorf("invalid credentials")
+	}
+	if owner.Disabled {
+		return nil, fmt.Errorf("account disabled")
+	}
+	if !s.accountAllowedByEmailDomain(ctx, owner.Email) {
+		return nil, errAccountNotEligible
+	}
+	if s.oauthLoginRequired(ctx) && !owner.IsAdmin {
+		return nil, fmt.Errorf("oauth required")
+	}
+	return owner, nil
+}
+
+func (s *Server) loginWithToken(r *http.Request) (*models.Account, error) {
 	tok := strings.TrimSpace(r.FormValue("token"))
 	if tok == "" {
-		return 0, "", fmt.Errorf("missing token")
+		return nil, fmt.Errorf("missing token")
 	}
 	owner, err := s.store.GetToken(r.Context(), tok)
 	if err != nil {
-		return 0, "", err
+		return nil, err
 	}
 	if owner.Disabled {
-		return 0, "", fmt.Errorf("account disabled")
+		return nil, fmt.Errorf("account disabled")
 	}
 	if !s.accountAllowedByEmailDomain(r.Context(), owner.Email) {
-		return 0, "", errAccountNotEligible
+		return nil, errAccountNotEligible
 	}
 	if (!s.tokenLoginEnabled(r.Context()) || s.oauthLoginRequired(r.Context())) && !owner.IsAdmin {
-		return 0, "", fmt.Errorf("token login disabled")
+		return nil, fmt.Errorf("token login disabled")
 	}
-	return owner.AccountID, owner.Name, nil
+	account, err := s.store.GetAccountByID(r.Context(), owner.AccountID)
+	if err != nil {
+		return nil, err
+	}
+	return account, nil
 }
 
 func (s *Server) oauthLoginRequired(ctx context.Context) bool {

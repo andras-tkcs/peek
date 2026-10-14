@@ -1,6 +1,7 @@
 package web
 
 import (
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -74,8 +75,13 @@ func TestRendererExecutesAllTemplates(t *testing.T) {
 		},
 		{
 			name: TemplateCLILogin,
-			data: CLILoginData{Code: "ABCDEFGH", CSRF: "csrf", User: "Admin"},
-			want: "Approve CLI login",
+			data: CLILoginData{Code: "ABCD-EFGH", CSRF: "csrf", User: "Admin", RequestIP: "203.0.113.7", UserAgent: "peek-cli/dev", RequestedAt: "2026-10-11 10:00:00 UTC", CurrentIP: "198.51.100.2"},
+			want: "Only approve if you just ran",
+		},
+		{
+			name: TemplateCLILoginEntry,
+			data: CLILoginEntryData{CSRF: "csrf", User: "Admin"},
+			want: `name="code"`,
 		},
 		{
 			name: TemplateCLILoginDone,
@@ -657,5 +663,74 @@ func TestDashboardTemplateRendersAPIKeys(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "No API keys yet.") {
 		t.Fatal("empty dashboard missing placeholder")
+	}
+}
+
+func TestPageTemplateShowsVerifiedCommentMarker(t *testing.T) {
+	renderer, err := newRenderer(func(name string) string {
+		return "/" + name + "?v=test"
+	})
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123/v/1", FrameURL: "/raw/abc123/v/1", Visibility: "public", Version: 1, LatestVersion: 1})
+	if err != nil {
+		t.Fatalf("execute page: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{`hn-comment-verified`, `x-show="c.verified"`} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("page template missing %q", want)
+		}
+	}
+}
+
+func TestNewRendererNilAssetPathUsesDefault(t *testing.T) {
+	r, err := newRenderer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := r.Execute(TemplateIndex, IndexData{BaseURL: "http://h"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "http://h") {
+		t.Fatalf("body missing base url")
+	}
+}
+
+func TestExecuteUninitializedAndUnknown(t *testing.T) {
+	for _, r := range []*Renderer{nil, {}} {
+		if _, err := r.Execute(TemplateIndex, nil); err == nil || !strings.Contains(err.Error(), "not initialized") {
+			t.Fatalf("err = %v", err)
+		}
+	}
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Execute("no-such-template", nil); err == nil || !strings.Contains(err.Error(), "render no-such-template") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRenderHTML(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	if err := r.RenderHTML(rec, 418, TemplateError, ErrorData{Title: "T", Message: "M"}); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != 418 || rec.Header().Get("Content-Type") != "text/html; charset=utf-8" || !strings.Contains(rec.Body.String(), "M") {
+		t.Fatalf("code=%d ct=%q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	rec = httptest.NewRecorder()
+	if err := r.RenderHTML(rec, 200, "no-such-template", nil); err == nil {
+		t.Fatal("expected error")
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatal("nothing should be written on render error")
 	}
 }

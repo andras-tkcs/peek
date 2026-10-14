@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 	password_hash TEXT NOT NULL DEFAULT '',
 	is_admin INTEGER NOT NULL DEFAULT 0,
 	disabled INTEGER NOT NULL DEFAULT 0,
+	session_epoch INTEGER NOT NULL DEFAULT 0,
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL
 );
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS comments (
 	author_cookie TEXT NOT NULL,
 	body TEXT NOT NULL,
 	version INTEGER NOT NULL DEFAULT 1,
+	account_id INTEGER,
 	created_at INTEGER NOT NULL
 );
 
@@ -124,7 +126,9 @@ CREATE TABLE IF NOT EXISTS cli_login_devices (
 	account_id INTEGER REFERENCES accounts(id),
 	created_at INTEGER NOT NULL,
 	expires_at INTEGER NOT NULL,
-	consumed_at INTEGER NOT NULL DEFAULT 0
+	consumed_at INTEGER NOT NULL DEFAULT 0,
+	request_ip TEXT NOT NULL DEFAULT '',
+	request_user_agent TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
