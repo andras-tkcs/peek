@@ -46,23 +46,24 @@ func (s *Store) GetAccountByEmail(ctx context.Context, email string) (*models.Ac
 
 func (s *Store) getAccountWhere(ctx context.Context, where string, arg any) (*models.Account, error) {
 	a := &models.Account{}
-	var isAdmin, disabled, created, updated int64
+	var isAdmin, disabled, epoch, created, updated int64
 	var email sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT id,email,name,password_hash,is_admin,disabled,created_at,updated_at FROM accounts WHERE `+where, arg).
-		Scan(&a.ID, &email, &a.Name, &a.PasswordHash, &isAdmin, &disabled, &created, &updated)
+	err := s.QueryRowContext(ctx, `SELECT id,email,name,password_hash,is_admin,disabled,session_epoch,created_at,updated_at FROM accounts WHERE `+where, arg).
+		Scan(&a.ID, &email, &a.Name, &a.PasswordHash, &isAdmin, &disabled, &epoch, &created, &updated)
 	if err != nil {
 		return nil, err
 	}
 	a.Email = email.String
 	a.IsAdmin = isAdmin == 1
 	a.Disabled = disabled == 1
+	a.SessionEpoch = epoch
 	a.CreatedAt = time.Unix(created, 0)
 	a.UpdatedAt = time.Unix(updated, 0)
 	return a, nil
 }
 
 func (s *Store) ListAccounts(ctx context.Context) ([]models.Account, error) {
-	rows, err := s.QueryContext(ctx, `SELECT id,email,name,password_hash,is_admin,disabled,created_at,updated_at FROM accounts ORDER BY created_at,id`)
+	rows, err := s.QueryContext(ctx, `SELECT id,email,name,password_hash,is_admin,disabled,session_epoch,created_at,updated_at FROM accounts ORDER BY created_at,id`)
 	if err != nil {
 		return nil, err
 	}
@@ -71,13 +72,14 @@ func (s *Store) ListAccounts(ctx context.Context) ([]models.Account, error) {
 	for rows.Next() {
 		var a models.Account
 		var email sql.NullString
-		var isAdmin, disabled, created, updated int64
-		if err := rows.Scan(&a.ID, &email, &a.Name, &a.PasswordHash, &isAdmin, &disabled, &created, &updated); err != nil {
+		var isAdmin, disabled, epoch, created, updated int64
+		if err := rows.Scan(&a.ID, &email, &a.Name, &a.PasswordHash, &isAdmin, &disabled, &epoch, &created, &updated); err != nil {
 			return nil, err
 		}
 		a.Email = email.String
 		a.IsAdmin = isAdmin == 1
 		a.Disabled = disabled == 1
+		a.SessionEpoch = epoch
 		a.CreatedAt = time.Unix(created, 0)
 		a.UpdatedAt = time.Unix(updated, 0)
 		out = append(out, a)
@@ -126,7 +128,7 @@ func (s *Store) SetAccountAdminChecked(ctx context.Context, id int64, isAdmin bo
 }
 
 func (s *Store) SetAccountDisabled(ctx context.Context, id int64, disabled bool) error {
-	res, err := s.ExecContext(ctx, `UPDATE accounts SET disabled=?, updated_at=? WHERE id=?`, boolToInt(disabled), time.Now().Unix(), id)
+	res, err := s.ExecContext(ctx, `UPDATE accounts SET disabled=?, session_epoch=session_epoch+?, updated_at=? WHERE id=?`, boolToInt(disabled), boolToInt(disabled), time.Now().Unix(), id)
 	if err != nil {
 		return err
 	}
@@ -155,7 +157,7 @@ func (s *Store) SetAccountDisabledChecked(ctx context.Context, id int64, disable
 			}
 		}
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE accounts SET disabled=?, updated_at=? WHERE id=?`, boolToInt(disabled), time.Now().Unix(), id)
+	res, err := tx.ExecContext(ctx, `UPDATE accounts SET disabled=?, session_epoch=session_epoch+?, updated_at=? WHERE id=?`, boolToInt(disabled), boolToInt(disabled), time.Now().Unix(), id)
 	if err != nil {
 		return err
 	}
@@ -191,4 +193,27 @@ func (s *Store) CountAccounts(ctx context.Context) (int, error) {
 	var n int
 	err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM accounts`).Scan(&n)
 	return n, err
+}
+
+// BumpSessionEpoch ends every dashboard session of account id and returns the
+// new epoch. sql.ErrNoRows when the account does not exist.
+func (s *Store) BumpSessionEpoch(ctx context.Context, id int64) (int64, error) {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, `UPDATE accounts SET session_epoch=session_epoch+1, updated_at=? WHERE id=?`, time.Now().Unix(), id)
+	if err != nil {
+		return 0, err
+	}
+	if err := requireRowsAffected(res); err != nil {
+		return 0, err
+	}
+	var epoch int64
+	if err := tx.QueryRowContext(ctx, `SELECT session_epoch FROM accounts WHERE id=?`, id).Scan(&epoch); err != nil {
+		return 0, err
+	}
+	return epoch, tx.Commit()
 }

@@ -57,6 +57,7 @@ type Account struct {
 	PasswordHash string
 	IsAdmin      bool
 	Disabled     bool
+	SessionEpoch int64 // bumped to end every dashboard session of the account
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -91,6 +92,8 @@ type CLILoginDevice struct {
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
 	ConsumedAt time.Time
+	RequestIP  string
+	UserAgent  string
 }
 
 type Upload struct {
