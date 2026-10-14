@@ -198,3 +198,25 @@ func TestRestrictedVersionPageEnforced(t *testing.T) {
 		t.Fatalf("owner status = %d, want 200", rec.Code)
 	}
 }
+
+func TestSetCovRestrictedGrantLookupFailureDenies(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "setcov-grants")
+	viewer := newViewer(t, s, "setcov-viewer@example.test", "Viewer", false)
+	dropTable(t, s.store, "upload_grants")
+	if s.accountCanViewRestricted(context.Background(), viewer, u) {
+		t.Fatal("grant lookup failure must deny access")
+	}
+}
+
+func TestSetCovRestrictedUserGrantForOtherEmailSkippedInGroupLoopDenies(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	s.groups = fakeGroups{}
+	u := restrictedPage(t, s, "setcov-skip")
+	viewer := newViewer(t, s, "member@example.test", "Member", false)
+	grant(t, s, u, models.UploadGrantUser, "someone-else@example.test")
+	grant(t, s, u, models.UploadGrantGroup, "team@example.test")
+	if s.accountCanViewRestricted(context.Background(), viewer, u) {
+		t.Fatal("non-member must not view through a user grant for someone else")
+	}
+}

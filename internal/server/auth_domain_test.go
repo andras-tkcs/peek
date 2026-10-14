@@ -325,3 +325,38 @@ func TestCLILoginPollRejectsDisallowedDomain(t *testing.T) {
 		t.Fatalf("body = %s", rec.Body.String())
 	}
 }
+
+func TestSetCovNormalizeAllowedEmailDomainRejectsInvalidCharacters(t *testing.T) {
+	for _, in := range []string{"exa_mple.com", "exa mple.com", "ex*ample.com", "exämple.com"} {
+		if _, err := normalizeAllowedEmailDomain(in); err == nil {
+			t.Fatalf("%q accepted", in)
+		}
+	}
+}
+
+func TestSetCovValidateAllowedEmailDomainUpdateAccountLookupFailure(t *testing.T) {
+	s, _, _, _ := newFaultServer(t)
+	_ = s.store.Close()
+	err := s.validateAllowedEmailDomainUpdate(context.Background(), map[string]string{authAllowedEmailDomainSetting: "example.test"})
+	if err == nil || !strings.Contains(err.Error(), "account lookup failed") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestSetCovAccountActiveOAuthIdentityLookupFailure(t *testing.T) {
+	s, _, _, _ := newFaultServer(t)
+	enableGitHubOAuthForTest(t, s)
+	user, err := s.store.CreateAccount(context.Background(), "setcov-user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropTable(t, s.store, "oauth_identities")
+	if err := s.accountActive(context.Background(), user); err == nil || errors.Is(err, errOAuthRequired) {
+		t.Fatalf("err = %v, want lookup error", err)
+	}
+	rec := httptest.NewRecorder()
+	writeTokenPolicyError(rec, errors.New("lookup failed"))
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "account check failed") {
+		t.Fatalf("policy error response = %d %s", rec.Code, rec.Body.String())
+	}
+}

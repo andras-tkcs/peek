@@ -145,3 +145,19 @@ func TestResolveFlash(t *testing.T) {
 		})
 	}
 }
+
+func TestSetCovParseDashboardFormReportsCSRFGenerationFailure(t *testing.T) {
+	s, _, _, _ := newFaultServer(t)
+	stubSecureRandomRead(t, func([]byte) (int, error) { return 0, errors.New("rand down") })
+	form := url.Values{"csrf": {"csrf-token"}}
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/settings", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
+	rec := httptest.NewRecorder()
+	if s.parseDashboardForm(rec, req) {
+		t.Fatal("parseDashboardForm succeeded without entropy")
+	}
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+}
