@@ -99,7 +99,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
-	if !s.commentLimiter.allow(s.clientIP(r)) {
+	if !s.commentLimiter.allow(s.rateLimitKey(r)) {
 		jsonError(w, http.StatusTooManyRequests, "too many comments, slow down")
 		return
 	}
@@ -200,7 +200,7 @@ func (s *Server) handleAddAccountComment(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	if !s.commentLimiter.allow(s.clientIP(r)) {
+	if !s.commentLimiter.allow(s.rateLimitKey(r)) {
 		jsonError(w, http.StatusTooManyRequests, "too many comments, slow down")
 		return
 	}

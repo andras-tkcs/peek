@@ -35,10 +35,11 @@ func TestRecordVisitPersistsPrivacySafeAnalytics(t *testing.T) {
 
 	secret := strings.Repeat("a", 64)
 	s := &Server{
-		store:        store,
-		secret:       secret,
-		trustedProxy: true,
-		visitQueue:   make(chan visitEvent, 4),
+		store:             store,
+		secret:            secret,
+		trustedProxy:      true,
+		trustedProxyCIDRs: mustPrefixes(t, DefaultTrustedProxyCIDRs),
+		visitQueue:        make(chan visitEvent, 4),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -49,7 +50,8 @@ func TestRecordVisitPersistsPrivacySafeAnalytics(t *testing.T) {
 	}()
 
 	req := httptest.NewRequest(http.MethodGet, "/p/page", nil)
-	req.Header.Set("X-Forwarded-For", "203.0.113.10, 10.0.0.1")
+	req.RemoteAddr = "127.0.0.1:5000"
+	req.Header.Set("X-Forwarded-For", "198.51.100.7, 203.0.113.10")
 	req.Header.Set("User-Agent", strings.Repeat("u", 350))
 	req.AddCookie(&http.Cookie{Name: nameCookie, Value: "Ada"})
 

@@ -107,19 +107,3 @@ func (s *Server) FlushVisits(ctx context.Context) error {
 		return ctx.Err()
 	}
 }
-
-func (s *Server) clientIP(r *http.Request) string {
-	if s.trustedProxy {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			if i := strings.IndexByte(xff, ','); i >= 0 {
-				return strings.TrimSpace(xff[:i])
-			}
-			return strings.TrimSpace(xff)
-		}
-	}
-	addr := r.RemoteAddr
-	if i := strings.LastIndexByte(addr, ':'); i >= 0 {
-		addr = addr[:i]
-	}
-	return strings.Trim(addr, "[]")
-}
