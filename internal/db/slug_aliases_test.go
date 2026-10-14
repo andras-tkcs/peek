@@ -110,3 +110,46 @@ func TestSlugAliasesCascadeOnUploadDelete(t *testing.T) {
 		t.Fatalf("UploadSlugExists(a) = %v, %v", ok, err)
 	}
 }
+
+func TestRenameUploadFailsMidTransaction(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct{ name, table, op string }{
+		{"alias cleanup", "upload_slug_aliases", "DELETE"},
+		{"alias insert", "upload_slug_aliases", "INSERT"},
+		{"upload update", "uploads", "UPDATE"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openTestStore(t)
+			t.Cleanup(func() { s.Close() })
+			_, id := seedVersionUpload(t, s, "o@example.test", "old", 1)
+			// Make the cleanup DELETE reachable as a row-level trigger: an alias owned by
+			// the upload under the target slug.
+			if _, err := s.Exec(`INSERT INTO upload_slug_aliases(slug,upload_id,created_at) VALUES('new',?,0)`, id); err != nil {
+				t.Fatal(err)
+			}
+			failOn(t, s, c.table, c.op)
+			wantErr(t, c.name, s.RenameUpload(ctx, id, "new", "n.html"))
+			if got, err := s.GetUploadByID(ctx, id); err != nil || got.Slug != "old" {
+				t.Fatalf("rename leaked out of the failed transaction: %+v, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestRenameUploadRejectsOtherUploadsAlias(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	t.Cleanup(func() { s.Close() })
+	_, a := seedVersionUpload(t, s, "a@example.test", "a", 1)
+	_, b := seedVersionUpload(t, s, "b@example.test", "b", 1)
+	if err := s.RenameUpload(ctx, a, "a2", "a.html"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RenameUpload(ctx, b, "a", "b.html"); !errors.Is(err, ErrSlugTaken) {
+		t.Fatalf("taking another upload's alias err = %v", err)
+	}
+	if cur, err := s.ResolveSlugAlias(ctx, "a"); err != nil || cur != "a2" {
+		t.Fatalf("ResolveSlugAlias = %q, %v", cur, err)
+	}
+}

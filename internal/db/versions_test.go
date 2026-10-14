@@ -249,3 +249,55 @@ func TestMigrationBackfillsUploadVersions(t *testing.T) {
 		t.Fatalf("expected 1 version row, got %d", n)
 	}
 }
+
+func TestVersionWritesFailMidTransaction(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name, table, op string
+		call            func(s *Store, accountID, uploadID int64) error
+	}{
+		{"CreateVersionChecked insert", "upload_versions", "INSERT", func(s *Store, a, u int64) error {
+			_, err := s.CreateVersionChecked(ctx, u, "k2", 5, a, uploadquota.Limits{})
+			return err
+		}},
+		{"CreateVersionChecked size update", "uploads", "UPDATE", func(s *Store, a, u int64) error {
+			_, err := s.CreateVersionChecked(ctx, u, "k2", 5, a, uploadquota.Limits{})
+			return err
+		}},
+		{"DeleteUploadVersion comments", "comments", "DELETE", func(s *Store, _, u int64) error { return s.DeleteUploadVersion(ctx, u, 1) }},
+		{"DeleteUploadVersion version", "upload_versions", "DELETE", func(s *Store, _, u int64) error { return s.DeleteUploadVersion(ctx, u, 1) }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openTestStore(t)
+			t.Cleanup(func() { s.Close() })
+			a, u := seedVersionUpload(t, s, "o@example.test", "v", 10)
+			if _, err := s.AddComment(ctx, u, 1, "p", "", "element", "G", "c", "b", 0); err != nil {
+				t.Fatal(err)
+			}
+			failOn(t, s, c.table, c.op)
+			wantErr(t, c.name, c.call(s, a, u))
+		})
+	}
+}
+
+func TestVersionScanErrorsAndVersionlessUpload(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	t.Cleanup(func() { s.Close() })
+	_, u := seedVersionUpload(t, s, "o@example.test", "v", 10)
+	if _, err := s.GetUploadVersion(ctx, u, 9); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("unknown version err = %v", err)
+	}
+	if got, err := s.GetUploadVersion(ctx, u, 1); err != nil || got.Version != 1 {
+		t.Fatalf("GetUploadVersion = %+v, %v", got, err)
+	}
+	corruptInt(t, s, "upload_versions", "created_at")
+	_, err := s.GetUploadVersion(ctx, u, 1)
+	wantErr(t, "GetUploadVersion", err)
+	_, err = s.ListUploadVersions(ctx, u)
+	wantErr(t, "ListUploadVersions", err)
+	if _, err := s.CreateVersionChecked(ctx, u, "k2", 1, 0, uploadquota.Limits{}); err != nil {
+		t.Fatalf("anonymous actor version: %v", err)
+	}
+}

@@ -127,3 +127,111 @@ func TestMigrationAddsCLILoginContextAndSessionEpoch(t *testing.T) {
 		}
 	}
 }
+
+func TestAccountReadsAndCounts(t *testing.T) {
+	ctx := context.Background()
+	s := openTokenTestStore(t)
+	admin, err := s.CreateAccount(ctx, " Admin@Example.test ", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admin.Name != "admin@example.test" || admin.Email != "admin@example.test" || !admin.IsAdmin {
+		t.Fatalf("admin = %+v", admin)
+	}
+	user, err := s.CreateAccountWithPassword(ctx, "user@example.test", "user", " hash ", false)
+	if err != nil || user.PasswordHash != "hash" {
+		t.Fatalf("user = %+v, %v", user, err)
+	}
+	byEmail, err := s.GetAccountByEmail(ctx, "USER@example.test")
+	if err != nil || byEmail.ID != user.ID {
+		t.Fatalf("GetAccountByEmail = %+v, %v", byEmail, err)
+	}
+	if _, err := s.GetAccountByEmail(ctx, "nobody@example.test"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing email err = %v", err)
+	}
+	list, err := s.ListAccounts(ctx)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("ListAccounts = %+v, %v", list, err)
+	}
+	if n, err := s.CountAccounts(ctx); err != nil || n != 2 {
+		t.Fatalf("CountAccounts = %d, %v", n, err)
+	}
+	if n, err := s.CountAdminAccounts(ctx); err != nil || n != 1 {
+		t.Fatalf("CountAdminAccounts = %d, %v", n, err)
+	}
+	if _, err := s.CreateAccount(ctx, "user@example.test", "dup", false); err == nil {
+		t.Fatal("expected duplicate email to fail")
+	}
+	if err := s.SetAccountAdmin(ctx, user.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := s.CountAdminAccounts(ctx); n != 2 {
+		t.Fatalf("admins after promote = %d", n)
+	}
+	if err := s.SetAccountAdmin(ctx, user.ID+100, true); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("SetAccountAdmin unknown err = %v", err)
+	}
+	if err := s.SetAccountDisabled(ctx, user.ID+100, true); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("SetAccountDisabled unknown err = %v", err)
+	}
+}
+
+func TestCheckedAccountChangesProtectLastAdmin(t *testing.T) {
+	ctx := context.Background()
+	s := openTokenTestStore(t)
+	first, _ := s.CreateAccount(ctx, "first@example.test", "first", true)
+	if err := s.SetAccountAdminChecked(ctx, first.ID, false); !errors.Is(err, ErrLastAdmin) {
+		t.Fatalf("demote last admin err = %v", err)
+	}
+	if err := s.SetAccountDisabledChecked(ctx, first.ID, true); !errors.Is(err, ErrLastAdmin) {
+		t.Fatalf("disable last admin err = %v", err)
+	}
+	if err := s.SetAccountAdminChecked(ctx, first.ID+100, false); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("demote unknown err = %v", err)
+	}
+	if err := s.SetAccountDisabledChecked(ctx, first.ID+100, true); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("disable unknown err = %v", err)
+	}
+	if err := s.SetAccountAdminChecked(ctx, first.ID+100, true); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("promote unknown err = %v", err)
+	}
+	if err := s.SetAccountDisabledChecked(ctx, first.ID+100, false); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("enable unknown err = %v", err)
+	}
+	second, _ := s.CreateAccount(ctx, "second@example.test", "second", true)
+	if err := s.SetAccountAdminChecked(ctx, first.ID, false); err != nil {
+		t.Fatalf("demote with a second admin: %v", err)
+	}
+	if err := s.SetAccountDisabledChecked(ctx, second.ID, true); !errors.Is(err, ErrLastAdmin) {
+		t.Fatalf("disable remaining admin err = %v", err)
+	}
+	if err := s.SetAccountAdminChecked(ctx, first.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAccountDisabledChecked(ctx, second.ID, true); err != nil {
+		t.Fatalf("disable with another active admin: %v", err)
+	}
+}
+
+func TestAccountWritesFailMidTransaction(t *testing.T) {
+	ctx := context.Background()
+	s := openTokenTestStore(t)
+	first, _ := s.CreateAccount(ctx, "first@example.test", "first", true)
+	s.CreateAccount(ctx, "second@example.test", "second", true)
+	failOn(t, s, "accounts", "UPDATE")
+	wantErr(t, "SetAccountAdminChecked", s.SetAccountAdminChecked(ctx, first.ID, false))
+	wantErr(t, "SetAccountDisabledChecked", s.SetAccountDisabledChecked(ctx, first.ID, true))
+	_, err := s.BumpSessionEpoch(ctx, first.ID)
+	wantErr(t, "BumpSessionEpoch", err)
+}
+
+func TestAccountScanErrors(t *testing.T) {
+	ctx := context.Background()
+	s := openTokenTestStore(t)
+	a, _ := s.CreateAccount(ctx, "a@example.test", "a", false)
+	corruptInt(t, s, "accounts", "created_at")
+	_, err := s.ListAccounts(ctx)
+	wantErr(t, "ListAccounts", err)
+	_, err = s.GetAccountByID(ctx, a.ID)
+	wantErr(t, "GetAccountByID", err)
+}
