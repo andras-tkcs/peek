@@ -224,10 +224,15 @@ func rawViewerID(r *http.Request) string {
 // Sec-Fetch-Dest must be loading the page into an iframe; a top-level navigation
 // ("document"), fetch ("empty") or any other destination is refused. Requests
 // without the header (older browsers, non-browser clients) still need a valid
-// view token and visitor cookie.
+// view token and visitor cookie. A download=1 request is the toolbar's top-level
+// attachment link, so it may also arrive as "document" or "empty"; the response
+// is an attachment and the token, cookie and access checks still apply.
 func rawFetchAllowed(r *http.Request) bool {
 	dest := r.Header.Get("Sec-Fetch-Dest")
-	return dest == "" || dest == "iframe"
+	if dest == "" || dest == "iframe" {
+		return true
+	}
+	return r.URL.Query().Get("download") == "1" && (dest == "document" || dest == "empty")
 }
 
 func (s *Server) handleRawVersion(w http.ResponseWriter, r *http.Request) {
@@ -305,6 +310,7 @@ func (s *Server) serveDownload(w http.ResponseWriter, r *http.Request, slug, nam
 	defer rc.Close()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", rawContentCSP)
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": downloadFilename(name, slug)}))
 	if _, err := io.Copy(w, rc); err != nil {
 		slog.Error("write download response", "slug", slug, "err", err)
