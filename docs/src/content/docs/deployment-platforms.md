@@ -49,6 +49,8 @@ PEEK_BASE_URL=https://peek.example.com
 PEEK_TRUSTED_PROXY=true
 ```
 
+Also set `PEEK_TRUSTED_PROXY_CIDRS` to the range the platform's proxy connects from; Peek logs the peer address once if it is ignoring `X-Forwarded-For`.
+
 Use your custom domain if you have one. If you are using Render's default domain, choose the service name first and set `PEEK_BASE_URL` to the expected `https://<service-name>.onrender.com` URL before the first deploy. If Render shows a different public URL after creation, update the value and redeploy before configuring OAuth or sharing links.
 
 Set the health check path to `/healthz`. Use one instance because SQLite is the metadata store.
@@ -81,7 +83,7 @@ volumes:
       claimName: peek-data
 ```
 
-Use a `ReadWriteOnce` claim unless your storage class and SQLite operating model have been deliberately tested. Set `PEEK_BASE_URL` to the public Ingress URL and protect `/metrics` at the Ingress or network layer.
+Use a `ReadWriteOnce` claim unless your storage class and SQLite operating model have been deliberately tested. Set `PEEK_BASE_URL` to the public Ingress URL and set `PEEK_METRICS_TOKEN` (or `PEEK_METRICS_TOKEN_FILE`) to require a bearer token on `/metrics`, and protect it at the Ingress or network layer.
 
 ## Sources
 
