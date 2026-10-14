@@ -154,3 +154,30 @@ func TestExportIncludesGrants(t *testing.T) {
 		t.Fatalf("grants = %s (%v)", rec.Body.String(), err)
 	}
 }
+
+func TestAPICovGrantsAccessAndBadBodies(t *testing.T) {
+	s, u, ownerTok := grantsFixture(t, "cov-grants")
+	_ = u
+	apiCovStatus(t, s, http.MethodGet, "/api/uploads/missing/grants", ownerTok, "", http.StatusNotFound)
+	// A malformed body must not create or remove anything.
+	for _, method := range []string{http.MethodPost, http.MethodDelete} {
+		rec := doRequest(t, s, method, "/api/uploads/cov-grants/grants", strings.NewReader(`{`), asBearer(ownerTok), withJSON())
+		if rec.Code < 400 && strings.Contains(rec.Body.String(), "email") {
+			t.Fatalf("%s with bad JSON = %d: %s", method, rec.Code, rec.Body.String())
+		}
+	}
+	grants, err := s.store.ListUploadGrants(context.Background(), u.ID)
+	if err != nil || len(grants) != 0 {
+		t.Fatalf("grants = %v err = %v", grants, err)
+	}
+}
+
+func TestAPICovGrantsDBFailures(t *testing.T) {
+	s, _, ownerTok := grantsFixture(t, "cov-grants-db")
+	apiCovStatus(t, s, http.MethodPost, "/api/uploads/cov-grants-db/grants", ownerTok, `{"kind":"user","email":"a@example.test"}`, http.StatusOK)
+	dropTable(t, s.store, "upload_grants")
+	body := `{"kind":"user","email":"a@example.test"}`
+	apiCovStatus(t, s, http.MethodGet, "/api/uploads/cov-grants-db/grants", ownerTok, "", http.StatusInternalServerError)
+	apiCovStatus(t, s, http.MethodPost, "/api/uploads/cov-grants-db/grants", ownerTok, body, http.StatusInternalServerError)
+	apiCovStatus(t, s, http.MethodDelete, "/api/uploads/cov-grants-db/grants", ownerTok, body, http.StatusInternalServerError)
+}
