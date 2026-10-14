@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/andras-tkcs/peek/internal/models"
 	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
@@ -40,15 +41,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		accountID int64
-		actorName string
-		err       error
+		account *models.Account
+		err     error
 	)
 	switch r.FormValue("method") {
 	case "password":
-		accountID, actorName, err = s.loginWithPassword(r)
+		account, err = s.loginWithPassword(r)
 	case "token":
-		accountID, actorName, err = s.loginWithToken(r)
+		account, err = s.loginWithToken(r)
 	default:
 		err = fmt.Errorf("unsupported login method")
 	}
@@ -60,8 +60,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.renderLoginForm(w, http.StatusOK, "Invalid credentials.", r)
 		return
 	}
-	s.setWebSession(w, accountID)
-	s.auditRequest(r, actorName, "login.success", "")
+	s.setWebSession(w, account)
+	s.auditRequest(r, account.Name, "login.success", "")
 	http.Redirect(w, r, s.consumeNextPath(w, r), http.StatusSeeOther)
 }
 
@@ -95,24 +95,24 @@ func loginFailureKey(email string) string { return strings.ToLower(strings.TrimS
 
 // loginWithPassword counts failures per email address, whether or not the
 // account exists, so the limiter does not reveal which accounts are real.
-func (s *Server) loginWithPassword(r *http.Request) (int64, string, error) {
+func (s *Server) loginWithPassword(r *http.Request) (*models.Account, error) {
 	email := strings.TrimSpace(r.FormValue("email"))
 	password := r.FormValue("password")
 	if email == "" || password == "" {
-		return 0, "", fmt.Errorf("missing credentials")
+		return nil, fmt.Errorf("missing credentials")
 	}
 	key := loginFailureKey(email)
 	if s.accountLoginLimiter.blocked(key) {
-		return 0, "", errLoginThrottled
+		return nil, errLoginThrottled
 	}
-	id, name, err := s.checkPasswordLogin(r.Context(), email, password)
+	account, err := s.checkPasswordLogin(r.Context(), email, password)
 	if err != nil {
 		s.accountLoginLimiter.recordFailure(key)
 	}
-	return id, name, err
+	return account, err
 }
 
-func (s *Server) checkPasswordLogin(ctx context.Context, email, password string) (int64, string, error) {
+func (s *Server) checkPasswordLogin(ctx context.Context, email, password string) (*models.Account, error) {
 	owner, err := s.store.GetAccountByEmail(ctx, email)
 	hash := ""
 	if err == nil {
@@ -122,39 +122,43 @@ func (s *Server) checkPasswordLogin(ctx context.Context, email, password string)
 	// reveal which accounts exist. Policy errors are only reachable with the
 	// correct password.
 	if !checkPassword(hash, password) {
-		return 0, "", fmt.Errorf("invalid credentials")
+		return nil, fmt.Errorf("invalid credentials")
 	}
 	if owner.Disabled {
-		return 0, "", fmt.Errorf("account disabled")
+		return nil, fmt.Errorf("account disabled")
 	}
 	if !s.accountAllowedByEmailDomain(ctx, owner.Email) {
-		return 0, "", errAccountNotEligible
+		return nil, errAccountNotEligible
 	}
 	if s.oauthLoginRequired(ctx) && !owner.IsAdmin {
-		return 0, "", fmt.Errorf("oauth required")
+		return nil, fmt.Errorf("oauth required")
 	}
-	return owner.ID, owner.Name, nil
+	return owner, nil
 }
 
-func (s *Server) loginWithToken(r *http.Request) (int64, string, error) {
+func (s *Server) loginWithToken(r *http.Request) (*models.Account, error) {
 	tok := strings.TrimSpace(r.FormValue("token"))
 	if tok == "" {
-		return 0, "", fmt.Errorf("missing token")
+		return nil, fmt.Errorf("missing token")
 	}
 	owner, err := s.store.GetToken(r.Context(), tok)
 	if err != nil {
-		return 0, "", err
+		return nil, err
 	}
 	if owner.Disabled {
-		return 0, "", fmt.Errorf("account disabled")
+		return nil, fmt.Errorf("account disabled")
 	}
 	if !s.accountAllowedByEmailDomain(r.Context(), owner.Email) {
-		return 0, "", errAccountNotEligible
+		return nil, errAccountNotEligible
 	}
 	if (!s.tokenLoginEnabled(r.Context()) || s.oauthLoginRequired(r.Context())) && !owner.IsAdmin {
-		return 0, "", fmt.Errorf("token login disabled")
+		return nil, fmt.Errorf("token login disabled")
 	}
-	return owner.AccountID, owner.Name, nil
+	account, err := s.store.GetAccountByID(r.Context(), owner.AccountID)
+	if err != nil {
+		return nil, err
+	}
+	return account, nil
 }
 
 func (s *Server) oauthLoginRequired(ctx context.Context) bool {

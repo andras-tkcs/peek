@@ -102,7 +102,7 @@ func newLoginLimiterServer(t *testing.T) (*Server, func(email, pw string) error)
 	try := func(email, pw string) error {
 		req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(url.Values{"email": {email}, "password": {pw}}.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		_, _, err := s.loginWithPassword(req)
+		_, err := s.loginWithPassword(req)
 		return err
 	}
 	return s, try
@@ -170,7 +170,7 @@ func TestLoginWithPasswordRunsOneBcryptCompareOnEveryFailure(t *testing.T) {
 	attempt := func(s *Server, email, pw string) error {
 		req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(url.Values{"email": {email}, "password": {pw}}.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		_, _, err := s.loginWithPassword(req)
+		_, err := s.loginWithPassword(req)
 		return err
 	}
 	tests := []struct {
@@ -263,5 +263,31 @@ func TestDummyPasswordHashIsDefaultCost(t *testing.T) {
 	}
 	if cost != bcrypt.DefaultCost {
 		t.Fatalf("cost = %d, want %d", cost, bcrypt.DefaultCost)
+	}
+}
+
+func TestLoginSetsEpochSessionCookie(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	hash, err := bcrypt.GenerateFromPassword([]byte("right"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	a, err := s.store.CreateAccountWithPassword(ctx, "user@example.test", "User", string(hash), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.store.BumpSessionEpoch(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	form := url.Values{"method": {"password"}, "email": {"user@example.test"}, "password": {"right"}, "csrf": {"csrf-token"}}
+	rec := doRequest(t, s, http.MethodPost, "/login", strings.NewReader(form.Encode()),
+		func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") },
+		func(r *http.Request) { r.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"}) })
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if got, want := sessionSubjectOf(t, s, rec), sessionSubject(a.ID, 1); got != want {
+		t.Fatalf("subject = %q, want %q", got, want)
 	}
 }
