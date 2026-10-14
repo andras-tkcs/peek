@@ -9,17 +9,18 @@ import (
 )
 
 const (
-	TemplateSetup        = "setup"
-	TemplateLogin        = "login"
-	TemplateDashboard    = "dashboard"
-	TemplateStats        = "stats"
-	TemplatePage         = "page"
-	TemplateGate         = "gate"
-	TemplateIndex        = "index"
-	TemplateError        = "error"
-	TemplateCLILogin     = "cli-login"
-	TemplateCLILoginDone = "cli-login-done"
-	TemplateAPIKeyShown  = "api-key-shown"
+	TemplateSetup         = "setup"
+	TemplateLogin         = "login"
+	TemplateDashboard     = "dashboard"
+	TemplateStats         = "stats"
+	TemplatePage          = "page"
+	TemplateGate          = "gate"
+	TemplateIndex         = "index"
+	TemplateError         = "error"
+	TemplateCLILogin      = "cli-login"
+	TemplateCLILoginDone  = "cli-login-done"
+	TemplateCLILoginEntry = "cli-login-entry"
+	TemplateAPIKeyShown   = "api-key-shown"
 )
 
 // DashboardCSP is the Content-Security-Policy for the management UI.
@@ -274,7 +275,18 @@ type ErrorData struct {
 }
 
 type CLILoginData struct {
-	Code  string
+	Code        string // ABCD-EFGH
+	CSRF        string
+	User        string
+	Error       string
+	RequestIP   string // client IP of the `peek login` request, "unknown" when not recorded
+	UserAgent   string // User-Agent of that request, "unknown" when not recorded
+	RequestedAt string // request time, "2006-01-02 15:04:05 UTC"
+	CurrentIP   string // client IP of the browser looking at the page
+}
+
+// CLILoginEntryData is the form where a signed-in user types a CLI login code.
+type CLILoginEntryData struct {
 	CSRF  string
 	User  string
 	Error string

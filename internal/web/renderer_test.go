@@ -74,8 +74,13 @@ func TestRendererExecutesAllTemplates(t *testing.T) {
 		},
 		{
 			name: TemplateCLILogin,
-			data: CLILoginData{Code: "ABCDEFGH", CSRF: "csrf", User: "Admin"},
-			want: "Approve CLI login",
+			data: CLILoginData{Code: "ABCD-EFGH", CSRF: "csrf", User: "Admin", RequestIP: "203.0.113.7", UserAgent: "peek-cli/dev", RequestedAt: "2026-10-11 10:00:00 UTC", CurrentIP: "198.51.100.2"},
+			want: "Only approve if you just ran",
+		},
+		{
+			name: TemplateCLILoginEntry,
+			data: CLILoginEntryData{CSRF: "csrf", User: "Admin"},
+			want: `name="code"`,
 		},
 		{
 			name: TemplateCLILoginDone,
