@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -100,4 +101,89 @@ func TestRecordVisitPersistsPrivacySafeAnalytics(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("visit worker did not stop")
 	}
+}
+
+func pageCovAnalyticsServer(t *testing.T) (*Server, *db.Store, int64) {
+	t.Helper()
+	s, store, _, adminID := newFaultServer(t)
+	s.visitQueue = make(chan visitEvent, 8)
+	if err := store.CreateUploadChecked(context.Background(), "page", adminID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	return s, store, adminID
+}
+
+func TestPageCovVisitorIDFallsBackWhenRandomFails(t *testing.T) {
+	s, _, _ := pageCovAnalyticsServer(t)
+	stubSecureRandomRead(t, func([]byte) (int, error) { return 0, errors.New("rand down") })
+	rec := httptest.NewRecorder()
+	if got := s.visitorID(rec, httptest.NewRequest(http.MethodGet, "/", nil)); got != "anon" {
+		t.Fatalf("visitor id = %q, want anon", got)
+	}
+	if len(rec.Result().Cookies()) != 0 {
+		t.Fatal("no cookie should be set when the id cannot be generated")
+	}
+}
+
+func TestPageCovRecordVisitWithoutIPLeavesHashEmpty(t *testing.T) {
+	s, store, _ := pageCovAnalyticsServer(t)
+	u, err := store.GetUpload(context.Background(), "page")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = ""
+	s.recordVisit(req, u, "vid", 1)
+	ev := <-s.visitQueue
+	if ev.IPHash != "" {
+		t.Fatalf("ip hash = %q, want empty", ev.IPHash)
+	}
+}
+
+func TestPageCovVisitWorkerSurvivesVisitorUpsertFailure(t *testing.T) {
+	s, store, _ := pageCovAnalyticsServer(t)
+	u, err := store.GetUpload(context.Background(), "page")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropTable(t, store, "visitors")
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		s.startVisitWorker(ctx)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	s.visitQueue <- visitEvent{UploadID: u.ID, Version: 1, VID: "vid", Name: "Ada"}
+	flushCtx, flushCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer flushCancel()
+	if err := s.FlushVisits(flushCtx); err != nil {
+		t.Fatal(err)
+	}
+	n, _, err := store.CountVisits(context.Background(), u.ID)
+	if err != nil || n != 1 {
+		t.Fatalf("visits = %d err = %v, want the visit recorded despite the visitor failure", n, err)
+	}
+}
+
+func TestPageCovFlushVisitsHonoursContext(t *testing.T) {
+	t.Run("queue full", func(t *testing.T) {
+		s := &Server{visitQueue: make(chan visitEvent)}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		if err := s.FlushVisits(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v, want deadline exceeded", err)
+		}
+	})
+	t.Run("worker not draining", func(t *testing.T) {
+		s := &Server{visitQueue: make(chan visitEvent, 1)}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		if err := s.FlushVisits(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v, want deadline exceeded", err)
+		}
+	})
 }

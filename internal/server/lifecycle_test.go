@@ -274,3 +274,85 @@ func TestAPIUploadAuditQuotesName(t *testing.T) {
 	}
 	t.Fatal("no upload.create audit entry")
 }
+
+func TestPageCovCloseWithoutStore(t *testing.T) {
+	if err := (&Server{}).Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPageCovRetentionCleanupDefaultsIntervalAndStopsOnCancel(t *testing.T) {
+	s := &Server{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan struct{})
+	go func() {
+		s.runRetentionCleanup(ctx, 0)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runRetentionCleanup did not stop on a cancelled context")
+	}
+}
+
+func TestPageCovCleanupExpiredListFailure(t *testing.T) {
+	s, store, storage, _ := newFaultServer(t)
+	if err := store.SetSetting(context.Background(), "retention_days", "1"); err != nil {
+		t.Fatal(err)
+	}
+	dropTable(t, store, "upload_versions")
+	s.cleanupExpired(context.Background())
+	if len(storage.objects) != 0 {
+		t.Fatalf("unexpected storage writes: %v", storage.objects)
+	}
+}
+
+func pageCovPrunableUpload(t *testing.T, store *db.Store, ownerID int64) (uploadID int64) {
+	t.Helper()
+	ctx := context.Background()
+	if err := store.CreateUploadChecked(ctx, "versioned", ownerID, 0, "versioned", 42, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	u, err := store.GetUpload(ctx, "versioned")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateVersionChecked(ctx, u.ID, "versions/versioned/2", 10, ownerID, uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour).Unix()
+	if _, err := store.Exec(`UPDATE upload_versions SET created_at=? WHERE upload_id=? AND version=1`, old, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	return u.ID
+}
+
+func TestPageCovPruneOldVersionsFailures(t *testing.T) {
+	cutoff := time.Now().Add(-24 * time.Hour)
+
+	t.Run("list fails", func(t *testing.T) {
+		s, store, _, _ := newFaultServer(t)
+		dropTable(t, store, "upload_versions")
+		s.pruneOldVersions(context.Background(), cutoff)
+	})
+	t.Run("storage delete fails", func(t *testing.T) {
+		s, store, storage, ownerID := newFaultServer(t)
+		uploadID := pageCovPrunableUpload(t, store, ownerID)
+		storage.deleteErr = errors.New("blocked")
+		s.pruneOldVersions(context.Background(), cutoff)
+		if _, err := store.GetUploadVersion(context.Background(), uploadID, 1); err != nil {
+			t.Fatalf("version 1 should survive a storage failure: %v", err)
+		}
+	})
+	t.Run("record delete fails", func(t *testing.T) {
+		s, store, _, ownerID := newFaultServer(t)
+		uploadID := pageCovPrunableUpload(t, store, ownerID)
+		addFailTrigger(t, store, "upload_versions", "DELETE")
+		s.pruneOldVersions(context.Background(), cutoff)
+		if _, err := store.GetUploadVersion(context.Background(), uploadID, 1); err != nil {
+			t.Fatalf("version 1 should survive a record failure: %v", err)
+		}
+	})
+}
