@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,13 @@ import (
 
 const oauthJSONBodyLimit = 1 << 20
 
+var (
+	errOIDCNonceMismatch   = errors.New("oidc nonce mismatch")
+	errOIDCUserInfoSubject = errors.New("oidc userinfo subject does not match id token")
+	// googleIssuerURL is Google's OIDC issuer; tests point it at a fake issuer.
+	googleIssuerURL = "https://accounts.google.com"
+)
+
 type oauthProfile struct {
 	Provider       string
 	ProviderUserID string
@@ -24,30 +32,44 @@ type oauthProfile struct {
 	Name           string
 }
 
-func (s *Server) fetchOAuthProfile(ctx context.Context, p *oauthProviderConfig, tok *oauth2.Token) (*oauthProfile, error) {
+func (s *Server) fetchOAuthProfile(ctx context.Context, p *oauthProviderConfig, tok *oauth2.Token, nonce string) (*oauthProfile, error) {
 	switch p.Key {
 	case "google":
-		return s.fetchGoogleProfile(ctx, p, tok)
+		return s.fetchGoogleProfile(ctx, p, tok, nonce)
 	case "github":
 		return s.fetchGitHubProfile(ctx, p, tok)
 	case "oidc":
-		return s.fetchOIDCProfile(ctx, p, tok)
+		return s.fetchOIDCProfile(ctx, p, tok, nonce)
 	default:
 		return nil, errors.New("unsupported provider")
 	}
 }
 
-func (s *Server) fetchGoogleProfile(ctx context.Context, p *oauthProviderConfig, tok *oauth2.Token) (*oauthProfile, error) {
+// oauthProviderUsesIDToken reports whether provider key returns an OIDC ID token that carries the nonce.
+func oauthProviderUsesIDToken(key string) bool { return key == "google" || key == "oidc" }
+
+// verifyIDTokenNonce checks that the ID token carries the nonce of this login.
+func verifyIDTokenNonce(idToken *oidc.IDToken, nonce string) error {
+	if nonce == "" || subtle.ConstantTimeCompare([]byte(idToken.Nonce), []byte(nonce)) != 1 {
+		return errOIDCNonceMismatch
+	}
+	return nil
+}
+
+func (s *Server) fetchGoogleProfile(ctx context.Context, p *oauthProviderConfig, tok *oauth2.Token, nonce string) (*oauthProfile, error) {
 	rawIDToken, _ := tok.Extra("id_token").(string)
 	if rawIDToken == "" {
 		return nil, errors.New("missing id token")
 	}
-	provider, err := oidc.NewProvider(ctx, "https://accounts.google.com")
+	provider, err := oidc.NewProvider(ctx, googleIssuerURL)
 	if err != nil {
 		return nil, err
 	}
 	idToken, err := provider.Verifier(&oidc.Config{ClientID: p.ClientID}).Verify(ctx, rawIDToken)
 	if err != nil {
+		return nil, err
+	}
+	if err := verifyIDTokenNonce(idToken, nonce); err != nil {
 		return nil, err
 	}
 	var claims struct {
@@ -114,7 +136,7 @@ func (s *Server) fetchGitHubProfile(ctx context.Context, p *oauthProviderConfig,
 	}, nil
 }
 
-func (s *Server) fetchOIDCProfile(ctx context.Context, p *oauthProviderConfig, tok *oauth2.Token) (*oauthProfile, error) {
+func (s *Server) fetchOIDCProfile(ctx context.Context, p *oauthProviderConfig, tok *oauth2.Token, nonce string) (*oauthProfile, error) {
 	provider := p.OIDCProvider
 	if provider == nil {
 		var err error
@@ -131,40 +153,43 @@ func (s *Server) fetchOIDCProfile(ctx context.Context, p *oauthProviderConfig, t
 	if err != nil {
 		return nil, err
 	}
+	if err := verifyIDTokenNonce(idToken, nonce); err != nil {
+		return nil, err
+	}
 	var claims oidcProfileClaims
 	if err := idToken.Claims(&claims); err != nil {
 		return nil, err
 	}
 
 	sub := strings.TrimSpace(claims.Sub)
+	if sub == "" {
+		return nil, errors.New("missing oidc subject")
+	}
 	email := normalizeOAuthEmail(claims.Email)
 	emailVerified := bool(claims.EmailVerified)
 	name := displayName(claims.Name, claims.PreferredUsername, email)
 
-	if email == "" || name == "user" || !emailVerified {
+	if email == "" || !emailVerified || name == "user" {
 		userInfo, err := provider.UserInfo(ctx, s.oauth2Config(p).TokenSource(ctx, tok))
 		if err == nil {
-			var infoClaims oidcProfileClaims
-			if claimErr := userInfo.Claims(&infoClaims); claimErr == nil {
-				if sub == "" {
-					sub = strings.TrimSpace(infoClaims.Sub)
+			var info oidcProfileClaims
+			if claimErr := userInfo.Claims(&info); claimErr == nil {
+				// OIDC Core 5.3.2: userinfo must be about the ID token's subject.
+				if strings.TrimSpace(info.Sub) != sub {
+					return nil, errOIDCUserInfoSubject
 				}
-				if email == "" {
-					email = normalizeOAuthEmail(infoClaims.Email)
+				// Email and email_verified always come from the same source.
+				if (email == "" || !emailVerified) && normalizeOAuthEmail(info.Email) != "" {
+					email = normalizeOAuthEmail(info.Email)
+					emailVerified = bool(info.EmailVerified)
 				}
 				if name == "user" {
-					name = displayName(infoClaims.Name, infoClaims.PreferredUsername, email)
-				}
-				if !emailVerified {
-					emailVerified = bool(infoClaims.EmailVerified)
+					name = displayName(info.Name, info.PreferredUsername, email)
 				}
 			}
 		}
 	}
 
-	if sub == "" {
-		return nil, errors.New("missing oidc subject")
-	}
 	return &oauthProfile{
 		Provider:       "oidc",
 		ProviderUserID: strings.TrimRight(p.IssuerURL, "/") + "#" + sub,
