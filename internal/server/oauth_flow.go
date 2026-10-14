@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
 	webui "github.com/andras-tkcs/peek/internal/web"
@@ -23,15 +24,25 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verifier := oauth2.GenerateVerifier()
+	nonce, err := randID(24)
+	if err != nil {
+		slog.Error("oauth nonce generation failed", "provider", p.Key, "err", err)
+		s.renderOAuthError(w, r, http.StatusInternalServerError, "OAuth login could not start.")
+		return
+	}
 	s.setCookie(w, &http.Cookie{
 		Name:     oauthCookieName(p.Key),
-		Value:    s.makeOAuthFlowCookie(p.Key, state, verifier),
+		Value:    s.makeOAuthFlowCookie(p.Key, state, verifier, nonce),
 		Path:     "/oauth/" + p.Key,
 		MaxAge:   10 * 60,
 		SameSite: http.SameSiteLaxMode,
 		HttpOnly: true,
 	})
-	url := s.oauth2Config(p).AuthCodeURL(state, oauth2.S256ChallengeOption(verifier))
+	opts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}
+	if oauthProviderUsesIDToken(p.Key) {
+		opts = append(opts, oidc.Nonce(nonce))
+	}
+	url := s.oauth2Config(p).AuthCodeURL(state, opts...)
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
@@ -41,7 +52,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		s.renderOAuthError(w, r, http.StatusNotFound, "OAuth provider is not configured.")
 		return
 	}
-	state, verifier, ok := s.parseOAuthFlowCookie(r, p.Key)
+	state, verifier, nonce, ok := s.parseOAuthFlowCookie(r, p.Key)
 	if !ok || state == "" || state != r.URL.Query().Get("state") {
 		s.clearCookie(w, oauthCookieName(p.Key), "/oauth/"+p.Key)
 		s.renderOAuthError(w, r, http.StatusBadRequest, "OAuth session expired. Try signing in again.")
@@ -66,7 +77,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		s.renderOAuthError(w, r, http.StatusBadGateway, "OAuth token exchange failed.")
 		return
 	}
-	profile, err := s.fetchOAuthProfile(ctx, p, tok)
+	profile, err := s.fetchOAuthProfile(ctx, p, tok, nonce)
 	if err != nil {
 		slog.Warn("oauth profile lookup failed", "provider", p.Key, "err", err)
 		s.clearCookie(w, oauthCookieName(p.Key), "/oauth/"+p.Key)
