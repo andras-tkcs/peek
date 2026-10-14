@@ -664,3 +664,22 @@ func TestDashboardTemplateRendersAPIKeys(t *testing.T) {
 		t.Fatal("empty dashboard missing placeholder")
 	}
 }
+
+func TestPageTemplateShowsVerifiedCommentMarker(t *testing.T) {
+	renderer, err := newRenderer(func(name string) string {
+		return "/" + name + "?v=test"
+	})
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplatePage, PageData{Name: "page.html", Slug: "abc123", RawURL: "/raw/abc123/v/1", FrameURL: "/raw/abc123/v/1", Visibility: "public", Version: 1, LatestVersion: 1})
+	if err != nil {
+		t.Fatalf("execute page: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{`hn-comment-verified`, `x-show="c.verified"`} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("page template missing %q", want)
+		}
+	}
+}

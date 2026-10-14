@@ -150,3 +150,42 @@ func TestHandleViewsRespectsPrivateVisibility(t *testing.T) {
 		t.Fatalf("active viewer status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestExportMarksVerifiedComments(t *testing.T) {
+	s, adminToken := newHandlerTestServer(t)
+	ctx := context.Background()
+	admin, err := s.store.GetToken(ctx, adminToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.CreateUploadChecked(ctx, "page", admin.AccountID, admin.ID, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	u, _ := s.store.GetUpload(ctx, "page")
+	if _, err := s.store.AddComment(ctx, u.ID, 1, "", "", "page", "Admin", "c1", "signed", admin.AccountID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.store.AddComment(ctx, u.ID, 1, "", "", "page", "Typed", "c2", "typed", 0); err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodGet, "/api/uploads/page/export", nil, asBearer(adminToken))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Comments []struct {
+			Author   string `json:"author"`
+			Verified bool   `json:"verified"`
+		} `json:"comments"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, c := range out.Comments {
+		got[c.Author] = c.Verified
+	}
+	if len(got) != 2 || !got["Admin"] || got["Typed"] {
+		t.Fatalf("comments = %+v", out.Comments)
+	}
+}

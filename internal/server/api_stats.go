@@ -84,6 +84,7 @@ func (s *Server) handleExportUpload(w http.ResponseWriter, r *http.Request) {
 
 	type exportComment struct {
 		Author     string `json:"author"`
+		Verified   bool   `json:"verified"`
 		Body       string `json:"body"`
 		Selector   string `json:"selector"`
 		Text       string `json:"element_text"`
@@ -126,7 +127,7 @@ func (s *Server) handleExportUpload(w http.ResponseWriter, r *http.Request) {
 	cmts := make([]exportComment, 0, len(comments))
 	for _, c := range comments {
 		cmts = append(cmts, exportComment{
-			Author: c.AuthorName, Body: c.Body, Selector: c.ElementSelector,
+			Author: c.AuthorName, Verified: c.AccountID != 0, Body: c.Body, Selector: c.ElementSelector,
 			Text: c.ElementText, AnchorKind: commentAnchorKind(c.ElementSelector, c.ElementText, c.AnchorKind),
 			CreatedAt: c.CreatedAt.Unix(), Version: c.Version,
 		})

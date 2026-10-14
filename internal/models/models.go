@@ -128,6 +128,7 @@ type Comment struct {
 	AnchorKind      string
 	AuthorName      string
 	AuthorCookie    string
+	AccountID       int64 // 0 when the author name was typed, not a signed-in account
 	Body            string
 	Version         int
 	CreatedAt       time.Time

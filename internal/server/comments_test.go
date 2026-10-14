@@ -320,3 +320,87 @@ func TestAccountCommentAppearsInList(t *testing.T) {
 		t.Fatalf("unexpected list: %+v", list)
 	}
 }
+
+func commentPageFixture(t *testing.T) (*Server, string) {
+	t.Helper()
+	s, _ := newHandlerTestServer(t)
+	owner := newViewer(t, s, "page-owner@example.test", "Page Owner", false)
+	if err := s.store.CreateUploadChecked(context.Background(), "page", owner.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	return s, "/api/uploads/page/comments"
+}
+
+func TestAddCommentSignedInViewerUsesAccountName(t *testing.T) {
+	s, target := commentPageFixture(t)
+	viewer := newViewer(t, s, "ada@example.com", "Ada Lovelace", false)
+	rec := doRequest(t, s, http.MethodPost, target, strings.NewReader(`{"name":"Alice (owner)","body":"hi"}`), asSession(s, viewer.ID), withJSON())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"author":"Ada Lovelace"`) || !strings.Contains(body, `"verified":true`) || strings.Contains(body, "Alice (owner)") {
+		t.Fatalf("body = %s", body)
+	}
+	u, _ := s.store.GetUpload(context.Background(), "page")
+	list, err := s.store.ListComments(context.Background(), u.ID, 0)
+	if err != nil || len(list) != 1 || list[0].AccountID != viewer.ID {
+		t.Fatalf("list = %+v err = %v", list, err)
+	}
+}
+
+func TestAddCommentAnonymousViewerIsUnverified(t *testing.T) {
+	s, target := commentPageFixture(t)
+	rec := doRequest(t, s, http.MethodPost, target, strings.NewReader(`{"name":"Alice (owner)","body":"hi"}`), withJSON())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"author":"Alice (owner)"`) || !strings.Contains(body, `"verified":false`) {
+		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestAddCommentDisabledSessionIsUnverified(t *testing.T) {
+	s, target := commentPageFixture(t)
+	viewer := newViewer(t, s, "ada@example.com", "Ada Lovelace", false)
+	if err := s.store.SetAccountDisabled(context.Background(), viewer.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodPost, target, strings.NewReader(`{"name":"Typed Name","body":"hi"}`), asSession(s, viewer.ID), withJSON())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"author":"Typed Name"`) || !strings.Contains(body, `"verified":false`) {
+		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestAddCommentSignedInBlankNameUsesEmail(t *testing.T) {
+	s, target := commentPageFixture(t)
+	viewer := newViewer(t, s, "noname@example.com", "", false)
+	rec := doRequest(t, s, http.MethodPost, target, strings.NewReader(`{"name":"Typed","body":"hi"}`), asSession(s, viewer.ID), withJSON())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"author":"noname@example.com"`) || !strings.Contains(body, `"verified":true`) {
+		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestAccountCommentIsVerified(t *testing.T) {
+	s, _, token := accountCommentFixture(t)
+	rec := postAccountComment(s, "page", token, `{"body":"hi"}`)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"verified":true`) {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/uploads/page/comments", nil)
+	req.SetPathValue("slug", "page")
+	list := httptest.NewRecorder()
+	s.handleListComments(list, req)
+	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), `"verified":true`) {
+		t.Fatalf("list status = %d, body = %s", list.Code, list.Body.String())
+	}
+}

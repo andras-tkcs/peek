@@ -48,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_upload_slug_aliases_upload ON upload_slug_aliases
 	{10, "token_hint_last_used", `-- ALTER TABLE handled idempotently below`},
 	{11, "cli_login_request_context", `-- ALTER TABLE handled idempotently below`},
 	{12, "account_session_epoch", `-- ALTER TABLE handled idempotently below`},
+	{13, "comment_account_id", `-- ALTER TABLE handled idempotently below`},
 }
 
 func (s *Store) runMigrations() error {
@@ -106,6 +107,10 @@ func (s *Store) runMigrations() error {
 			}
 		} else if m.id == 12 {
 			if err := s.migrateAccountSessionEpoch(); err != nil {
+				return fmt.Errorf("migration %d (%s): %w", m.id, m.desc, err)
+			}
+		} else if m.id == 13 {
+			if err := s.migrateCommentAccountID(); err != nil {
 				return fmt.Errorf("migration %d (%s): %w", m.id, m.desc, err)
 			}
 		} else if m.sql != "" {
@@ -436,6 +441,15 @@ func (s *Store) migrateCLILoginRequestContext() error {
 func (s *Store) migrateAccountSessionEpoch() error {
 	_, err := s.Exec(`ALTER TABLE accounts ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0`)
 	if err != nil && !isDuplicateColumnError(err) {
+		return err
+	}
+	return nil
+}
+
+// migrateCommentAccountID records which signed-in account wrote a comment.
+// NULL means the author name was typed by the viewer.
+func (s *Store) migrateCommentAccountID() error {
+	if _, err := s.Exec(`ALTER TABLE comments ADD COLUMN account_id INTEGER`); err != nil && !isDuplicateColumnError(err) {
 		return err
 	}
 	return nil
