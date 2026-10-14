@@ -14,6 +14,8 @@ peek upload demo.html --visibility public
 
 The response includes a URL and a slug. Share the URL with reviewers; keep the slug for CLI commands such as `stats`, `comments`, `visibility`, and `export`.
 
+Links are made from the page name plus a random six-character suffix, for example /p/q3-plan-k7m2xq, so a page cannot be found by guessing its name. Renaming a page gives it a new suffixed link; old links keep redirecting.
+
 The dashboard is better when you want to paste HTML, choose visibility visually, copy links, or manage several uploads at once.
 
 <figure>
@@ -79,7 +81,7 @@ Use a page comment when the note is about the whole artifact rather than one tar
 
 ## Read Feedback
 
-The comments panel shows author, timestamp, scope, target text, and body. Anchored comments are clickable, so owners can jump back to the relevant part of the page.
+The comments panel shows author, timestamp, scope, target text, and body. Anchored comments are clickable, so owners can jump back to the relevant part of the page. Comments from signed-in Peek accounts show the account name with a "signed in" marker; a signed-in viewer cannot choose another name. Names without the marker were typed by the viewer and are not verified.
 
 <figure>
   <img src="/peek/assets/screenshots/02-viewer-comments.png" alt="Peek shared-page viewer with the comments panel open">
@@ -115,7 +117,7 @@ The list shows each key's name, last four characters, created, last used (update
 
 **Regenerate** replaces the secret and keeps the name, and the old key stops working at once. **Revoke** deletes the key after a confirmation.
 
-A key acts as your account with the same access, so an admin's key can use the admin API. It keeps working until it is revoked or the account is disabled, even if an allowed email domain is set later. Use it as `PEEK_TOKEN` or as `Authorization: Bearer <key>`.
+A key acts as your account with the same access, so an admin's key can use the admin API. It keeps working until it is revoked or the account is disabled, even if an allowed email domain is set later. Use it as `PEEK_TOKEN` or as `Authorization: Bearer <key>`. Keys from `peek login` expire 90 days after approval.
 
 ## CLI Workflow
 

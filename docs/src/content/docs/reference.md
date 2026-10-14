@@ -11,17 +11,19 @@ kicker: peekd reference
 | `--addr` | `PEEK_ADDR` | `:7700` | Listen address. |
 | `--data` | `PEEK_DATA` | `./data` | Data directory for SQLite, generated secret, and file uploads. |
 | `--base-url` | `PEEK_BASE_URL` | `http://localhost:7700` | Public absolute URL. Use HTTPS in production. |
-| `--secret` | `PEEK_SECRET` | generated | HMAC/encryption secret. Provide one when multiple processes must share cookie/settings secrets. |
+| `--secret` | `PEEK_SECRET` | generated | HMAC/encryption secret. Provide one when multiple processes must share cookie/settings secrets. Or `PEEK_SECRET_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--max-upload` | `PEEK_MAX_UPLOAD` | `2097152` | Maximum upload size in bytes. Must be greater than zero. |
 | `--max-total-size` | `PEEK_MAX_TOTAL_SIZE` | `0` | Server-wide storage cap in bytes. `0` means unlimited. |
 | `--retention-days` | `PEEK_RETENTION_DAYS` | `0` | Delete uploads older than N days. `0` disables. |
 | `--trusted-proxy` | `PEEK_TRUSTED_PROXY` | `false` | Trust `X-Forwarded-For` for analytics and audit IP fields. |
+| `--trusted-proxy-cidrs` | `PEEK_TRUSTED_PROXY_CIDRS` | `127.0.0.0/8,::1/128` | Proxies allowed to set `X-Forwarded-For` (with `--trusted-proxy`). |
+| `--metrics-token` | `PEEK_METRICS_TOKEN` | empty | Bearer token required on `/metrics`, at least 16 characters. Or `PEEK_METRICS_TOKEN_FILE` with the path to a file; setting both is an error. Empty leaves `/metrics` unauthenticated. |
 | `--storage` | `PEEK_STORAGE` | `file` | Storage backend: `file` or `s3`. |
 | `--s3-endpoint` | `PEEK_S3_ENDPOINT` | empty | S3-compatible endpoint URL. |
-| `--s3-bucket` | `PEEK_S3_BUCKET` | empty | S3 bucket name. |
+| `--s3-bucket` | `PEEK_S3_BUCKET` | empty | S3 bucket name. Must be DNS-compatible (3–63 lowercase letters, digits, dots, hyphens); the SSRF guard also blocks CGNAT, NAT64/6to4/Teredo, benchmarking, multicast and reserved ranges. |
 | `--s3-region` | `PEEK_S3_REGION` | `us-east-1` | S3 signing region. |
 | `--s3-access-key` | `PEEK_S3_ACCESS_KEY` | empty | S3 access key ID. |
-| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | empty | S3 secret access key. |
+| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | empty | S3 secret access key. Or `PEEK_S3_SECRET_KEY_FILE` with the path to a file; setting both the variable and `_FILE` is an error. |
 | `--s3-allow-private-endpoint` | `PEEK_S3_ALLOW_PRIVATE_ENDPOINT` | `false` | Allows HTTP/private/link-local endpoints for controlled private deployments. |
 | `--google-sa-key-file` | `PEEK_GOOGLE_SA_KEY_FILE` | empty | Path to a Google service account JSON key with domain-wide delegation, for Google group grants. Requires `--google-admin-email`. |
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | empty | Workspace admin user the service account impersonates. Requires `--google-sa-key-file`. |
@@ -78,6 +80,8 @@ peek login --token-file <path>
 peek login --token <value>
 ```
 
+`peek login` only opens the browser for a verification URL on the configured host; it warns when the host uses plain `http://` and is not loopback. `peek config set --host <new>` clears the saved token when the host changes; run `peek login` afterwards.
+
 ## CLI Commands
 
 ```text
@@ -92,7 +96,7 @@ peek versions <slug>
 peek comments <slug> [--version <n>]
 ```
 
-`--slug` uploads a new version of an existing page you own (admins can target any page). It cannot be combined with `--visibility`, `--password`, `--password-stdin` or `--name`. `grant` and `revoke` take a user email by default and a Google group email with `--group`; group grants need the `PEEK_GOOGLE_*` server settings. `grants` lists a page's grants. `versions` lists a page's versions with size, time and URL. `comments` shows the latest version's comments unless `--version` is given.
+`--slug` uploads a new version of an existing page you own (admins can target any page). It cannot be combined with `--visibility`, `--password`, `--password-stdin` or `--name`. `grant` and `revoke` take a user email by default and a Google group email with `--group`; group grants need the `PEEK_GOOGLE_*` server settings. `grants` lists a page's grants. `versions` lists a page's versions with size, time and URL. `comments` shows the latest version's comments unless `--version` is given. Page names (the `--name` value or the file name) are limited to 200 characters. `--password` prints a warning; prefer `--password-stdin`.
 
 ## Page And API Routes
 
@@ -116,7 +120,7 @@ Authenticate with `Authorization: Bearer <token>`. The token's account must own 
 
 The request body is JSON. `body` is required and may be up to 4000 characters. Optional fields are `selector` (up to 500 characters), `element_text` (up to 200 characters) and `anchor_kind`. `anchor_kind` `text` needs both `selector` and `element_text`, `element` needs a `selector`, `page` needs no `selector`, and an empty value is inferred from the other fields. Any other value or an inconsistent combination gives 400 `invalid anchor kind`. A `name` field is accepted but ignored: the author is always the token's account name.
 
-A successful call answers 200 with a single comment object with `id`, `selector`, `element_text`, `anchor_kind`, `author`, `body` and `created_at` (Unix seconds). Errors are 400 (bad JSON, missing body or invalid anchor), 401 (missing or invalid token), 403 (not the owner, or account disabled), 404 (unknown slug), 413 (a field is too long) and 429 (too many comments).
+A successful call answers 200 with a single comment object with `id`, `selector`, `element_text`, `anchor_kind`, `author`, `verified`, `body`, `created_at` (Unix seconds) and `version`. `verified` is true for comments written by a signed-in account or through this API, false when the author name was typed by a viewer. Errors are 400 (bad JSON, missing body or invalid anchor), 401 (missing or invalid token), 403 (not the owner, or account disabled), 404 (unknown slug), 413 (a field is too long) and 429 (too many comments).
 
 ```sh
 curl -s -X POST -H "Authorization: Bearer $PEEK_TOKEN" \
@@ -130,8 +134,8 @@ curl -s -X POST -H "Authorization: Bearer $PEEK_TOKEN" \
 | Endpoint | Purpose |
 | --- | --- |
 | `/healthz` | Liveness. |
-| `/readyz` | Readiness, including database reachability. |
-| `/metrics` | Prometheus text metrics. Protect it before exposing Peek outside a trusted network. |
+| `/readyz` | Readiness, including database reachability. Failures answer `not ready` without details; the cause is logged. |
+| `/metrics` | Prometheus text metrics. Requires `Authorization: Bearer <token>` when `--metrics-token` is set; otherwise protect it before exposing Peek outside a trusted network. |
 | `/setup` | First-run setup only. Closes after the first account exists. |
 | `/oauth/google/callback` | Google OAuth callback. |
 | `/oauth/github/callback` | GitHub OAuth callback. |
