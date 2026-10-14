@@ -438,3 +438,85 @@ func TestSecretFlagWarnings(t *testing.T) {
 		t.Fatalf("warnings = %v", got)
 	}
 }
+
+func TestRunVersionReturnsZero(t *testing.T) {
+	if got := Run([]string{"--version"}); got != 0 {
+		t.Fatalf("Run --version = %d, want 0", got)
+	}
+}
+
+func TestRunUnknownFlagReturnsUsageError(t *testing.T) {
+	if got := Run([]string{"--nope"}); got != 2 {
+		t.Fatalf("Run --nope = %d, want 2", got)
+	}
+}
+
+func TestRunDispatchesHealthcheck(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+	if got := Run([]string{"healthcheck", "--addr", ts.URL}); got != 0 {
+		t.Fatalf("Run healthcheck = %d, want 0", got)
+	}
+}
+
+func TestRunDispatchesBackup(t *testing.T) {
+	dataDir := seedBackupSource(t)
+	dest := filepath.Join(t.TempDir(), "snap.db")
+	if got := Run([]string{"backup", "--data", dataDir, dest}); got != 0 {
+		t.Fatalf("Run backup = %d, want 0", got)
+	}
+}
+
+func TestParseServeConfigRejectsEveryBadEnvSource(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing")
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"s3 secret file", map[string]string{"PEEK_S3_SECRET_KEY_FILE": missing}, "PEEK_S3_SECRET_KEY_FILE"},
+		{"metrics token file", map[string]string{"PEEK_METRICS_TOKEN_FILE": missing}, "PEEK_METRICS_TOKEN_FILE"},
+		{"secret file", map[string]string{"PEEK_SECRET_FILE": missing}, "PEEK_SECRET_FILE"},
+		{"s3 private endpoint", map[string]string{"PEEK_S3_ALLOW_PRIVATE_ENDPOINT": "maybe"}, "PEEK_S3_ALLOW_PRIVATE_ENDPOINT must be a boolean"},
+		{"oidc private issuer", map[string]string{"PEEK_OIDC_ALLOW_PRIVATE_ISSUER": "maybe"}, "PEEK_OIDC_ALLOW_PRIVATE_ISSUER must be a boolean"},
+		{"max total size", map[string]string{"PEEK_MAX_TOTAL_SIZE": "lots"}, "PEEK_MAX_TOTAL_SIZE must be an integer"},
+		{"retention days", map[string]string{"PEEK_RETENTION_DAYS": "forever"}, "PEEK_RETENTION_DAYS must be an integer"},
+		{"google ttl", map[string]string{"PEEK_GOOGLE_GROUP_CACHE_TTL": "soon"}, "invalid PEEK_GOOGLE_GROUP_CACHE_TTL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+			_, _, err := parseServeConfig(nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseServeConfigRejectsUnknownFlag(t *testing.T) {
+	if _, _, err := parseServeConfig([]string{"--nope"}); err == nil {
+		t.Fatal("expected flag parse error")
+	}
+}
+
+func TestParseServeConfigVersionFlag(t *testing.T) {
+	_, showVersion, err := parseServeConfig([]string{"--version"})
+	if err != nil || !showVersion {
+		t.Fatalf("showVersion = %v, err = %v", showVersion, err)
+	}
+}
+
+func TestParseServeConfigAcceptsMetricsTokenFlag(t *testing.T) {
+	cfg, _, err := parseServeConfig([]string{"--data", t.TempDir(), "--metrics-token", "0123456789abcdef"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MetricsToken != "0123456789abcdef" {
+		t.Fatalf("MetricsToken = %q", cfg.MetricsToken)
+	}
+}
