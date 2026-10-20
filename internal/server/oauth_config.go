@@ -58,6 +58,9 @@ func (s *Server) enabledOAuthProviders(ctx context.Context) []authProvider {
 
 func (s *Server) oauthProviderMetadata(ctx context.Context, key string) (authProvider, error) {
 	key = strings.ToLower(strings.TrimSpace(key))
+	if key != "google" && s.googleOrgSignupEnabled(ctx) {
+		return authProvider{}, fmt.Errorf("%s oauth is disabled while Google org sign-in is on", key)
+	}
 	enabled := s.settingBool(ctx, "oauth_"+key+"_enabled")
 	clientID := strings.TrimSpace(s.settingString(ctx, "oauth_"+key+"_client_id"))
 	clientSecret := strings.TrimSpace(s.settingString(ctx, "oauth_"+key+"_client_secret"))
@@ -81,6 +84,9 @@ func (s *Server) oauthProviderMetadata(ctx context.Context, key string) (authPro
 
 func (s *Server) oauthProviderConfig(ctx context.Context, key string) (*oauthProviderConfig, error) {
 	key = strings.ToLower(strings.TrimSpace(key))
+	if key != "google" && s.googleOrgSignupEnabled(ctx) {
+		return nil, fmt.Errorf("%s oauth is disabled while Google org sign-in is on", key)
+	}
 	enabled := s.settingBool(ctx, "oauth_"+key+"_enabled")
 	clientID := strings.TrimSpace(s.settingString(ctx, "oauth_"+key+"_client_id"))
 	clientSecret := strings.TrimSpace(s.settingString(ctx, "oauth_"+key+"_client_secret"))

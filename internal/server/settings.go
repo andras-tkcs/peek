@@ -20,6 +20,7 @@ const maxDashboardMegabytes = int64(1<<63-1) / dashboardMegabyte
 var settingsMeta = map[string]settingsRow{
 	"auth_token_login_enabled":    {Label: "Access token login", Description: "Allow signing in to the web dashboard with an access token", IsBool: true},
 	authAllowedEmailDomainSetting: {Label: "Allowed email domain", Description: "Restrict human sign-in, CLI approval, and invites to this email domain (blank = any domain)"},
+	authGoogleOrgSignupSetting:    {Label: "Google org sign-in", Description: "Only Google sign-in for everyone in the allowed email domain. The first sign-in creates the account; no invite needed. Requires Google login and an allowed email domain.", IsBool: true},
 	"max_upload":                  {Label: "Max upload size (bytes)", Description: "Maximum size per individual HTML file upload"},
 	"max_total_size":              {Label: "Max total storage (bytes)", Description: "Cumulative size limit across all uploads (0 = unlimited)"},
 	"retention_days":              {Label: "Retention (days)", Description: "Auto-delete uploads older than this many days (0 = off)"},
@@ -89,6 +90,10 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		updates[k] = normalized
 	}
 	if err := s.validateAllowedEmailDomainUpdate(r.Context(), updates); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.validateGoogleOrgSignupUpdate(r.Context(), updates); err != nil {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -250,6 +255,10 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 		updates[k] = normalized
 	}
 	if err := s.validateAllowedEmailDomainUpdate(r.Context(), updates); err != nil {
+		s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
+		return
+	}
+	if err := s.validateGoogleOrgSignupUpdate(r.Context(), updates); err != nil {
 		s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
 		return
 	}
@@ -471,7 +480,7 @@ func maxInt64(a, b int64) int64 {
 
 func dashboardSettingsRows(raw map[string]string) []settingsRow {
 	order := []string{
-		"auth_token_login_enabled", authAllowedEmailDomainSetting,
+		"auth_token_login_enabled", authAllowedEmailDomainSetting, authGoogleOrgSignupSetting,
 		"oauth_google_enabled", "oauth_google_client_id", "oauth_google_client_secret",
 		"oauth_github_enabled", "oauth_github_client_id", "oauth_github_client_secret",
 		"oauth_oidc_enabled", "oauth_oidc_issuer_url", "oauth_oidc_client_id", "oauth_oidc_client_secret",
