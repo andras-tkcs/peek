@@ -252,6 +252,40 @@ func TestDashboardInviteLinkRendersAsCopyAction(t *testing.T) {
 	}
 }
 
+func TestDashboardGoogleOrgSwitchAndInvitations(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	render := func(googleOrg bool) string {
+		body, err := renderer.Execute(TemplateDashboard, DashboardData{
+			CSRF:            "csrf",
+			User:            "Admin",
+			IsAdmin:         true,
+			GoogleOrgSignup: googleOrg,
+			Invites:         []InviteDashboardRow{{ID: 1, Email: "person@example.com", Status: "pending"}},
+			SettingsPanel: DashboardSettings{Auth: AuthSettings{
+				GoogleOrg: SettingRow{Key: "auth_google_org_signup", Label: "Google org sign-in"},
+			}},
+		})
+		if err != nil {
+			t.Fatalf("execute dashboard: %v", err)
+		}
+		return string(body)
+	}
+	off := render(false)
+	if !strings.Contains(off, "Invitations") || !strings.Contains(off, `name="auth_google_org_signup"`) {
+		t.Fatalf("mode off should show invitations and the switch: %s", off)
+	}
+	on := render(true)
+	if !strings.Contains(on, `name="auth_google_org_signup"`) {
+		t.Fatalf("mode on should still show the switch: %s", on)
+	}
+	if strings.Contains(on, "Invitations") || strings.Contains(on, "Create invite") {
+		t.Fatalf("mode on should hide the invitations card: %s", on)
+	}
+}
+
 func TestDashboardUploadFormShowsSelectedFileAndDisablesEmptySubmit(t *testing.T) {
 	renderer, err := NewRenderer()
 	if err != nil {
