@@ -31,7 +31,7 @@ func TestFlashMessagesCoverAllCodes(t *testing.T) {
 		flashInvalidSession, flashFormInvalid, flashNoHTML, flashNoFile, flashFileTooLarge,
 		flashNotFound, flashNotOwner, flashDeleteFailed, flashVisibilityFailed, flashRenameFailed,
 		flashGrantKind, flashGrantEmail, flashGrantGroupLookup, flashGrantFailed, flashGrantNotFound,
-		flashInviteEmailRequired, flashInviteDomain, flashInviteFailed, flashBadInvite, flashInviteRevokeFailed,
+		flashInviteEmailRequired, flashInviteDomain, flashInviteFailed, flashInviteNotUsed, flashBadInvite, flashInviteRevokeFailed,
 		flashBadUser, flashLastAdminRemove, flashLastAdminDisable, flashUserUpdateFailed, flashSettingsFailed,
 		flashAPIKeyName, flashAPIKeyCreateFailed, flashAPIKeyRegenerateFailed, flashAPIKeyRevokeFailed,
 		flashUploadFailed, flashUploadPersistenceFailure,

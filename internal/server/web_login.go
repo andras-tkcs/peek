@@ -172,15 +172,15 @@ func (s *Server) tokenLoginEnabled(ctx context.Context) bool {
 func (s *Server) loginData(csrf, errMsg string, r *http.Request) loginData {
 	_, inviteErr := r.Cookie(inviteCookie)
 	providers := s.enabledOAuthProviders(r.Context())
-	oauthEnabled := len(providers) > 0
+	oauthRequired := s.oauthLoginRequired(r.Context())
 	return loginData{
 		CSRF:          csrf,
 		Error:         errMsg,
 		Invite:        inviteErr == nil && !s.googleOrgSignupEnabled(r.Context()),
 		Providers:     providers,
 		PasswordLogin: true,
-		TokenLogin:    s.tokenLoginEnabled(r.Context()) && !oauthEnabled,
-		OAuthEnabled:  oauthEnabled,
+		TokenLogin:    s.tokenLoginEnabled(r.Context()) && !oauthRequired,
+		OAuthEnabled:  oauthRequired,
 	}
 }
 
