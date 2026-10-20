@@ -208,4 +208,10 @@ func TestOAuthCovAccountErrorMessages(t *testing.T) {
 	if got := oauthAccountErrorMessage(errors.New("account disabled")); got != "This account is disabled." {
 		t.Fatalf("message = %q", got)
 	}
+	if got := oauthAccountErrorMessage(errors.New("account not eligible")); got != "This email address is not allowed to sign in." {
+		t.Fatalf("message = %q", got)
+	}
+	if got := oauthAccountErrorMessage(errGoogleWorkspaceRequired); got != "Sign in with your Google Workspace account." {
+		t.Fatalf("message = %q", got)
+	}
 }
