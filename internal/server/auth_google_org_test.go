@@ -169,12 +169,20 @@ func TestGoogleOrgLoginStillRequiredWhenGoogleUnloadable(t *testing.T) {
 		"oauth_google_client_id":     "g",
 		"oauth_google_client_secret": "",
 		authGoogleOrgSignupSetting:   "true",
+		"auth_token_login_enabled":   "true",
 	})
 	if !s.oauthLoginRequired(ctx) {
 		t.Fatal("oauthLoginRequired = false with the mode on")
 	}
 	if got := s.enabledOAuthProviders(ctx); len(got) != 0 {
 		t.Fatalf("providers = %v, want none", got)
+	}
+	data := s.loginData("csrf", "", httptest.NewRequest(http.MethodGet, "/login", nil))
+	if data.TokenLogin {
+		t.Fatal("TokenLogin = true while the mode makes OAuth login required")
+	}
+	if !data.OAuthEnabled {
+		t.Fatal("OAuthEnabled = false while the mode makes OAuth login required")
 	}
 	setGoogleOrgSettings(t, s, map[string]string{authGoogleOrgSignupSetting: ""})
 	if s.oauthLoginRequired(ctx) {
