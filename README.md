@@ -224,7 +224,7 @@ Set `--metrics-token` (or `PEEK_METRICS_TOKEN_FILE`) to require a bearer token o
 
 ## Web dashboard
 
-A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, view stats, and create, regenerate and revoke their own API keys. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from Settings and optionally restrict human login to one exact email domain. OAuth signups are invite-only unless Google org sign-in is on: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
+A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, view stats, and create, regenerate and revoke their own API keys. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from Settings and optionally restrict human login to one exact email domain. OAuth signups are invite-only unless Google org sign-in (the `auth_google_org_signup` setting) is on: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
 
 OAuth callback URLs:
 ```
