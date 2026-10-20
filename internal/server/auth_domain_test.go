@@ -290,7 +290,7 @@ func TestDashboardCreateInviteRejectsDisallowedDomain(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	loc := rec.Header().Get("Location")
-	if loc != "/dashboard?err=invite_domain" {
+	if loc != "/admin?err=invite_domain" {
 		t.Fatalf("location = %q", loc)
 	}
 }

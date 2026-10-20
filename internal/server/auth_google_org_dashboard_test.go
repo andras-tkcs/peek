@@ -7,15 +7,15 @@ import (
 	"testing"
 )
 
-func TestGoogleOrgDashboardReflectsSetting(t *testing.T) {
+func TestGoogleOrgAdminPageReflectsSetting(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	ctx := context.Background()
 	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
 
 	get := func() string {
-		rec := doRequest(t, s, http.MethodGet, "/dashboard", nil, asSession(s, admin.ID))
+		rec := doRequest(t, s, http.MethodGet, "/admin", nil, asSession(s, admin.ID))
 		if rec.Code != http.StatusOK {
-			t.Fatalf("GET /dashboard = %d: %s", rec.Code, rec.Body.String())
+			t.Fatalf("GET /admin = %d: %s", rec.Code, rec.Body.String())
 		}
 		return rec.Body.String()
 	}

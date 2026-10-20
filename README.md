@@ -166,7 +166,7 @@ Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env o
 | `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | Group membership cache lifetime |
 | `--oidc-allow-private-issuer` | `PEEK_OIDC_ALLOW_PRIVATE_ISSUER` | `false` | Allow HTTP/private OIDC issuers for local SSO testing |
 
-Admins can update runtime settings from the dashboard: max upload size, total storage limit, per-token quotas, retention days, and S3 credentials. Changing the storage backend requires a restart.
+Admins can update runtime settings from the **Admin** page (the **Admin** button next to **Sign out**): max upload size, total storage limit, per-token quotas, retention days, and S3 credentials. Changing the storage backend requires a restart.
 
 `peekd --version` prints the version. `peekd backup [path]` writes a consistent SQLite snapshot via `VACUUM INTO`. `peekd healthcheck` checks `/healthz`.
 
@@ -224,7 +224,7 @@ Set `--metrics-token` (or `PEEK_METRICS_TOKEN_FILE`) to require a bearer token o
 
 ## Web dashboard
 
-A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, view stats, and create, regenerate and revoke their own API keys. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from Settings and optionally restrict human login to one exact email domain. OAuth signups are invite-only unless Google org sign-in (the `auth_google_org_signup` setting) is on: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
+A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, view stats, and create, regenerate and revoke their own API keys. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from the **Admin** page (the **Admin** button next to **Sign out**) and optionally restrict human login to one exact email domain. OAuth signups are invite-only unless Google org sign-in (the `auth_google_org_signup` setting) is on: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
 
 OAuth callback URLs:
 ```

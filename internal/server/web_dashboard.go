@@ -71,29 +71,18 @@ func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request, owner *
 	if !ok {
 		return
 	}
-	allSettings := s.dashboardSettingsMap(r.Context())
-	sortedMeta := dashboardSettingsRows(allSettings)
-	settingsPanel := dashboardSettingsPanel(allSettings)
 	dashData_ := dashData{
-		CSRF:            csrf,
-		User:            owner.Name,
-		IsAdmin:         owner.IsAdmin,
-		GoogleOrgSignup: s.googleOrgSignupEnabled(r.Context()),
-		Settings:        allSettings,
-		SettingsMeta:    sortedMeta,
-		SettingsPanel:   settingsPanel,
-		Uploads:         uploads,
-		APIKeys:         s.dashboardAPIKeyRows(r.Context(), owner.ID),
+		CSRF:    csrf,
+		User:    owner.Name,
+		IsAdmin: owner.IsAdmin,
+		Uploads: uploads,
+		APIKeys: s.dashboardAPIKeyRows(r.Context(), owner.ID),
 
 		GroupGrantsEnabled: s.groups != nil,
 		ManageSlug:         q.Get("manage"),
 	}
 	if listErr != nil {
 		dashData_.UploadError = "uploads could not be loaded"
-	}
-	if owner.IsAdmin {
-		dashData_.Invites = s.dashboardInviteRows(r.Context())
-		dashData_.Accounts = s.dashboardAccountRows(r.Context(), owner.ID)
 	}
 	flash := resolveFlash(q, uploads, s.baseURL)
 	if flash.Error != "" {

@@ -43,38 +43,38 @@ func (s *Server) handleDashboardCreateInvite(w http.ResponseWriter, r *http.Requ
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	if !s.parseDashboardForm(w, r) {
+	if !s.parseAdminForm(w, r) {
 		return
 	}
 	if s.googleOrgSignupEnabled(r.Context()) {
-		dashboardError(w, r, flashInviteNotUsed)
+		adminError(w, r, flashInviteNotUsed)
 		return
 	}
 	email := normalizeOAuthEmail(r.FormValue("email"))
 	if email == "" || !strings.Contains(email, "@") {
-		dashboardError(w, r, flashInviteEmailRequired)
+		adminError(w, r, flashInviteEmailRequired)
 		return
 	}
 	if !s.accountAllowedByEmailDomain(r.Context(), email) {
-		dashboardError(w, r, flashInviteDomain)
+		adminError(w, r, flashInviteDomain)
 		return
 	}
 	raw, err := randID(24)
 	if err != nil {
-		dashboardError(w, r, flashInviteFailed)
+		adminError(w, r, flashInviteFailed)
 		return
 	}
 	ciphertext, err := encryptSecret(s.secret, raw)
 	if err != nil {
-		dashboardError(w, r, flashInviteFailed)
+		adminError(w, r, flashInviteFailed)
 		return
 	}
 	if _, err := s.store.CreateInvite(r.Context(), raw, ciphertext, email, owner.ID, time.Now().Add(inviteTTL)); err != nil {
-		dashboardError(w, r, flashInviteFailed)
+		adminError(w, r, flashInviteFailed)
 		return
 	}
 	s.audit("invite created %s", auditDetail("email", email, "by", owner.Name))
-	dashboardOK(w, r, flashInviteCreated)
+	adminOK(w, r, flashInviteCreated)
 }
 
 func (s *Server) handleDashboardRevokeInvite(w http.ResponseWriter, r *http.Request) {
@@ -83,24 +83,24 @@ func (s *Server) handleDashboardRevokeInvite(w http.ResponseWriter, r *http.Requ
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	if !s.parseDashboardForm(w, r) {
+	if !s.parseAdminForm(w, r) {
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		dashboardError(w, r, flashBadInvite)
+		adminError(w, r, flashBadInvite)
 		return
 	}
 	if err := s.store.RevokeInvite(r.Context(), id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			dashboardError(w, r, flashBadInvite)
+			adminError(w, r, flashBadInvite)
 			return
 		}
-		dashboardError(w, r, flashInviteRevokeFailed)
+		adminError(w, r, flashInviteRevokeFailed)
 		return
 	}
 	s.audit("invite revoked %s", auditDetail("id", strconv.FormatInt(id, 10), "by", owner.Name))
-	dashboardOK(w, r, flashInviteRevoked)
+	adminOK(w, r, flashInviteRevoked)
 }
 
 func (s *Server) handleDashboardUserAdmin(w http.ResponseWriter, r *http.Request) {
@@ -109,25 +109,25 @@ func (s *Server) handleDashboardUserAdmin(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	if !s.parseDashboardForm(w, r) {
+	if !s.parseAdminForm(w, r) {
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		dashboardError(w, r, flashBadUser)
+		adminError(w, r, flashBadUser)
 		return
 	}
 	makeAdmin := r.FormValue("admin") == "true"
 	if err := s.store.SetAccountAdminChecked(r.Context(), id, makeAdmin); err != nil {
 		if errors.Is(err, db.ErrLastAdmin) {
-			dashboardError(w, r, flashLastAdminRemove)
+			adminError(w, r, flashLastAdminRemove)
 			return
 		}
-		dashboardError(w, r, flashUserUpdateFailed)
+		adminError(w, r, flashUserUpdateFailed)
 		return
 	}
 	s.audit("account %s", auditDetail("admin", strconv.FormatBool(makeAdmin), "id", strconv.FormatInt(id, 10), "by", owner.Name))
-	dashboardOK(w, r, flashUserUpdated)
+	adminOK(w, r, flashUserUpdated)
 }
 
 func (s *Server) handleDashboardUserDisabled(w http.ResponseWriter, r *http.Request) {
@@ -136,25 +136,25 @@ func (s *Server) handleDashboardUserDisabled(w http.ResponseWriter, r *http.Requ
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	if !s.parseDashboardForm(w, r) {
+	if !s.parseAdminForm(w, r) {
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		dashboardError(w, r, flashBadUser)
+		adminError(w, r, flashBadUser)
 		return
 	}
 	disabled := r.FormValue("disabled") == "true"
 	if err := s.store.SetAccountDisabledChecked(r.Context(), id, disabled); err != nil {
 		if errors.Is(err, db.ErrLastAdmin) {
-			dashboardError(w, r, flashLastAdminDisable)
+			adminError(w, r, flashLastAdminDisable)
 			return
 		}
-		dashboardError(w, r, flashUserUpdateFailed)
+		adminError(w, r, flashUserUpdateFailed)
 		return
 	}
 	s.audit("account %s", auditDetail("disabled", strconv.FormatBool(disabled), "id", strconv.FormatInt(id, 10), "by", owner.Name))
-	dashboardOK(w, r, flashUserUpdated)
+	adminOK(w, r, flashUserUpdated)
 }
 
 func (s *Server) dashboardInviteRows(ctx context.Context) []inviteDashRow {

@@ -12,7 +12,7 @@ The product has two surfaces:
 
 | Surface | Use it for |
 | --- | --- |
-| Web dashboard | Upload HTML, manage links, inspect stats, invite users, configure auth, tune limits, and change storage settings. |
+| Web dashboard | Upload HTML, manage links, and inspect stats. Admins also get an **Admin** page (the **Admin** button next to **Sign out**) to invite users, configure auth, tune limits, and change storage settings. |
 | CLI | Upload from local scripts, CI, or agents; list uploads; read comments; export an upload; create automation tokens. |
 
 Pages can be public, password-gated, private to signed-in users, or restricted to named users and Google groups with `peek grant`. Uploading again with `--slug` adds a version served at `/p/<slug>/v/<n>`, with comments kept per version.

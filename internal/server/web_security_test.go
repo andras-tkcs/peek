@@ -49,6 +49,33 @@ func TestDashboardTemplateHasNoInlineScriptExecution(t *testing.T) {
 	}
 }
 
+func TestAdminTemplateHasNoInlineScriptExecution(t *testing.T) {
+	renderer, err := webui.NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	const payload = `<script>alert(1)</script>`
+	body, err := renderer.Execute(webui.TemplateAdmin, adminData{
+		CSRF:     "csrf",
+		User:     "admin",
+		Invites:  []inviteDashRow{{ID: 1, Email: payload, Status: "pending", Link: payload, CanRevoke: true}},
+		Accounts: []accountDashRow{{ID: 2, Name: payload, Email: "x@example.test"}},
+	})
+	if err != nil {
+		t.Fatalf("execute admin template: %v", err)
+	}
+	html := string(body)
+	if strings.Contains(html, payload) {
+		t.Fatalf("admin template rendered a raw script tag: %s", html)
+	}
+	if strings.Contains(html, "onclick=") || strings.Contains(html, "onchange=") || strings.Contains(html, "onsubmit=") {
+		t.Fatalf("admin template contains inline event handler: %s", html)
+	}
+	if !strings.Contains(html, `<script src="/dashboard-alpine.js?v=`) {
+		t.Fatalf("admin template did not include dashboard-alpine.js: %s", html)
+	}
+}
+
 func TestDashboardCSPRestrictsScriptsToSelf(t *testing.T) {
 	if !strings.Contains(webui.DashboardCSP, "script-src 'self'") {
 		t.Fatalf("dashboard CSP does not pin scripts to self: %s", webui.DashboardCSP)

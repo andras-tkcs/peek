@@ -222,7 +222,7 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	if !s.parseDashboardForm(w, r) {
+	if !s.parseAdminForm(w, r) {
 		return
 	}
 	updates := map[string]string{}
@@ -230,7 +230,7 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 		if meta.IsBool {
 			normalized, err := s.normalizeSettingValue(k, r.FormValue(k))
 			if err != nil {
-				s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
+				s.renderAdmin(w, r, owner, http.StatusBadRequest, nil, err.Error())
 				return
 			}
 			updates[k] = normalized
@@ -238,7 +238,7 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 		}
 		v, submitted, err := dashboardSubmittedSettingValue(k, r.PostForm)
 		if err != nil {
-			s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
+			s.renderAdmin(w, r, owner, http.StatusBadRequest, nil, err.Error())
 			return
 		}
 		if !submitted {
@@ -249,27 +249,27 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 		}
 		normalized, err := s.normalizeSettingValue(k, v)
 		if err != nil {
-			s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
+			s.renderAdmin(w, r, owner, http.StatusBadRequest, nil, err.Error())
 			return
 		}
 		updates[k] = normalized
 	}
 	if err := s.validateAllowedEmailDomainUpdate(r.Context(), updates); err != nil {
-		s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
+		s.renderAdmin(w, r, owner, http.StatusBadRequest, nil, err.Error())
 		return
 	}
 	if err := s.validateGoogleOrgSignupUpdate(r.Context(), updates); err != nil {
-		s.renderDashboard(w, r, owner, http.StatusBadRequest, nil, err.Error())
+		s.renderAdmin(w, r, owner, http.StatusBadRequest, nil, err.Error())
 		return
 	}
 	for _, k := range s.settingKeys(updates) {
 		if err := s.encryptedSetSetting(r.Context(), k, updates[k]); err != nil {
-			dashboardError(w, r, flashSettingsFailed)
+			adminError(w, r, flashSettingsFailed)
 			return
 		}
 	}
 	s.auditRequest(r, owner.Name, "settings.update", "via dashboard")
-	dashboardOK(w, r, flashSettingsSaved)
+	adminOK(w, r, flashSettingsSaved)
 }
 
 func dashboardSubmittedSettingValue(key string, form map[string][]string) (string, bool, error) {
@@ -477,37 +477,6 @@ func maxInt64(a, b int64) int64 {
 		return a
 	}
 	return b
-}
-
-func dashboardSettingsRows(raw map[string]string) []settingsRow {
-	order := []string{
-		"auth_token_login_enabled", authAllowedEmailDomainSetting, authGoogleOrgSignupSetting,
-		"oauth_google_enabled", "oauth_google_client_id", "oauth_google_client_secret",
-		"oauth_github_enabled", "oauth_github_client_id", "oauth_github_client_secret",
-		"oauth_oidc_enabled", "oauth_oidc_issuer_url", "oauth_oidc_client_id", "oauth_oidc_client_secret",
-		"storage", "s3_endpoint", "s3_bucket", "s3_region", "s3_access_key", "s3_secret_key",
-		"max_upload", "max_total_size", "max_uploads_per_token", "max_storage_per_token", "retention_days",
-	}
-	seen := map[string]bool{}
-	out := make([]settingsRow, 0, len(order))
-	for _, k := range order {
-		meta := settingsMeta[k]
-		meta.Key = k
-		meta.Value = raw[k]
-		if meta.IsSecret && meta.Value != "" {
-			meta.Value = ""
-			meta.Description = meta.Description + " (leave blank to keep current value)"
-		}
-		out = append(out, meta)
-		seen[k] = true
-	}
-	for k, v := range raw {
-		if seen[k] {
-			continue
-		}
-		out = append(out, settingsRow{Key: k, Value: v, Label: k})
-	}
-	return out
 }
 
 func (s *Server) settingString(ctx context.Context, key string) string {

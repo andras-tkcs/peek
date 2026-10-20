@@ -34,7 +34,7 @@ kicker: peekd reference
 
 ## Runtime Settings
 
-Admins can change these from the dashboard or the settings API:
+Admins can change these from the **Admin** page (the **Admin** button next to **Sign out**) or the settings API:
 
 | Key | Type | Notes |
 | --- | --- | --- |
