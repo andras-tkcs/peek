@@ -339,6 +339,7 @@ func dashboardSettingsPanel(raw map[string]string) webui.DashboardSettings {
 		Auth: webui.AuthSettings{
 			Token:     dashboardSettingRow(raw, "auth_token_login_enabled"),
 			Domain:    dashboardSettingRow(raw, authAllowedEmailDomainSetting),
+			GoogleOrg: dashboardSettingRow(raw, authGoogleOrgSignupSetting),
 			Google:    google,
 			GitHub:    github,
 			OIDC:      oidc,

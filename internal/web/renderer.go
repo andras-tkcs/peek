@@ -153,6 +153,7 @@ type DashboardSettings struct {
 type AuthSettings struct {
 	Token     SettingRow
 	Domain    SettingRow
+	GoogleOrg SettingRow
 	Google    OAuthProviderSettings
 	GitHub    OAuthProviderSettings
 	OIDC      OAuthProviderSettings
@@ -209,6 +210,7 @@ type DashboardData struct {
 	CSRF             string
 	User             string
 	IsAdmin          bool
+	GoogleOrgSignup  bool
 	Settings         map[string]string
 	SettingsMeta     []SettingRow
 	SettingsPanel    DashboardSettings
