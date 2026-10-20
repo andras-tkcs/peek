@@ -82,7 +82,7 @@ docker compose --profile s3 up -d # with MinIO storage
 - **In-context review**: pinned, text-anchored, and page-level comments with numbered on-page markers. Click a comment to jump back to its anchor.
 - **Safe HTML previews**: uploaded pages render in a sandboxed iframe (`sandbox="allow-scripts"`, no `allow-same-origin`) so they cannot read Peek cookies, call the server as the user, or touch the parent page.
 - **Terminal and browser workflows**: upload, list, delete, change visibility, inspect comments, and view stats from the CLI or web dashboard.
-- **Access controls for internal teams**: public links, password-gated pages, private account-only pages, restricted pages with per-user and Google group grants, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, allowed login email domain, token expiry, and admin-managed users.
+- **Access controls for internal teams**: public links, password-gated pages, private account-only pages, restricted pages with per-user and Google group grants, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, Google org sign-in (no invites), allowed login email domain, token expiry, and admin-managed users.
 - **Operational basics included**: health/readiness checks, structured JSON logging, Prometheus metrics, audit log, quota and retention controls, consistent SQLite backup, file or S3-compatible storage, and S3 endpoint SSRF protection.
 - **Small deployment footprint**: one static Go binary, pure-Go SQLite, no runtime dependencies.
 
@@ -224,7 +224,7 @@ Set `--metrics-token` (or `PEEK_METRICS_TOKEN_FILE`) to require a bearer token o
 
 ## Web dashboard
 
-A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, view stats, and create, regenerate and revoke their own API keys. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from Settings and optionally restrict human login to one exact email domain. OAuth signups are invite-only: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
+A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, view stats, and create, regenerate and revoke their own API keys. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from Settings and optionally restrict human login to one exact email domain. OAuth signups are invite-only unless Google org sign-in is on: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
 
 OAuth callback URLs:
 ```

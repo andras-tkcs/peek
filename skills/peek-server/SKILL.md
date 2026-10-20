@@ -143,6 +143,8 @@ be disabled from Settings. Direct bearer tokens still work for API/automation.
 The same verified email maps to the same Peek account across Google and GitHub.
 Admins can disable users or promote/demote admins in the dashboard later.
 
+Google Workspace organizations can instead turn on `auth_google_org_signup` in Settings. It requires Google login with client credentials and an allowed email domain (not gmail.com or googlemail.com). While it is on, a Google Workspace account (Google's `hd` claim) with a verified email in the allowed domain gets a non-admin account on first sign-in, GitHub and OIDC sign-in are inactive, and invites are inactive (existing invites return when it is off). Non-admin password and token login stay disabled and admins keep the password form. Enable it in this order: make sure an active admin has an email in the allowed domain, set the domain, configure Google login, then turn the mode on.
+
 ### Manage page passwords
 
 ```sh
