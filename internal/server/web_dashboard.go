@@ -75,14 +75,15 @@ func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request, owner *
 	sortedMeta := dashboardSettingsRows(allSettings)
 	settingsPanel := dashboardSettingsPanel(allSettings)
 	dashData_ := dashData{
-		CSRF:          csrf,
-		User:          owner.Name,
-		IsAdmin:       owner.IsAdmin,
-		Settings:      allSettings,
-		SettingsMeta:  sortedMeta,
-		SettingsPanel: settingsPanel,
-		Uploads:       uploads,
-		APIKeys:       s.dashboardAPIKeyRows(r.Context(), owner.ID),
+		CSRF:            csrf,
+		User:            owner.Name,
+		IsAdmin:         owner.IsAdmin,
+		GoogleOrgSignup: s.googleOrgSignupEnabled(r.Context()),
+		Settings:        allSettings,
+		SettingsMeta:    sortedMeta,
+		SettingsPanel:   settingsPanel,
+		Uploads:         uploads,
+		APIKeys:         s.dashboardAPIKeyRows(r.Context(), owner.ID),
 
 		GroupGrantsEnabled: s.groups != nil,
 		ManageSlug:         q.Get("manage"),

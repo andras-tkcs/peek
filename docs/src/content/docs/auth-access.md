@@ -77,6 +77,35 @@ When OAuth is enabled, non-admin password and token web login are disabled. Admi
 
 The same rule applies to API tokens: while OAuth is enabled, a non-admin account's token works only if the account has signed in with OAuth at least once.
 
+Organizations that only use Google Workspace can skip invites entirely with [Google org sign-in](#google-org-sign-in).
+
+## Google Org Sign-In
+
+The `auth_google_org_signup` setting turns Peek into a "Google sign-in for the whole organization" server. While it is on, anyone who signs in with a Google Workspace account whose verified email is in the allowed email domain gets a Peek account on their first sign-in. No invite link is needed and nothing is emailed.
+
+Requirements: Google login must be enabled with a client ID and secret, and `auth_allowed_email_domain` must be set. Peek refuses to save the mode otherwise, and it refuses `gmail.com` and `googlemail.com` as the allowed domain. While the mode is on you also cannot clear the domain, disable Google, or blank the Google client ID.
+
+What changes while the mode is on:
+
+- Only Google Workspace accounts are provisioned. Peek requires Google's `hd` (hosted domain) claim, so a personal Google account that merely carries a work email address is refused, even if an account with that email already exists in Peek. The address itself must still be in the allowed domain.
+- New accounts are created as non-admin users.
+- The GitHub and generic OIDC providers are inactive: their buttons and endpoints are gone. Their settings are kept, so turning the mode off restores them.
+- Invites are inactive: the Invitations card is hidden, creating an invite is refused, and invite links redirect to the login page. Existing invites are kept and work again when the mode is off.
+- An existing account with the same verified email is linked as before.
+- Non-admin password and token login stay disabled. Admins keep the local password form as the recovery path, as long as the admin email matches the allowed domain.
+
+Things the mode does not do:
+
+- Accounts that already linked a GitHub or SSO identity keep working while the mode is on.
+- Deleting or suspending a user in Google Workspace does not disable their Peek account or API keys. An admin disables the account in Peek.
+
+A wrong allowed domain locks out everyone except admins whose email matches it. To enable the mode safely:
+
+1. Make sure an active admin has an email address in the allowed domain.
+2. Set the allowed email domain.
+3. Configure Google login with its client credentials and enable it.
+4. Turn on Google org sign-in.
+
 ## Sessions
 
 Dashboard sessions last 7 days. **Sign out other sessions** in the dashboard header ends every other browser session of your account and keeps this one. Disabling an account ends all of its sessions, and enabling it again does not bring them back. **Sign out** ends only the current browser's session. API keys are not affected; revoke them under **Dashboard → API keys**.
@@ -141,6 +170,7 @@ Grants apply to page views, comments, and view stats. Revoking a grant takes eff
 | --- | --- | --- |
 | `auth_token_login_enabled` | Runtime setting | Allows dashboard login with access tokens when OAuth is not required. |
 | `auth_allowed_email_domain` | Runtime setting | Optional exact email domain for human sign-in, invites, and CLI browser approval. |
+| `auth_google_org_signup` | Runtime setting | Google-only sign-in that creates accounts on first sign-in for Google Workspace users in the allowed domain; invites are inactive. Requires Google login and an allowed domain. |
 | `oauth_google_enabled` | Runtime setting | Enables Google login when credentials are present. |
 | `oauth_google_client_id` | Runtime setting | Google OAuth web client ID. |
 | `oauth_google_client_secret` | Runtime setting | Google OAuth web client secret; leave blank in the dashboard to keep the current secret. |

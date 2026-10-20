@@ -30,6 +30,8 @@ type oauthProfile struct {
 	Email          string
 	EmailVerified  bool
 	Name           string
+	// HostedDomain is Google's hd claim, set for Workspace-managed accounts.
+	HostedDomain string
 }
 
 func (s *Server) fetchOAuthProfile(ctx context.Context, p *oauthProviderConfig, tok *oauth2.Token, nonce string) (*oauthProfile, error) {
@@ -77,6 +79,7 @@ func (s *Server) fetchGoogleProfile(ctx context.Context, p *oauthProviderConfig,
 		Email         string `json:"email"`
 		EmailVerified bool   `json:"email_verified"`
 		Name          string `json:"name"`
+		HD            string `json:"hd"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		return nil, err
@@ -87,6 +90,7 @@ func (s *Server) fetchGoogleProfile(ctx context.Context, p *oauthProviderConfig,
 		Email:          normalizeOAuthEmail(claims.Email),
 		EmailVerified:  claims.EmailVerified,
 		Name:           displayName(claims.Name, claims.Email),
+		HostedDomain:   strings.ToLower(strings.TrimSpace(claims.HD)),
 	}, nil
 }
 

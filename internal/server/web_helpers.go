@@ -35,6 +35,7 @@ const (
 	flashInviteEmailRequired      = "invite_email_required"
 	flashInviteDomain             = "invite_domain"
 	flashInviteFailed             = "invite_failed"
+	flashInviteNotUsed            = "invite_not_used"
 	flashBadInvite                = "bad_invite"
 	flashInviteRevokeFailed       = "invite_revoke_failed"
 	flashBadUser                  = "bad_user"
@@ -82,6 +83,7 @@ var flashMessages = map[string]string{
 	flashInviteEmailRequired:      "email required",
 	flashInviteDomain:             "email must match allowed domain",
 	flashInviteFailed:             "invite failed",
+	flashInviteNotUsed:            "invites are not used while Google org sign-in is on",
 	flashBadInvite:                "bad invite",
 	flashInviteRevokeFailed:       "invite revoke failed",
 	flashBadUser:                  "bad user",
