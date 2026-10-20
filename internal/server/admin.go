@@ -16,6 +16,10 @@ import (
 const inviteTTL = 7 * 24 * time.Hour
 
 func (s *Server) handleInviteLink(w http.ResponseWriter, r *http.Request) {
+	if s.googleOrgSignupEnabled(r.Context()) {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
 	raw := strings.TrimSpace(r.PathValue("token"))
 	inv, err := s.store.GetInviteByToken(r.Context(), raw)
 	if err != nil || !invitePending(inv) {
@@ -40,6 +44,10 @@ func (s *Server) handleDashboardCreateInvite(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if !s.parseDashboardForm(w, r) {
+		return
+	}
+	if s.googleOrgSignupEnabled(r.Context()) {
+		dashboardError(w, r, flashInviteNotUsed)
 		return
 	}
 	email := normalizeOAuthEmail(r.FormValue("email"))

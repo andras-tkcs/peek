@@ -42,6 +42,11 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	if oauthProviderUsesIDToken(p.Key) {
 		opts = append(opts, oidc.Nonce(nonce))
 	}
+	if p.Key == "google" && s.googleOrgSignupEnabled(r.Context()) {
+		if domain := s.allowedEmailDomain(r.Context()); domain != "" {
+			opts = append(opts, oauth2.SetAuthURLParam("hd", domain))
+		}
+	}
 	url := s.oauth2Config(p).AuthCodeURL(state, opts...)
 	http.Redirect(w, r, url, http.StatusFound)
 }
@@ -119,6 +124,10 @@ func oauthAccountErrorMessage(err error) string {
 		return "OAuth account must have a verified email."
 	case "account disabled":
 		return "This account is disabled."
+	case "account not eligible":
+		return "This email address is not allowed to sign in."
+	case "google workspace account required":
+		return "Sign in with your Google Workspace account."
 	case "invite required":
 		return "An invite is required for this account."
 	case "invite not found", "invite does not match this account":
