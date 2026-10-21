@@ -17,17 +17,23 @@ var (
 	commentsTotal atomic.Int64
 )
 
-// metricsAuthorized reports whether r may read /metrics. With no metrics token
-// configured, /metrics stays open (protect it at the proxy).
+// metricsAuthorized reports whether r may read /metrics. It never serves anonymous
+// callers. With a metrics token configured, only that bearer token is accepted
+// (for a Prometheus scrape job). Without one, an active admin API token is
+// required.
 func (s *Server) metricsAuthorized(r *http.Request) bool {
-	if s.metricsToken == "" {
-		return true
-	}
 	got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if !ok {
+	if !ok || got == "" {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(got), []byte(s.metricsToken)) == 1
+	if s.metricsToken != "" {
+		return subtle.ConstantTimeCompare([]byte(got), []byte(s.metricsToken)) == 1
+	}
+	t, err := s.store.GetToken(r.Context(), got)
+	if err != nil || !t.IsAdmin {
+		return false
+	}
+	return s.tokenAccountActive(r.Context(), t) == nil
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {

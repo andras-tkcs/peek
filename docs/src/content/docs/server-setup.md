@@ -103,7 +103,7 @@ Set `--trusted-proxy` only when the proxy is controlled by you and overwrites or
 
 Set `--base-url` / `PEEK_BASE_URL` before users create durable links. If you do not have a custom domain yet, use the stable default hostname your platform assigns from the service name, then update it before configuring OAuth or inviting users if the platform assigns a different URL.
 
-Set `--metrics-token` / `PEEK_METRICS_TOKEN` (or `PEEK_METRICS_TOKEN_FILE`) to require a bearer token on `/metrics`, and keep it protected at the proxy or network layer.
+Set `--metrics-token` / `PEEK_METRICS_TOKEN` (or `PEEK_METRICS_TOKEN_FILE`) to set the bearer token for `/metrics`. Without it, `/metrics` requires an admin API token and is never served anonymously.
 
 ## Smoke Test
 

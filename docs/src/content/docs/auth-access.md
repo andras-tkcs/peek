@@ -57,7 +57,7 @@ For Okta, use the issuer URL for the authorization server, for example `https://
 
 ## Allowed Email Domain
 
-Admins can set one allowed email domain on the Admin page. When configured, human sign-in must use an account email from that exact domain. The rule applies to OAuth login and signup, local password login, web token login, CLI browser approval, private-page sessions, and new invites. It also applies to API bearer tokens of accounts with an email: a token whose account email is outside the domain is refused with 403. Automation tokens from `peek token create` have no email and are not affected.
+Admins can set one allowed email domain on the Admin page. When configured, human sign-in must use an account email from that exact domain. The rule applies to OAuth login and signup, local password login, web token login, CLI browser approval, signed-in page sessions, and new invites. It also applies to API bearer tokens of accounts with an email: a token whose account email is outside the domain is refused with 403. Automation tokens from `peek token create` have no email and are not affected.
 
 Use the bare domain, such as `example.com`. A leading `@` is accepted and normalized away. Subdomains are not implicit matches, so `person@team.example.com` does not match `example.com`.
 
@@ -143,7 +143,7 @@ Each upload chooses one of four access modes:
 | --- | --- |
 | `public` | Anyone with the link can open and comment. |
 | `password` | Visitors must pass the upload password gate before opening and commenting. |
-| `private` | Visitors must have an active Peek account session. |
+| `signed-in` | Visitors must have an active Peek account session. Any account qualifies, not only the owner; use `restricted` to limit access to named people. The former name `private` is still accepted. |
 | `restricted` | Only the owner, admins, and signed-in visitors matching a grant. Others see a 403 page. |
 
 Uploaded HTML itself remains sandboxed in all modes.

@@ -5,7 +5,11 @@ import "time"
 const (
 	UploadVisibilityPublic   = "public"
 	UploadVisibilityPassword = "password"
-	UploadVisibilityPrivate  = "private"
+	UploadVisibilitySignedIn = "signed-in"
+
+	// LegacyVisibilityPrivate is the former name of UploadVisibilitySignedIn. It is
+	// still accepted as input and rewritten by migration 14.
+	LegacyVisibilityPrivate = "private"
 
 	UploadVisibilityRestricted = "restricted"
 )

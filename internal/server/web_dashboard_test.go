@@ -253,7 +253,7 @@ func TestDashboardUploadPassesVisibility(t *testing.T) {
 		"csrf":       "csrf-token",
 		"mode":       "paste",
 		"name":       "private-page",
-		"visibility": "private",
+		"visibility": "signed-in",
 		"html":       "<!doctype html><html></html>",
 	} {
 		if err := mw.WriteField(k, v); err != nil {
@@ -278,7 +278,7 @@ func TestDashboardUploadPassesVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 1 || list[0].Visibility != "private" {
+	if len(list) != 1 || list[0].Visibility != "signed-in" {
 		t.Fatalf("uploads = %+v", list)
 	}
 	if loc := rec.Header().Get("Location"); loc != "/dashboard?uploaded="+list[0].Slug {
@@ -769,7 +769,7 @@ func TestDashCovDeleteAndVisibilityGuards(t *testing.T) {
 	}
 
 	addFailTrigger(t, store, "uploads", "UPDATE")
-	rec := dashboardPost(t, s, userID, "/dashboard/visibility/page", url.Values{"visibility": {"private"}}, true)
+	rec := dashboardPost(t, s, userID, "/dashboard/visibility/page", url.Values{"visibility": {"signed-in"}}, true)
 	assertDashboardRedirect(t, rec, "/dashboard?err="+flashVisibilityFailed)
 	_ = adminID
 }

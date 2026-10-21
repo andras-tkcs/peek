@@ -109,7 +109,7 @@ func TestPrivateUploadCommentsRequireActiveAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "private", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", "", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 
