@@ -1,18 +1,42 @@
 (function () {
   "use strict";
+
+  function clipboardState() {
+    return {
+      copied: "",
+
+      copy(text, success) {
+        const value = String(text || "");
+        return window.peekCopyText(value, { success: success || "Copied link." }).then((ok) => {
+          if (ok) {
+            this.copied = value;
+            setTimeout(() => { if (this.copied === value) this.copied = ""; }, 1500);
+          }
+          return ok;
+        });
+      },
+
+      absoluteURL(value) {
+        const text = String(value || "");
+        try {
+          return new URL(text, window.location.origin).href;
+        } catch (e) {
+          return text;
+        }
+      },
+
+      copyAbsolute(value) {
+        this.copy(this.absoluteURL(value));
+      },
+    };
+  }
+
   document.addEventListener("alpine:init", () => {
-    Alpine.data("dashboard", (initial = {}) => ({
+    Alpine.data("dashboard", () => ({
+      ...clipboardState(),
       mode: "file",
       visibility: "password",
       password: "",
-      settingsTab: "auth",
-      oauth: {
-        google: Boolean(initial.googleOAuth),
-        github: Boolean(initial.githubOAuth),
-        oidc: Boolean(initial.oidcOAuth),
-      },
-      storageBackend: initial.storageBackend || "file",
-      copied: "",
       fileName: "",
       fileSizeLabel: "",
       html: "",
@@ -47,29 +71,22 @@
         }
       },
 
-      copy(text, success) {
-        const value = String(text || "");
-        return window.peekCopyText(value, { success: success || "Copied link." }).then((ok) => {
-          if (ok) {
-            this.copied = value;
-            setTimeout(() => { if (this.copied === value) this.copied = ""; }, 1500);
-          }
-          return ok;
-        });
-      },
-
-      absoluteURL(value) {
-        const text = String(value || "");
-        try {
-          return new URL(text, window.location.origin).href;
-        } catch (e) {
-          return text;
+      confirm(event, message) {
+        if (!window.confirm(message)) {
+          event.preventDefault();
         }
       },
+    }));
 
-      copyAbsolute(value) {
-        this.copy(this.absoluteURL(value));
+    Alpine.data("admin", (initial = {}) => ({
+      ...clipboardState(),
+      settingsTab: "auth",
+      oauth: {
+        google: Boolean(initial.googleOAuth),
+        github: Boolean(initial.githubOAuth),
+        oidc: Boolean(initial.oidcOAuth),
       },
+      storageBackend: initial.storageBackend || "file",
 
       confirm(event, message) {
         if (!window.confirm(message)) {

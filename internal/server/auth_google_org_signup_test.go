@@ -243,7 +243,7 @@ func TestGoogleOrgInviteCreateRefused(t *testing.T) {
 	s, store, adminID, _ := admFaultAdmin(t)
 	googleOrgOn(t, s, "example.test")
 	rec := dashboardPost(t, s, adminID, "/dashboard/invites", url.Values{"email": {"new@example.test"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=invite_not_used")
+	assertDashboardRedirect(t, rec, "/admin?err=invite_not_used")
 	invites, err := store.ListInvites(context.Background())
 	if err != nil {
 		t.Fatal(err)

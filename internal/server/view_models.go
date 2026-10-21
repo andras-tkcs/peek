@@ -11,6 +11,7 @@ type apiKeyShownData = webui.APIKeyShownData
 type inviteDashRow = webui.InviteDashboardRow
 type accountDashRow = webui.AccountDashboardRow
 type dashData = webui.DashboardData
+type adminData = webui.AdminData
 type statsVisit = webui.StatsVisit
 type statsSparklineData = webui.StatsSparkline
 type statsData = webui.StatsData

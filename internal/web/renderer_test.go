@@ -37,16 +37,22 @@ func TestRendererExecutesAllTemplates(t *testing.T) {
 		{
 			name: TemplateDashboard,
 			data: DashboardData{
-				CSRF:         "csrf",
-				User:         "Admin",
-				IsAdmin:      true,
-				Uploads:      []DashboardUpload{{Slug: "abc123", Name: "page.html", SizeHuman: "1 KB", CreatedHuman: "2026-06-21 10:00"}},
-				Invites:      []InviteDashboardRow{{ID: 1, Email: "person@example.com", Status: "pending", Expires: "2026-06-28 10:00", Link: "http://example.test/invite/token", CanRevoke: true}},
-				Accounts:     []AccountDashboardRow{{ID: 1, Name: "Admin", Email: "admin@example.com", Admin: true, IsSelf: true}},
-				Settings:     map[string]string{"max_upload": "2097152"},
-				SettingsMeta: []SettingRow{{Key: "max_upload", Value: "2097152", Label: "Max upload size", Description: "bytes"}},
+				CSRF:    "csrf",
+				User:    "Admin",
+				IsAdmin: true,
+				Uploads: []DashboardUpload{{Slug: "abc123", Name: "page.html", SizeHuman: "1 KB", CreatedHuman: "2026-06-21 10:00"}},
 			},
 			want: "Upload HTML",
+		},
+		{
+			name: TemplateAdmin,
+			data: AdminData{
+				CSRF:     "csrf",
+				User:     "Admin",
+				Invites:  []InviteDashboardRow{{ID: 1, Email: "person@example.com", Status: "pending", Expires: "2026-06-28 10:00", Link: "http://example.test/invite/token", CanRevoke: true}},
+				Accounts: []AccountDashboardRow{{ID: 1, Name: "Admin", Email: "admin@example.com", Admin: true, IsSelf: true}},
+			},
+			want: "Settings",
 		},
 		{
 			name: TemplateStats,
@@ -213,15 +219,14 @@ func TestPageTemplateNameModalCanBeShownByAlpine(t *testing.T) {
 	}
 }
 
-func TestDashboardInviteLinkRendersAsCopyAction(t *testing.T) {
+func TestAdminInviteLinkRendersAsCopyAction(t *testing.T) {
 	renderer, err := NewRenderer()
 	if err != nil {
 		t.Fatalf("new renderer: %v", err)
 	}
-	body, err := renderer.Execute(TemplateDashboard, DashboardData{
-		CSRF:    "csrf",
-		User:    "Admin",
-		IsAdmin: true,
+	body, err := renderer.Execute(TemplateAdmin, AdminData{
+		CSRF: "csrf",
+		User: "Admin",
 		Invites: []InviteDashboardRow{{
 			ID:        1,
 			Email:     "person@example.com",
@@ -232,36 +237,35 @@ func TestDashboardInviteLinkRendersAsCopyAction(t *testing.T) {
 		}},
 	})
 	if err != nil {
-		t.Fatalf("execute dashboard: %v", err)
+		t.Fatalf("execute admin: %v", err)
 	}
 	html := string(body)
 	if !strings.Contains(html, `title="Copy invite link"`) || !strings.Contains(html, `data-url="http://example.test/invite/token"`) {
-		t.Fatalf("dashboard invite did not render a copy action: %s", html)
+		t.Fatalf("admin invite did not render a copy action: %s", html)
 	}
 	if !strings.Contains(html, `<span class="peek-link-copy-text">http://example.test/invite/token</span>`) {
-		t.Fatalf("dashboard invite did not render the link value in the copy control: %s", html)
+		t.Fatalf("admin invite did not render the link value in the copy control: %s", html)
 	}
 	if strings.Contains(html, `>Copy link</span>`) {
-		t.Fatalf("dashboard invite should show the link value, not generic copy text: %s", html)
+		t.Fatalf("admin invite should show the link value, not generic copy text: %s", html)
 	}
 	if strings.Contains(html, `<code`) {
-		t.Fatalf("dashboard invite should not render the link in an unconstrained code element: %s", html)
+		t.Fatalf("admin invite should not render the link in an unconstrained code element: %s", html)
 	}
 	if strings.Contains(html, `window.location.origin + url`) {
-		t.Fatalf("dashboard invite copy should not concatenate origin onto absolute URLs: %s", html)
+		t.Fatalf("admin invite copy should not concatenate origin onto absolute URLs: %s", html)
 	}
 }
 
-func TestDashboardGoogleOrgSwitchAndInvitations(t *testing.T) {
+func TestAdminGoogleOrgSwitchAndInvitations(t *testing.T) {
 	renderer, err := NewRenderer()
 	if err != nil {
 		t.Fatalf("new renderer: %v", err)
 	}
 	render := func(googleOrg bool) string {
-		body, err := renderer.Execute(TemplateDashboard, DashboardData{
+		body, err := renderer.Execute(TemplateAdmin, AdminData{
 			CSRF:            "csrf",
 			User:            "Admin",
-			IsAdmin:         true,
 			GoogleOrgSignup: googleOrg,
 			Invites:         []InviteDashboardRow{{ID: 1, Email: "person@example.com", Status: "pending"}},
 			SettingsPanel: DashboardSettings{Auth: AuthSettings{
@@ -269,7 +273,7 @@ func TestDashboardGoogleOrgSwitchAndInvitations(t *testing.T) {
 			}},
 		})
 		if err != nil {
-			t.Fatalf("execute dashboard: %v", err)
+			t.Fatalf("execute admin: %v", err)
 		}
 		return string(body)
 	}
@@ -447,7 +451,7 @@ func TestLoginInviteCopyIsClear(t *testing.T) {
 	}
 }
 
-func TestDashboardRendersSettingsTabsAndControls(t *testing.T) {
+func TestAdminRendersSettingsTabsAndControls(t *testing.T) {
 	renderer, err := NewRenderer()
 	if err != nil {
 		t.Fatalf("new renderer: %v", err)
@@ -481,10 +485,9 @@ func TestDashboardRendersSettingsTabsAndControls(t *testing.T) {
 		oidc.ClientID,
 		oidc.ClientSecret,
 	}
-	body, err := renderer.Execute(TemplateDashboard, DashboardData{
-		CSRF:    "csrf",
-		User:    "Admin",
-		IsAdmin: true,
+	body, err := renderer.Execute(TemplateAdmin, AdminData{
+		CSRF: "csrf",
+		User: "Admin",
 		SettingsPanel: DashboardSettings{
 			Auth: AuthSettings{
 				Token:     SettingRow{Key: "auth_token_login_enabled", Value: "true", Label: "Access token login", Description: "Allow token login"},
@@ -508,7 +511,7 @@ func TestDashboardRendersSettingsTabsAndControls(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("execute dashboard: %v", err)
+		t.Fatalf("execute admin: %v", err)
 	}
 	html := string(body)
 	for _, want := range []string{
@@ -530,11 +533,11 @@ func TestDashboardRendersSettingsTabsAndControls(t *testing.T) {
 		`>MB</span>`,
 	} {
 		if !strings.Contains(html, want) {
-			t.Fatalf("dashboard settings controls missing %q: %s", want, html)
+			t.Fatalf("admin settings controls missing %q: %s", want, html)
 		}
 	}
 	if strings.Contains(html, `type="range"`) || strings.Contains(html, `peek-range-input`) {
-		t.Fatalf("dashboard limits should render compact number inputs, not sliders: %s", html)
+		t.Fatalf("admin limits should render compact number inputs, not sliders: %s", html)
 	}
 	if !strings.Contains(html, `name="storage" value="s3" x-model="storageBackend" checked`) {
 		t.Fatalf("s3 storage radio was not checked: %s", html)

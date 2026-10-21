@@ -28,7 +28,7 @@ S3 storage writes upload bytes to `uploads/<object-name>` inside the configured 
 
 <figure>
   <img src="/peek/assets/screenshots/09-admin-storage-s3.png" alt="Peek Settings Storage tab with S3 selected and endpoint, bucket, region, access key, and secret fields visible">
-  <figcaption>The dashboard can update S3 connection settings, but backend selection takes effect after restart.</figcaption>
+  <figcaption>The Admin page can update S3 connection settings, but backend selection takes effect after restart.</figcaption>
 </figure>
 
 Startup environment:
@@ -52,7 +52,7 @@ Limits protect the server from accidental growth and runaway automation.
 
 <figure>
   <img src="/peek/assets/screenshots/10-admin-limits-retention.png" alt="Peek Settings Limits tab showing upload size, total storage, per-owner quotas, and retention controls">
-  <figcaption>Limits are runtime settings: save them from the dashboard and they apply to future uploads and cleanup.</figcaption>
+  <figcaption>Limits are runtime settings: save them from the Admin page and they apply to future uploads and cleanup.</figcaption>
 </figure>
 
 | Limit | Meaning |
@@ -62,7 +62,7 @@ Limits protect the server from accidental growth and runaway automation.
 | Max uploads per owner | Count limit per account or token owner. `0` means unlimited. |
 | Storage per owner | Byte limit per account or token owner. `0` means unlimited. |
 
-The dashboard shows byte-based limits in MB. The API stores the underlying runtime setting in bytes.
+The Admin page shows byte-based limits in MB. The API stores the underlying runtime setting in bytes.
 
 ## Versions
 

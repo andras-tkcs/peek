@@ -231,8 +231,8 @@ func TestDashboardSettingsInvalidS3EndpointRendersInlineError(t *testing.T) {
 	if loc := rec.Header().Get("Location"); loc != "" {
 		t.Fatalf("Location = %q, want inline render", loc)
 	}
-	if !strings.Contains(rec.Body.String(), "invalid s3 endpoint: ") {
-		t.Fatalf("body missing inline error: %s", rec.Body.String())
+	if body := rec.Body.String(); !strings.Contains(body, "invalid s3 endpoint: ") || !strings.Contains(body, "Save settings") {
+		t.Fatalf("body missing inline error on the admin page: %s", body)
 	}
 }
 
@@ -624,7 +624,7 @@ func TestSetCovDashboardSettingsErrorPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec = dashboardPost(t, s, admin.ID, "/dashboard/settings", url.Values{"s3_secret_key": {""}, "s3_bucket": {"mybucket"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=settings_saved")
+	assertDashboardRedirect(t, rec, "/admin?ok=settings_saved")
 	if got := s.settingString(ctx, "s3_secret_key"); got != "keep-me" {
 		t.Fatalf("secret = %q", got)
 	}
@@ -635,7 +635,7 @@ func TestSetCovDashboardSettingsErrorPaths(t *testing.T) {
 	addFailTrigger(t, s.store, "settings", "UPDATE")
 	addFailTrigger(t, s.store, "settings", "INSERT")
 	rec = dashboardPost(t, s, admin.ID, "/dashboard/settings", url.Values{"s3_bucket": {"other"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=settings_failed")
+	assertDashboardRedirect(t, rec, "/admin?err=settings_failed")
 }
 
 func TestSetCovDashboardSettingsHelpers(t *testing.T) {
@@ -673,19 +673,6 @@ func TestSetCovDashboardSettingsHelpers(t *testing.T) {
 	panel := dashboardSettingsPanel(map[string]string{"oauth_github_client_secret": "stored"})
 	if secret := panel.Auth.GitHub.ClientSecret; secret.Value != "" || !strings.Contains(secret.Description, "leave blank") {
 		t.Fatalf("panel secret row = %+v", secret)
-	}
-	rows := dashboardSettingsRows(map[string]string{"zz_extra": "v", "s3_secret_key": "secret"})
-	var sawExtra, sawSecret bool
-	for _, r := range rows {
-		if r.Key == "zz_extra" && r.Label == "zz_extra" && r.Value == "v" {
-			sawExtra = true
-		}
-		if r.Key == "s3_secret_key" && r.Value == "" && strings.Contains(r.Description, "leave blank") {
-			sawSecret = true
-		}
-	}
-	if !sawExtra || !sawSecret {
-		t.Fatalf("rows extra=%v secret=%v", sawExtra, sawSecret)
 	}
 }
 

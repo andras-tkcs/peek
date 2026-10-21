@@ -12,6 +12,7 @@ const (
 	TemplateSetup         = "setup"
 	TemplateLogin         = "login"
 	TemplateDashboard     = "dashboard"
+	TemplateAdmin         = "admin"
 	TemplateStats         = "stats"
 	TemplatePage          = "page"
 	TemplateGate          = "gate"
@@ -210,12 +211,6 @@ type DashboardData struct {
 	CSRF             string
 	User             string
 	IsAdmin          bool
-	GoogleOrgSignup  bool
-	Settings         map[string]string
-	SettingsMeta     []SettingRow
-	SettingsPanel    DashboardSettings
-	Invites          []InviteDashboardRow
-	Accounts         []AccountDashboardRow
 	Uploads          []DashboardUpload
 	APIKeys          []DashboardAPIKey
 	UploadError      string
@@ -224,6 +219,18 @@ type DashboardData struct {
 
 	GroupGrantsEnabled bool
 	ManageSlug         string
+}
+
+// AdminData is the view model of the admin-only page.
+type AdminData struct {
+	CSRF            string
+	User            string
+	GoogleOrgSignup bool
+	SettingsPanel   DashboardSettings
+	Invites         []InviteDashboardRow
+	Accounts        []AccountDashboardRow
+	Error           string
+	FlashSuccess    string
 }
 
 type StatsVisit struct {

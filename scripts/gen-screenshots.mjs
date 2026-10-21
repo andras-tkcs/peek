@@ -338,7 +338,7 @@ async function showStats(page) {
 }
 
 async function scrollToSettings(page) {
-  await page.goto(`${BASE}/dashboard`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE}/admin`, { waitUntil: "domcontentloaded" });
   await page
     .locator("h2", { hasText: "Settings" })
     .waitFor({ state: "attached" });
@@ -402,7 +402,7 @@ async function showAdminLimits(page) {
 }
 
 async function showAdminUsersInvites(page) {
-  await page.goto(`${BASE}/dashboard`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE}/admin`, { waitUntil: "domcontentloaded" });
   await page
     .locator("h2", { hasText: "Invitations" })
     .waitFor({ state: "visible" });

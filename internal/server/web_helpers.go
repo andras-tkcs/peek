@@ -8,6 +8,7 @@ import (
 
 const sessionCookie = "hn_session"
 const dashboardPath = "/dashboard"
+const adminPath = "/admin"
 
 func noCache(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -131,6 +132,20 @@ func dashboardError(w http.ResponseWriter, r *http.Request, code string) {
 	dashboardFlash(w, r, url.Values{"err": {code}})
 }
 
+func adminError(w http.ResponseWriter, r *http.Request, code string) {
+	adminFlash(w, r, url.Values{"err": {code}})
+}
+
+func adminOK(w http.ResponseWriter, r *http.Request, code string) {
+	adminFlash(w, r, url.Values{"ok": {code}})
+}
+
+// adminFlash redirects to the admin page with flash codes. Only codes from
+// flashMessages are ever rendered.
+func adminFlash(w http.ResponseWriter, r *http.Request, q url.Values) {
+	http.Redirect(w, r, adminPath+"?"+q.Encode(), http.StatusSeeOther)
+}
+
 func dashboardOK(w http.ResponseWriter, r *http.Request, code string) {
 	dashboardFlash(w, r, url.Values{"ok": {code}})
 }
@@ -245,8 +260,18 @@ func grantFlashCode(msg string) string {
 }
 
 func (s *Server) parseDashboardForm(w http.ResponseWriter, r *http.Request) bool {
+	return s.parseForm(w, r, dashboardError)
+}
+
+func (s *Server) parseAdminForm(w http.ResponseWriter, r *http.Request) bool {
+	return s.parseForm(w, r, adminError)
+}
+
+// parseForm parses r's form and checks its CSRF token, calling fail with the
+// invalid-session flash code when either is bad.
+func (s *Server) parseForm(w http.ResponseWriter, r *http.Request, fail func(http.ResponseWriter, *http.Request, string)) bool {
 	if err := r.ParseForm(); err != nil {
-		dashboardError(w, r, flashInvalidSession)
+		fail(w, r, flashInvalidSession)
 		return false
 	}
 	validCSRF, err := s.validateCSRF(r, w, r.FormValue("csrf"))
@@ -255,7 +280,7 @@ func (s *Server) parseDashboardForm(w http.ResponseWriter, r *http.Request) bool
 		return false
 	}
 	if !validCSRF {
-		dashboardError(w, r, flashInvalidSession)
+		fail(w, r, flashInvalidSession)
 		return false
 	}
 	return true

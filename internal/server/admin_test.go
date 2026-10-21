@@ -71,7 +71,7 @@ func TestDashboardRevokeInviteReportsSuccessAfterUpdate(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	if rec.Header().Get("Location") != "/dashboard?ok=invite_revoked" {
+	if rec.Header().Get("Location") != "/admin?ok=invite_revoked" {
 		t.Fatalf("location = %q", rec.Header().Get("Location"))
 	}
 }
@@ -160,9 +160,9 @@ func TestDashboardCreateInviteBranches(t *testing.T) {
 		csrf  bool
 		want  string
 	}{
-		{name: "bad csrf", form: url.Values{"email": {"a@example.test"}}, csrf: false, want: "/dashboard?err=invalid_session"},
-		{name: "empty email", form: url.Values{"email": {""}}, csrf: true, want: "/dashboard?err=invite_email_required"},
-		{name: "no at sign", form: url.Values{"email": {"nobody"}}, csrf: true, want: "/dashboard?err=invite_email_required"},
+		{name: "bad csrf", form: url.Values{"email": {"a@example.test"}}, csrf: false, want: "/admin?err=invalid_session"},
+		{name: "empty email", form: url.Values{"email": {""}}, csrf: true, want: "/admin?err=invite_email_required"},
+		{name: "no at sign", form: url.Values{"email": {"nobody"}}, csrf: true, want: "/admin?err=invite_email_required"},
 		{
 			name: "domain rejected",
 			setup: func(t *testing.T, s *Server, store *db.Store) {
@@ -170,7 +170,7 @@ func TestDashboardCreateInviteBranches(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			form: url.Values{"email": {"a@other.test"}}, csrf: true, want: "/dashboard?err=invite_domain",
+			form: url.Values{"email": {"a@other.test"}}, csrf: true, want: "/admin?err=invite_domain",
 		},
 		{
 			name: "random failure",
@@ -182,19 +182,19 @@ func TestDashboardCreateInviteBranches(t *testing.T) {
 					return rand.Read(b)
 				})
 			},
-			form: url.Values{"email": {"a@example.test"}}, csrf: true, want: "/dashboard?err=invite_failed",
+			form: url.Values{"email": {"a@example.test"}}, csrf: true, want: "/admin?err=invite_failed",
 		},
 		{
 			name:  "encrypt failure",
 			setup: func(t *testing.T, s *Server, store *db.Store) { s.secret = "zz" },
-			form:  url.Values{"email": {"a@example.test"}}, csrf: true, want: "/dashboard?err=invite_failed",
+			form:  url.Values{"email": {"a@example.test"}}, csrf: true, want: "/admin?err=invite_failed",
 		},
 		{
 			name:  "store failure",
 			setup: func(t *testing.T, s *Server, store *db.Store) { addFailTrigger(t, store, "invites", "INSERT") },
-			form:  url.Values{"email": {"a@example.test"}}, csrf: true, want: "/dashboard?err=invite_failed",
+			form:  url.Values{"email": {"a@example.test"}}, csrf: true, want: "/admin?err=invite_failed",
 		},
-		{name: "success", form: url.Values{"email": {" New@Example.test "}}, csrf: true, want: "/dashboard?ok=invite_created"},
+		{name: "success", form: url.Values{"email": {" New@Example.test "}}, csrf: true, want: "/admin?ok=invite_created"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -233,14 +233,14 @@ func TestDashboardAdminActionsRejectBadCSRF(t *testing.T) {
 		"/dashboard/users/1/disabled",
 	} {
 		rec := dashboardPost(t, s, adminID, path, url.Values{}, false)
-		assertDashboardRedirect(t, rec, "/dashboard?err=invalid_session")
+		assertDashboardRedirect(t, rec, "/admin?err=invalid_session")
 	}
 }
 
 func TestDashboardRevokeInviteBadIDAndStoreFailure(t *testing.T) {
 	s, store, _, adminID := newFaultServer(t)
 	rec := dashboardPost(t, s, adminID, "/dashboard/invites/revoke/abc", url.Values{}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=bad_invite")
+	assertDashboardRedirect(t, rec, "/admin?err=bad_invite")
 
 	inv, err := store.CreateInvite(context.Background(), "raw", "cipher", "u@example.test", adminID, time.Now().Add(inviteTTL))
 	if err != nil {
@@ -248,7 +248,7 @@ func TestDashboardRevokeInviteBadIDAndStoreFailure(t *testing.T) {
 	}
 	addFailTrigger(t, store, "invites", "UPDATE")
 	rec = dashboardPost(t, s, adminID, "/dashboard/invites/revoke/"+strconv.FormatInt(inv.ID, 10), url.Values{}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=invite_revoke_failed")
+	assertDashboardRedirect(t, rec, "/admin?err=invite_revoke_failed")
 }
 
 func TestDashboardUserToggles(t *testing.T) {
@@ -262,12 +262,12 @@ func TestDashboardUserToggles(t *testing.T) {
 			base := "/dashboard/users/%s/" + field
 
 			rec := dashboardPost(t, s, adminID, fmt.Sprintf(base, "abc"), url.Values{field: {"true"}}, true)
-			assertDashboardRedirect(t, rec, "/dashboard?err=bad_user")
+			assertDashboardRedirect(t, rec, "/admin?err=bad_user")
 
 			// The only admin cannot lose admin rights or be disabled.
-			wantLast := "/dashboard?err=last_admin_remove"
+			wantLast := "/admin?err=last_admin_remove"
 			if field == "disabled" {
-				wantLast = "/dashboard?err=last_admin_disable"
+				wantLast = "/admin?err=last_admin_disable"
 			}
 			lastVal := "true"
 			if field == "admin" {
@@ -278,11 +278,11 @@ func TestDashboardUserToggles(t *testing.T) {
 
 			otherPath := fmt.Sprintf(base, strconv.FormatInt(other.ID, 10))
 			rec = dashboardPost(t, s, adminID, otherPath, url.Values{field: {"true"}}, true)
-			assertDashboardRedirect(t, rec, "/dashboard?ok=user_updated")
+			assertDashboardRedirect(t, rec, "/admin?ok=user_updated")
 
 			addFailTrigger(t, store, "accounts", "UPDATE")
 			rec = dashboardPost(t, s, adminID, otherPath, url.Values{field: {"false"}}, true)
-			assertDashboardRedirect(t, rec, "/dashboard?err=user_update_failed")
+			assertDashboardRedirect(t, rec, "/admin?err=user_update_failed")
 		})
 	}
 }

@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /cli-login/{code}", s.rateLimit(s.loginLimiter, s.handleCLILoginApprove))
 	mux.HandleFunc("POST /logout", s.handleLogout)
 	mux.HandleFunc("GET /dashboard", s.handleDashboard)
+	mux.HandleFunc("GET /admin", s.handleAdmin)
 	mux.HandleFunc("POST /dashboard/upload", s.handleDashboardUpload)
 	mux.HandleFunc("POST /dashboard/delete/{slug}", s.handleDashboardDelete)
 	mux.HandleFunc("POST /dashboard/visibility/{slug}", s.handleDashboardVisibility)

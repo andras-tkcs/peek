@@ -17,8 +17,8 @@ Peek has account authentication for the dashboard and API, plus upload-level vis
 First-run setup creates the initial admin. Admins can invite users, disable users, promote or remove admin rights, enable OAuth providers, restrict human sign-in to an email domain, and control token-login behavior.
 
 <figure>
-  <img src="/peek/assets/screenshots/11-admin-users-invites.png" alt="Peek dashboard showing invitations and users tables">
-  <figcaption>Admins manage invitations and account status from the dashboard.</figcaption>
+  <img src="/peek/assets/screenshots/11-admin-users-invites.png" alt="Peek admin page showing invitations and users tables">
+  <figcaption>Admins manage invitations and account status from the Admin page, opened with the Admin button next to Sign out.</figcaption>
 </figure>
 
 ## OAuth Providers
@@ -57,7 +57,7 @@ For Okta, use the issuer URL for the authorization server, for example `https://
 
 ## Allowed Email Domain
 
-Admins can set one allowed email domain in Settings. When configured, human sign-in must use an account email from that exact domain. The rule applies to OAuth login and signup, local password login, web token login, CLI browser approval, private-page sessions, and new invites. It also applies to API bearer tokens of accounts with an email: a token whose account email is outside the domain is refused with 403. Automation tokens from `peek token create` have no email and are not affected.
+Admins can set one allowed email domain on the Admin page. When configured, human sign-in must use an account email from that exact domain. The rule applies to OAuth login and signup, local password login, web token login, CLI browser approval, private-page sessions, and new invites. It also applies to API bearer tokens of accounts with an email: a token whose account email is outside the domain is refused with 403. Automation tokens from `peek token create` have no email and are not affected.
 
 Use the bare domain, such as `example.com`. A leading `@` is accepted and normalized away. Subdomains are not implicit matches, so `person@team.example.com` does not match `example.com`.
 
