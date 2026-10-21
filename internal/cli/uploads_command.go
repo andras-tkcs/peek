@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -110,23 +108,13 @@ func cmdDelete(args []string) error {
 
 func cmdVisibility(args []string) error {
 	var (
-		slug             string
-		visibility       string
-		password         string
-		passwordStdin    bool
-		usedPasswordFlag bool
+		slug       string
+		visibility string
 	)
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--password":
-			if i+1 >= len(args) {
-				return fmt.Errorf("--password requires a value")
-			}
-			password = args[i+1]
-			usedPasswordFlag = true
-			i++
-		case "--password-stdin":
-			passwordStdin = true
+		case "--password", "--password-stdin":
+			return passwordFlagRemoved(args[i])
 		default:
 			switch {
 			case strings.HasPrefix(args[i], "-"):
@@ -141,36 +129,14 @@ func cmdVisibility(args []string) error {
 		}
 	}
 	if slug == "" || visibility == "" {
-		return fmt.Errorf("usage: peek visibility <slug> public|signed-in|password|restricted [--password <pw>|--password-stdin]")
+		return fmt.Errorf("usage: peek visibility <slug> public|signed-in|restricted")
 	}
 	if !validVisibility(visibility) {
-		return fmt.Errorf("visibility must be public, password, signed-in, or restricted")
-	}
-	if password != "" && passwordStdin {
-		return fmt.Errorf("use only one of --password or --password-stdin")
-	}
-	if passwordStdin {
-		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		if err != nil && err != io.EOF {
-			return err
-		}
-		password = strings.TrimSpace(line)
-		if password == "" {
-			return fmt.Errorf("no password provided on stdin")
-		}
-	}
-	if visibility == "password" && password == "" {
-		return fmt.Errorf("password visibility requires --password or --password-stdin")
-	}
-	if visibility != "password" && password != "" {
-		return fmt.Errorf("--password is only valid with password visibility")
+		return fmt.Errorf("visibility must be public, signed-in, or restricted")
 	}
 	seg, err := slugPath(slug)
 	if err != nil {
 		return err
-	}
-	if usedPasswordFlag {
-		fmt.Fprintln(os.Stderr, "warning: --password is exposed in your shell history and process list (ps). Prefer --password-stdin.")
 	}
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -180,7 +146,7 @@ func cmdVisibility(args []string) error {
 	if err != nil {
 		return err
 	}
-	body := map[string]any{"visibility": visibility, "password": password}
+	body := map[string]any{"visibility": visibility}
 	var out struct {
 		Visibility string `json:"visibility"`
 	}

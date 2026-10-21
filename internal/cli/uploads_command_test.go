@@ -137,52 +137,23 @@ func TestCovVersionsDeleteRenameVisibilitySuccess(t *testing.T) {
 	}
 }
 
-func TestCovVisibilityPasswordPaths(t *testing.T) {
-	ts := covFake(t, map[string]string{"/api/uploads/demo/visibility": `{"visibility":"password"}`}, nil)
-	configureTestClient(t, ts.URL)
-
-	withStdin(t, "s3cret\n")
-	if _, err := captureStdout(t, func() error {
-		return cmdVisibility([]string{"demo", "password", "--password-stdin"})
-	}); err != nil {
-		t.Fatalf("stdin password: %v", err)
-	}
-	stderr, err := captureStderr(t, func() error {
-		_, err := captureStdout(t, func() error {
-			return cmdVisibility([]string{"demo", "password", "--password", "pw"})
-		})
-		return err
-	})
-	if err != nil || !strings.Contains(stderr, "warning: --password") {
-		t.Fatalf("flag password: %q %v", stderr, err)
-	}
-}
-
 func TestCovUploadsCommandUsageErrors(t *testing.T) {
 	configureTestClient(t, "http://127.0.0.1:1")
 	withStdin(t, "\n")
 	cases := map[string]func() error{
-		"versions arity":        func() error { return cmdVersions(nil) },
-		"versions slug":         func() error { return cmdVersions([]string{"bad/slug"}) },
-		"delete arity":          func() error { return cmdDelete(nil) },
-		"delete slug":           func() error { return cmdDelete([]string{"bad slug"}) },
-		"rename arity":          func() error { return cmdRename([]string{"demo"}) },
-		"rename blank":          func() error { return cmdRename([]string{"demo", "  "}) },
-		"rename slug":           func() error { return cmdRename([]string{"bad/slug", "x"}) },
-		"visibility pw missing": func() error { return cmdVisibility([]string{"demo", "--password"}) },
-		"visibility flag":       func() error { return cmdVisibility([]string{"demo", "public", "--nope"}) },
-		"visibility extra":      func() error { return cmdVisibility([]string{"demo", "public", "extra"}) },
-		"visibility usage":      func() error { return cmdVisibility([]string{"demo"}) },
-		"visibility invalid":    func() error { return cmdVisibility([]string{"demo", "weird"}) },
-		"visibility both": func() error {
-			return cmdVisibility([]string{"demo", "password", "--password", "x", "--password-stdin"})
-		},
-		"visibility stdin empty": func() error {
-			return cmdVisibility([]string{"demo", "password", "--password-stdin"})
-		},
-		"visibility pw required": func() error { return cmdVisibility([]string{"demo", "password"}) },
-		"visibility pw mismatch": func() error { return cmdVisibility([]string{"demo", "public", "--password", "x"}) },
-		"visibility slug":        func() error { return cmdVisibility([]string{"bad/slug", "public"}) },
+		"versions arity":      func() error { return cmdVersions(nil) },
+		"versions slug":       func() error { return cmdVersions([]string{"bad/slug"}) },
+		"delete arity":        func() error { return cmdDelete(nil) },
+		"delete slug":         func() error { return cmdDelete([]string{"bad slug"}) },
+		"rename arity":        func() error { return cmdRename([]string{"demo"}) },
+		"rename blank":        func() error { return cmdRename([]string{"demo", "  "}) },
+		"rename slug":         func() error { return cmdRename([]string{"bad/slug", "x"}) },
+		"visibility flag":     func() error { return cmdVisibility([]string{"demo", "public", "--nope"}) },
+		"visibility extra":    func() error { return cmdVisibility([]string{"demo", "public", "extra"}) },
+		"visibility usage":    func() error { return cmdVisibility([]string{"demo"}) },
+		"visibility invalid":  func() error { return cmdVisibility([]string{"demo", "weird"}) },
+		"visibility password": func() error { return cmdVisibility([]string{"demo", "password"}) },
+		"visibility slug":     func() error { return cmdVisibility([]string{"bad/slug", "public"}) },
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -210,32 +181,14 @@ func (covErrReader) Read([]byte) (int, error) { return 0, errors.New("read faile
 func TestCovWriteMultipartUploadErrorPaths(t *testing.T) {
 	for n := 0; n < 1024; n += 8 {
 		mw := multipart.NewWriter(&covFailAfterWriter{left: n})
-		_ = writeMultipartUpload(mw, strings.NewReader("<html></html>"), "p", "password", "pw", "slug")
+		_ = writeMultipartUpload(mw, strings.NewReader("<html></html>"), "p", "restricted", "slug")
 	}
 	mw := multipart.NewWriter(io.Discard)
-	if err := writeMultipartUpload(mw, covErrReader{}, "p", "", "", ""); err == nil {
+	if err := writeMultipartUpload(mw, covErrReader{}, "p", "", ""); err == nil {
 		t.Fatal("expected read error")
 	}
-	body, _ := streamMultipartUpload(covErrReader{}, "p", "", "", "")
+	body, _ := streamMultipartUpload(covErrReader{}, "p", "", "")
 	if _, err := io.ReadAll(body); err == nil {
 		t.Fatal("expected stream error")
-	}
-}
-
-func TestCovPasswordStdinReadError(t *testing.T) {
-	configureTestClient(t, "http://127.0.0.1:1")
-	dir, err := os.Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	old := os.Stdin
-	os.Stdin = dir
-	t.Cleanup(func() { os.Stdin = old; _ = dir.Close() })
-
-	if err := cmdVisibility([]string{"demo", "password", "--password-stdin"}); err == nil {
-		t.Fatal("visibility: expected stdin read error")
-	}
-	if err := cmdUpload([]string{"x.html", "--password-stdin"}); err == nil {
-		t.Fatal("upload: expected stdin read error")
 	}
 }
