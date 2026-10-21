@@ -1,0 +1,151 @@
+<title>Peek Sharing Rollout Checks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: one reading column; each check is a numbered section with a checklist of steps and a report-back line. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1b2230;
+  --muted: #5b6577;
+  --line: #dde2ea;
+  --accent: #2f5fd0;
+  --accent-soft: #e6edfb;
+  --done: #2e7d4f;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #1a1f28; --fg: #e5e9f0; --muted: #9aa4b5; --line: #2c3442;
+    --accent: #8fb0ff; --accent-soft: #1f2a42; --done: #6fcf97; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a1f28; --fg: #e5e9f0; --muted: #9aa4b5; --line: #2c3442;
+  --accent: #8fb0ff; --accent-soft: #1f2a42; --done: #6fcf97; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1 { font-family: var(--font-display); font-size: 30px; line-height: 1.2; margin: 0; text-wrap: balance; }
+h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 8px 0 0; font-weight: 600; }
+h3 { font-size: 18px; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: var(--muted); max-width: 65ch; }
+.progress { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+section.item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.item-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.est { font-family: var(--font-mono); font-size: 12px; color: var(--muted); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; }
+.why { color: var(--muted); font-size: 14px; }
+ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; counter-reset: step; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: 22px 2.2em minmax(0, 1fr); gap: 6px; align-items: start; }
+ol.steps li::before { content: counter(step) "."; grid-column: 2; grid-row: 1; font-family: var(--font-mono); font-size: 13px; color: var(--muted); padding-top: 2px; }
+ol.steps input { grid-column: 1; grid-row: 1; margin-top: 4px; accent-color: var(--accent); width: 16px; height: 16px; }
+ol.steps label { grid-column: 3; grid-row: 1; min-width: 0; }
+ol.steps li.checked label { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+.see { display: block; font-size: 13px; color: var(--muted); }
+code { font-family: var(--font-mono); font-size: 13px; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.report { border-top: 1px dashed var(--line); padding-top: 12px; font-size: 14px; }
+.report strong { color: var(--done); }
+.note { font-size: 14px; color: var(--muted); }
+</style>
+
+<main>
+  <header style="display:flex;flex-direction:column;gap:10px">
+    <h1>Peek sharing rollout checks</h1>
+    <p class="lede">These are the checks that only you can do for the <code>collaboration-sharing</code> plan. None are needed before implementation. Do these four after the last phase merges and before the feature PR merges, on a staging Peek running the PR's build.</p>
+    <p class="progress" id="hn-progress">0 of 0 steps done</p>
+  </header>
+
+  <h2>Before implementation</h2>
+  <p class="note">Nothing. Every phase builds and tests against fakes (a fake SMTP server, a fake mail sender, a fake Google group checker).</p>
+
+  <h2>After implementation</h2>
+
+  <section class="item" id="ma1">
+    <div class="item-head"><h3>1. Real SMTP: test email and a share notification</h3><span class="est">~20 min</span></div>
+    <p class="why">CI only talks to a fake SMTP server. This checks TLS, authentication, real delivery and how the link looks in a real mailbox.</p>
+    <ol class="steps">
+      <li><input type="checkbox" id="ma1-1"><label for="ma1-1">Pick the relay Peek will use and note its host, port, TLS mode (<code>starttls</code> on 587, or <code>tls</code> on 465), username and a sender address. For Google Workspace, the SMTP relay service is under <a href="https://admin.google.com/ac/apps/gmail/routing" target="_blank" rel="noopener">Admin console → Apps → Gmail → Routing</a>, or use a Google account with an <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">app password</a> on <code>smtp.gmail.com</code>.<span class="see">You have host, port, TLS mode, username, password and From address at hand. The password stays with you until the next step.</span></label></li>
+      <li><input type="checkbox" id="ma1-2"><label for="ma1-2">On the staging Peek, sign in as an admin, open <strong>Admin</strong> → <strong>Settings</strong> → <strong>Email</strong>, fill in the fields, type the password into <strong>SMTP password</strong> (Peek stores it encrypted; never paste it into the PR or a chat), and click <strong>Save settings</strong>.<span class="see">A "settings saved" toast. Reopening the tab shows the password field empty with "(leave blank to keep current value)".</span></label></li>
+      <li><input type="checkbox" id="ma1-3"><label for="ma1-3">Click <strong>Send test email</strong>.<span class="see">A "test email sent" toast, and within a minute a "Peek test email" message in your inbox, not in spam.</span></label></li>
+      <li><input type="checkbox" id="ma1-4"><label for="ma1-4">On <strong>Dashboard</strong>, upload a small HTML page. It defaults to <strong>Restricted</strong>. Open <strong>Access</strong> and share it with a colleague's address (or a second account of yours).<span class="see">The toast says the page was shared with that address, with no "could not be sent" error.</span></label></li>
+      <li><input type="checkbox" id="ma1-5"><label for="ma1-5">Check the recipient's inbox: the subject is <code>&lt;your name&gt; shared "&lt;page name&gt;" with you on Peek</code>, Reply-To is your address, and the link opens the page after the recipient signs in.<span class="see">The page renders for the recipient. Signed in as anyone else, it shows "Access denied".</span></label></li>
+      <li><input type="checkbox" id="ma1-6"><label for="ma1-6">Switch a <strong>Signed-in</strong> page that already has a grant to <strong>Restricted</strong>, and confirm the grantee gets one email.</label></li>
+    </ol>
+    <p class="report">Report in the PR: <strong>ma1-smtp-live: pass</strong> (relay name, TLS mode) or <strong>fail</strong> plus the toast text and the <code>share notification failed</code> / <code>test email failed</code> server log line.</p>
+  </section>
+
+  <section class="item" id="ma2">
+    <div class="item-head"><h3>2. Dashboard rows and role icons</h3><span class="est">~10 min</span></div>
+    <p class="why">Tests check the markup. Whether a row now reads clearly is your call.</p>
+    <ol class="steps">
+      <li><input type="checkbox" id="ma2-1"><label for="ma2-1">As the owner from check 1, open <strong>Dashboard</strong>.<span class="see">Each row shows a pencil icon and the page title as a link, with no slug text and no copy icon. Hovering the icon says "You own this page and can edit it".</span></label></li>
+      <li><input type="checkbox" id="ma2-2"><label for="ma2-2">Sign in as the grantee (a non-admin) and open <strong>Dashboard</strong>.<span class="see">The shared page is listed with an eye icon ("Shared with you by …. View only") and has no Access, Stats or Delete buttons.</span></label></li>
+      <li><input type="checkbox" id="ma2-3"><label for="ma2-3">If Google group grants are configured, share a page with a group the grantee is in and reload their dashboard.<span class="see">That page appears with the eye icon too, possibly after the group cache time (5 minutes by default).</span></label></li>
+      <li><input type="checkbox" id="ma2-4"><label for="ma2-4">Sign in as an admin who does not own those pages.<span class="see">Other people's pages show a shield icon ("Owned by …. You can edit it as an admin") and keep their action buttons.</span></label></li>
+      <li><input type="checkbox" id="ma2-5"><label for="ma2-5">Shrink the window to phone width.<span class="see">Titles truncate with an ellipsis and the page does not scroll sideways.</span></label></li>
+    </ol>
+    <p class="report">Report: <strong>ma2-dashboard-look: pass</strong>, or what looked wrong with a screenshot.</p>
+  </section>
+
+  <section class="item" id="ma3">
+    <div class="item-head"><h3>3. Upgrade a copy of real data</h3><span class="est">~15 min</span></div>
+    <p class="why">Migration 15 is tested on a synthetic database. This confirms that real password pages become restricted and that their owners can still open them.</p>
+    <ol class="steps">
+      <li><input type="checkbox" id="ma3-1"><label for="ma3-1">On the production host, take a consistent copy: <code>PEEK_DATA=/var/lib/peek peekd backup /tmp/peek-copy.db</code> (see <a href="https://github.com/andras-tkcs/peek/blob/plan/collaboration-sharing/docs/operations.md" target="_blank" rel="noopener">docs/operations.md</a>, Persistent State).<span class="see">The backup file exists. The command refuses to overwrite an existing file.</span></label></li>
+      <li><input type="checkbox" id="ma3-2"><label for="ma3-2">Count the password pages before the upgrade: <code>sqlite3 /tmp/peek-copy.db "SELECT COUNT(*) FROM uploads WHERE visibility='password'"</code>. Write the number down.</label></li>
+      <li><input type="checkbox" id="ma3-3"><label for="ma3-3">In a scratch data directory, put the copy at <code>peek.db</code> along with the same <code>secret.key</code> (or <code>PEEK_SECRET</code>), and start the PR build of <code>peekd</code> against it with file storage, on a local port.<span class="see">The server starts and logs no migration error.</span></label></li>
+      <li><input type="checkbox" id="ma3-4"><label for="ma3-4">Run <code>sqlite3 &lt;scratch&gt;/peek.db "SELECT visibility, COUNT(*) FROM uploads GROUP BY visibility"</code>.<span class="see">No <code>password</code> row. The <code>restricted</code> count has grown by the number from step 2.</span></label></li>
+      <li><input type="checkbox" id="ma3-5"><label for="ma3-5">Sign in as the owner of one former password page and open its link.<span class="see">The owner sees the page. A different non-admin account gets "Access denied". Page bytes may be missing if objects live in S3; the access check is what matters here.</span></label></li>
+      <li><input type="checkbox" id="ma3-6"><label for="ma3-6">Delete the scratch directory and <code>/tmp/peek-copy.db</code>.</label></li>
+    </ol>
+    <p class="report">Report: <strong>ma3-upgrade-copy: pass</strong> (N password pages → restricted), or <strong>fail</strong> plus the query output.</p>
+  </section>
+
+  <section class="item" id="ma4">
+    <div class="item-head"><h3>4. No invites under Google org sign-in</h3><span class="est">~5 min</span></div>
+    <p class="why">Confirms the wording change on the configuration you use.</p>
+    <ol class="steps">
+      <li><input type="checkbox" id="ma4-1"><label for="ma4-1">On a staging Peek with <strong>Google org sign-in</strong> switched on (Admin → Settings → Auth), open <strong>Admin</strong>.<span class="see">There is no Invitations card, and neither "Allowed email domain" nor "Google org sign-in" mentions invites.</span></label></li>
+      <li><input type="checkbox" id="ma4-2"><label for="ma4-2">Search the page for "invite" (Ctrl/Cmd+F).<span class="see">No matches.</span></label></li>
+    </ol>
+    <p class="report">Report: <strong>ma4-google-org-admin: pass</strong>, or the text that still mentions invites.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var KEY = "peek-collab-sharing-checks";
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { state = {}; }
+  var boxes = Array.prototype.slice.call(document.querySelectorAll("ol.steps input[type=checkbox]"));
+  var progress = document.getElementById("hn-progress");
+  function render() {
+    var done = 0;
+    boxes.forEach(function (b) {
+      b.closest("li").classList.toggle("checked", b.checked);
+      if (b.checked) done++;
+    });
+    progress.textContent = done + " of " + boxes.length + " steps done";
+  }
+  boxes.forEach(function (b) {
+    b.checked = Boolean(state[b.id]);
+    b.addEventListener("change", function () {
+      state[b.id] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable: keep in memory */ }
+      render();
+    });
+  });
+  render();
+})();
+</script>
