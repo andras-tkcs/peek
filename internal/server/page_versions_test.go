@@ -290,7 +290,7 @@ func TestRawRefusedAfterVisibilityChange(t *testing.T) {
 	if rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies)); rec.Code != http.StatusOK {
 		t.Fatalf("before change = %d, want 200", rec.Code)
 	}
-	if err := s.store.SetUploadVisibility(context.Background(), u.ID, models.UploadVisibilityPrivate, ""); err != nil {
+	if err := s.store.SetUploadVisibility(context.Background(), u.ID, models.UploadVisibilitySignedIn, ""); err != nil {
 		t.Fatal(err)
 	}
 	if rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies)); rec.Code != http.StatusForbidden {

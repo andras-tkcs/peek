@@ -56,7 +56,7 @@ For company usage, prefer OAuth/SSO with invite-only signup. Google Workspace or
 
 ## Page Access
 
-Each page has one of four visibilities: `public` (anyone with the link), `password` (link plus upload password), `private` (any signed-in Peek account), and `restricted` (only the owner, admins, and signed-in viewers matching a grant). Grants are user emails or Google group emails, managed with `peek grant`, `peek revoke` and `peek grants`, or the grants API, or the dashboard's **Access** dialog. Grants are stored for any visibility but only enforced while the page is `restricted`. They are read from the database on every view of `/p/...`, the comment API and the views API.
+Each page has one of four visibilities: `public` (anyone with the link), `password` (link plus upload password), `signed-in` (any signed-in Peek account; renamed from `private`, existing pages are migrated), and `restricted` (only the owner, admins, and signed-in viewers matching a grant). Grants are user emails or Google group emails, managed with `peek grant`, `peek revoke` and `peek grants`, or the grants API, or the dashboard's **Access** dialog. Grants are stored for any visibility but only enforced while the page is `restricted`. They are read from the database on every view of `/p/...`, the comment API and the views API.
 
 A signed-in viewer without a matching grant gets a 403 "Access denied" page naming the account they are signed in as, and the denial is written to the audit log as `page.access.denied`. Viewers who are not signed in are sent to the login page.
 
@@ -94,7 +94,7 @@ Use `/healthz` for liveness and `/readyz` for readiness; readiness verifies the 
 
 Peek logs structured JSON to stderr. Set `PEEK_LOG_LEVEL=debug`, `info`, or `warn`. Audit events are persisted in SQLite and important operational failures are logged with structured fields. Audit details are space-separated key=value fields; a value containing a space, =, a quote, a backslash or a control character is written as a Go-quoted string.
 
-`/metrics` exposes Prometheus text metrics. Set `PEEK_METRICS_TOKEN` (or `PEEK_METRICS_TOKEN_FILE`, at least 16 characters) to require `Authorization: Bearer <token>`; configure Prometheus with `authorization: { credentials_file: … }`. Without a token, protect `/metrics` at the proxy or network layer. `/readyz` returns `not ready` without details; the cause is logged as `readiness check failed`.
+`/metrics` exposes Prometheus text metrics. Set `PEEK_METRICS_TOKEN` (or `PEEK_METRICS_TOKEN_FILE`, at least 16 characters) to require `Authorization: Bearer <token>`; configure Prometheus with `authorization: { credentials_file: … }`. Without a metrics token, `/metrics` requires an admin API token; it is never served anonymously. `/readyz` returns `not ready` without details; the cause is logged as `readiness check failed`.
 
 ## Upgrades And Rollbacks
 

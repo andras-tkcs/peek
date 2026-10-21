@@ -57,7 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 
-	// Prometheus metrics (unauthenticated, for monitoring).
+	// Prometheus metrics (metrics token or admin API token).
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 
 	// Web GUI (browser-based management).

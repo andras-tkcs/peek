@@ -89,7 +89,7 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 		s.renderHTML(w, http.StatusOK, webui.TemplateGate, webui.GateData{Slug: slug, Action: pageQuery})
 		return
 	}
-	if u.Visibility == models.UploadVisibilityPrivate && !s.viewerCanAccessUpload(r, u) {
+	if u.Visibility == models.UploadVisibilitySignedIn && !s.viewerCanAccessUpload(r, u) {
 		s.setNextPath(w, nextPathWithQuery(pagePath, r.URL.RawQuery))
 		if _, err := r.Cookie(sessionCookie); err == nil {
 			s.clearCookie(w, sessionCookie, "/")
@@ -113,6 +113,13 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 		}
 		s.auditRequest(r, who, "page.access.denied", "slug="+slug)
 		s.renderWebError(w, http.StatusForbidden, "Access denied", "You are signed in as "+who+", which has not been given access to this page. Ask the page owner to share it with you.")
+		return
+	}
+	// Fail closed: any visibility the branches above do not handle (an unknown
+	// stored value) is served only to viewers viewerCanAccessUpload admits, which
+	// is nobody.
+	if !s.viewerCanAccessUpload(r, u) {
+		s.renderWebError(w, http.StatusForbidden, "Access denied", "This page is not available.")
 		return
 	}
 	if u.Visibility == models.UploadVisibilityPassword {

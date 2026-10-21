@@ -49,6 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_upload_slug_aliases_upload ON upload_slug_aliases
 	{11, "cli_login_request_context", `-- ALTER TABLE handled idempotently below`},
 	{12, "account_session_epoch", `-- ALTER TABLE handled idempotently below`},
 	{13, "comment_account_id", `-- ALTER TABLE handled idempotently below`},
+	{14, "visibility_signed_in", `UPDATE uploads SET visibility='signed-in' WHERE visibility='private'`},
 }
 
 func (s *Store) runMigrations() error {

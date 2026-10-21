@@ -79,7 +79,7 @@ uid `65532`.
 | `--retention-days` | `PEEK_RETENTION_DAYS` | `0` | Auto-delete uploads older than N days (`0` = off) |
 | `--trusted-proxy` | `PEEK_TRUSTED_PROXY` | `false` | Trust `X-Forwarded-For` for analytics/audit IPs. Enable only behind your reverse proxy. |
 | `--trusted-proxy-cidrs` | `PEEK_TRUSTED_PROXY_CIDRS` | `127.0.0.0/8,::1/128` | Proxies allowed to set `X-Forwarded-For` (with `--trusted-proxy`) |
-| `--metrics-token` | `PEEK_METRICS_TOKEN` | *(empty)* | Bearer token (at least 16 characters) required on `/metrics`. Or `PEEK_METRICS_TOKEN_FILE` with the path to a file. |
+| `--metrics-token` | `PEEK_METRICS_TOKEN` | *(empty)* | Bearer token (at least 16 characters) for `/metrics`; when empty an admin API token is required. Or `PEEK_METRICS_TOKEN_FILE` with the path to a file. |
 | `--storage` | `PEEK_STORAGE` | `file` | Storage backend: `file` or `s3` |
 | `--s3-endpoint` | `PEEK_S3_ENDPOINT` | *(empty)* | S3-compatible endpoint URL |
 | `--s3-bucket` | `PEEK_S3_BUCKET` | *(empty)* | S3 bucket name |
@@ -166,16 +166,15 @@ peek delete-all      # delete every upload owned by the configured token
 ```sh
 curl -fsS http://127.0.0.1:7700/healthz
 curl -fsS http://127.0.0.1:7700/readyz
-curl -fsS http://127.0.0.1:7700/metrics
+curl -fsS -H "Authorization: Bearer $PEEK_METRICS_TOKEN" http://127.0.0.1:7700/metrics
 
 PEEK_DATA=./data peekd backup ./peek-backup.db
 ```
 
 `/healthz` is liveness, `/readyz` checks database reachability, and `/metrics`
-emits Prometheus text metrics. Set `--metrics-token` (or
-`PEEK_METRICS_TOKEN_FILE`) to require `Authorization: Bearer <token>` on
-`/metrics`, or protect it at the reverse proxy if the server is reachable from
-untrusted networks.
+emits Prometheus text metrics and always needs `Authorization: Bearer <token>`:
+the `--metrics-token` (or `PEEK_METRICS_TOKEN_FILE`) value when set, otherwise
+an admin API token.
 
 ## Deployment
 

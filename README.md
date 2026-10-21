@@ -82,7 +82,7 @@ docker compose --profile s3 up -d # with MinIO storage
 - **In-context review**: pinned, text-anchored, and page-level comments with numbered on-page markers. Click a comment to jump back to its anchor.
 - **Safe HTML previews**: uploaded pages render in a sandboxed iframe (`sandbox="allow-scripts"`, no `allow-same-origin`) so they cannot read Peek cookies, call the server as the user, or touch the parent page.
 - **Terminal and browser workflows**: upload, list, delete, change visibility, inspect comments, and view stats from the CLI or web dashboard.
-- **Access controls for internal teams**: public links, password-gated pages, private account-only pages, restricted pages with per-user and Google group grants, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, Google org sign-in (no invites), allowed login email domain, token expiry, and admin-managed users.
+- **Access controls for internal teams**: public links, password-gated pages, signed-in-user pages (any active Peek account), restricted pages with per-user and Google group grants, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, Google org sign-in (no invites), allowed login email domain, token expiry, and admin-managed users.
 - **Operational basics included**: health/readiness checks, structured JSON logging, Prometheus metrics, audit log, quota and retention controls, consistent SQLite backup, file or S3-compatible storage, and S3 endpoint SSRF protection.
 - **Small deployment footprint**: one static Go binary, pure-Go SQLite, no runtime dependencies.
 
@@ -96,7 +96,7 @@ Open `/p/<slug>` and use the floating island at the bottom:
 2. Click Comment, then click any element to pin a comment to it.
 3. Or leave a page-level note not tied to anything.
 
-Comments live in a side panel. Your name is asked once and remembered. Public pages are open to anyone with the link, password pages gate commenting behind the same password session, private pages require an active Peek account, and restricted pages require an account matching a grant. Comments belong to the version they were written on.
+Comments live in a side panel. Your name is asked once and remembered. Public pages are open to anyone with the link, password pages gate commenting behind the same password session, signed-in pages require an active Peek account, and restricted pages require an account matching a grant. Comments belong to the version they were written on.
 
 ## CLI reference
 
@@ -107,7 +107,7 @@ peek login --token-file <path>         read an access token from a file
 peek config set --host <url>           set the configured server
 peek config show                       show current host + masked token
 peek upload <file.html> --visibility public [--name <filename>]
-peek upload <file.html> --visibility private [--name <filename>]
+peek upload <file.html> --visibility signed-in [--name <filename>]
 peek upload <file.html> --visibility restricted [--name <filename>]
 peek upload <file.html> --slug <slug>   upload a new version of an existing page
 peek upload <file.html> --visibility password --password <pw> [--name <filename>]
@@ -116,7 +116,7 @@ peek list
 peek delete <slug>
 peek delete-all                        delete all your uploads
 peek visibility <slug> public          make an upload link-accessible
-peek visibility <slug> private         require a Peek account
+peek visibility <slug> signed-in      require a Peek account
 peek visibility <slug> password --password <pw>
 peek visibility <slug> password --password-stdin
 peek visibility <slug> restricted      only the owner, admins and grantees
@@ -134,7 +134,7 @@ peek token revoke <id>                 revoke a token by id (admin only)
 peek version                           show version
 ```
 
-Upload visibility is set at creation time with `--visibility public|password|private|restricted`. Password uploads require `--password` or `--password-stdin`; `peek upload <file.html> --password <pw>` is also accepted as shorthand for password visibility. Use `peek visibility <slug> public` to remove the password gate and make the link public again, or `peek visibility <slug> private` to require a Peek account. Restricted pages admit only the owner, admins and signed-in viewers matching a grant (`peek grant`); group grants need the `PEEK_GOOGLE_*` settings below. Re-uploading with `--slug` adds a version: `/p/<slug>` serves the latest and `/p/<slug>/v/<n>` any retained version. Setting a new password signs out viewers who unlocked the page with the old one. `peek rename <slug> <new name>` renames a page; its link follows the name and old links redirect. The dashboard's **Access** row action does all of this from the browser.
+Upload visibility is set at creation time with `--visibility public|password|signed-in|restricted`. Password uploads require `--password` or `--password-stdin`; `peek upload <file.html> --password <pw>` is also accepted as shorthand for password visibility. Use `peek visibility <slug> public` to remove the password gate and make the link public again, or `peek visibility <slug> signed-in` to require a Peek account (the old name `private` is still accepted). Restricted pages admit only the owner, admins and signed-in viewers matching a grant (`peek grant`); group grants need the `PEEK_GOOGLE_*` settings below. Re-uploading with `--slug` adds a version: `/p/<slug>` serves the latest and `/p/<slug>/v/<n>` any retained version. Setting a new password signs out viewers who unlocked the page with the old one. `peek rename <slug> <new name>` renames a page; its link follows the name and old links redirect. The dashboard's **Access** row action does all of this from the browser.
 
 Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env override for CI (with a key from Dashboard → API keys), `peek login --token-stdin`, then `peek login --token-file <path>`. The `--token <value>` flag still works where token login is allowed but warns because it leaks into shell history and process lists.
 
@@ -153,7 +153,7 @@ Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env o
 | `--retention-days` | `PEEK_RETENTION_DAYS` | `0` | Auto-delete uploads older than N days (`0` = off) |
 | `--trusted-proxy` | `PEEK_TRUSTED_PROXY` | `false` | Trust `X-Forwarded-For` for analytics/audit IPs |
 | `--trusted-proxy-cidrs` | `PEEK_TRUSTED_PROXY_CIDRS` | `127.0.0.0/8,::1/128` | Proxies allowed to set `X-Forwarded-For` (with `--trusted-proxy`) |
-| `--metrics-token` | `PEEK_METRICS_TOKEN` | _(empty)_ | Bearer token (at least 16 characters) required on `/metrics`. Or `PEEK_METRICS_TOKEN_FILE` with the path to a file. |
+| `--metrics-token` | `PEEK_METRICS_TOKEN` | _(empty)_ | Bearer token (at least 16 characters) for `/metrics`; when empty, an admin API token is required instead. Or `PEEK_METRICS_TOKEN_FILE` with the path to a file. |
 | `--storage` | `PEEK_STORAGE` | `file` | Storage backend: `file` or `s3` |
 | `--s3-endpoint` | `PEEK_S3_ENDPOINT` | _(empty)_ | S3-compatible endpoint URL |
 | `--s3-bucket` | `PEEK_S3_BUCKET` | _(empty)_ | S3 bucket name |
@@ -220,7 +220,7 @@ Operational endpoints:
 | `/readyz` | Readiness check |
 | `/metrics` | Prometheus text metrics |
 
-Set `--metrics-token` (or `PEEK_METRICS_TOKEN_FILE`) to require a bearer token on `/metrics`, or protect it at your proxy. Full deployment checklist: [docs/operations.md](docs/operations.md).
+`/metrics` is never anonymous: send `Authorization: Bearer <token>` with the `--metrics-token` value (or `PEEK_METRICS_TOKEN_FILE`), or with an admin API token when no metrics token is set. Full deployment checklist: [docs/operations.md](docs/operations.md).
 
 ## Web dashboard
 

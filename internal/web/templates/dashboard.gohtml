@@ -59,8 +59,8 @@
         <input type="text" name="name" placeholder="name (optional)" class="flex-1 h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
       </div>
       <div class="inline-flex gap-0.5 self-start rounded-lg bg-muted p-0.5">
-        <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="visibility === 'private' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
-          <input type="radio" name="visibility" value="private" x-model="visibility" class="sr-only"> Private
+        <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="visibility === 'signed-in' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
+          <input type="radio" name="visibility" value="signed-in" x-model="visibility" class="sr-only"> Signed-in users
         </label>
         <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="visibility === 'restricted' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
           <input type="radio" name="visibility" value="restricted" x-model="visibility" class="sr-only"> Restricted
@@ -117,8 +117,8 @@
                     <input type="hidden" name="csrf" value="{{$.CSRF}}">
                     <h3 id="hn-visibility-title-{{.Slug}}" class="text-sm font-semibold text-card-foreground">Access for /p/{{.Slug}}</h3>
                     <div class="inline-flex gap-0.5 self-start rounded-lg bg-muted p-0.5">
-                      <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="vis === 'private' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
-                        <input type="radio" name="visibility" value="private" x-model="vis" class="sr-only"> Private
+                      <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="vis === 'signed-in' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
+                        <input type="radio" name="visibility" value="signed-in" x-model="vis" class="sr-only"> Signed-in users
                       </label>
                       <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="vis === 'restricted' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
                         <input type="radio" name="visibility" value="restricted" x-model="vis" class="sr-only"> Restricted

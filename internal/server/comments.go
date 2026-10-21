@@ -294,7 +294,7 @@ func (s *Server) viewerCanAccessUpload(r *http.Request, u *models.Upload) bool {
 			return false
 		}
 		return verifyPageAuthCookie(s.secret, c.Value, u.Slug, u.PasswordHash)
-	case models.UploadVisibilityPrivate:
+	case models.UploadVisibilitySignedIn:
 		_, ok := s.webAuth(r)
 		return ok
 	case models.UploadVisibilityRestricted:
@@ -307,7 +307,7 @@ func (s *Server) viewerCanAccessUpload(r *http.Request, u *models.Upload) bool {
 
 func uploadAccessRequiredMessage(u *models.Upload) string {
 	switch u.Visibility {
-	case models.UploadVisibilityPrivate:
+	case models.UploadVisibilitySignedIn:
 		return "login required"
 	case models.UploadVisibilityRestricted:
 		return "access denied"

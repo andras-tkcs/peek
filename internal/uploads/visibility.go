@@ -20,10 +20,13 @@ type VisibilityChange struct {
 // own default before calling this.
 func PrepareVisibility(visibility, password string) (VisibilityChange, error) {
 	visibility = strings.TrimSpace(visibility)
+	if visibility == models.LegacyVisibilityPrivate {
+		visibility = models.UploadVisibilitySignedIn
+	}
 	password = strings.TrimSpace(password)
 
 	switch visibility {
-	case models.UploadVisibilityPublic, models.UploadVisibilityPrivate, models.UploadVisibilityRestricted:
+	case models.UploadVisibilityPublic, models.UploadVisibilitySignedIn, models.UploadVisibilityRestricted:
 		if password != "" {
 			return VisibilityChange{}, newError(KindPasswordNotAllowed, "password is only allowed with password visibility")
 		}
@@ -33,7 +36,7 @@ func PrepareVisibility(visibility, password string) (VisibilityChange, error) {
 			return VisibilityChange{}, newError(KindPasswordRequired, "password visibility requires a password")
 		}
 	default:
-		return VisibilityChange{}, newError(KindInvalidVisibility, "visibility must be public, password, private, or restricted")
+		return VisibilityChange{}, newError(KindInvalidVisibility, "visibility must be public, password, signed-in, or restricted")
 	}
 
 	if !ValidatePasswordLength(password) {

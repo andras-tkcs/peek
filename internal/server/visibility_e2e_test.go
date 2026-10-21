@@ -102,8 +102,8 @@ func TestUploadVisibilityE2E(t *testing.T) {
 		addComment(t, app, up.Slug, []*http.Cookie{newCookie}, http.StatusUnauthorized)
 	})
 
-	t.Run("private requires active non-owner account", func(t *testing.T) {
-		up := uploadRawHTML(t, app, "private-page", "private")
+	t.Run("signed-in requires active non-owner account", func(t *testing.T) {
+		up := uploadRawHTML(t, app, "signed-in-page", "signed-in")
 		viewerToken := createAPIToken(t, app, "private-viewer")
 
 		blocked := app.request(t, http.MethodGet, "/p/"+up.Slug, nil)

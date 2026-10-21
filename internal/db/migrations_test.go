@@ -280,3 +280,22 @@ func TestMigrationsFailOnClosedStore(t *testing.T) {
 		}
 	}
 }
+
+func TestMigrationRenamesPrivateVisibilityToSignedIn(t *testing.T) {
+	path := migCovPrepare(t, 14,
+		`INSERT INTO accounts(id,name,created_at,updated_at) VALUES(1,'a',1,1)`,
+		`INSERT INTO uploads(slug,owner_account_id,filename,size,visibility,created_at) VALUES('was-private',1,'a.html',1,'private',1)`,
+		`INSERT INTO uploads(slug,owner_account_id,filename,size,visibility,created_at) VALUES('was-public',1,'b.html',1,'public',1)`,
+		`INSERT INTO uploads(slug,owner_account_id,filename,size,visibility,created_at) VALUES('was-restricted',1,'c.html',1,'restricted',1)`)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for slug, want := range map[string]string{"was-private": "signed-in", "was-public": "public", "was-restricted": "restricted"} {
+		var got string
+		if err := s.QueryRow(`SELECT visibility FROM uploads WHERE slug=?`, slug).Scan(&got); err != nil || got != want {
+			t.Fatalf("%s visibility = %q (err %v), want %q", slug, got, err, want)
+		}
+	}
+}

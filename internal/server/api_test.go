@@ -325,10 +325,11 @@ func TestSetVisibilityAPIValidation(t *testing.T) {
 	}{
 		{"password without value", `{"visibility":"password"}`, http.StatusBadRequest, "password visibility requires a password"},
 		{"password with public", `{"visibility":"public","password":"x"}`, http.StatusBadRequest, "password is only allowed with password visibility"},
-		{"unknown visibility", `{"visibility":"nope"}`, http.StatusBadRequest, "visibility must be public, password, private, or restricted"},
+		{"unknown visibility", `{"visibility":"nope"}`, http.StatusBadRequest, "visibility must be public, password, signed-in, or restricted"},
 		{"password too long", `{"visibility":"password","password":"` + strings.Repeat("a", 73) + `"}`, http.StatusBadRequest, "password must be 72 characters or fewer"},
 		{"restricted", `{"visibility":"restricted"}`, http.StatusOK, `"visibility":"restricted"`},
-		{"private", `{"visibility":"private"}`, http.StatusOK, `"visibility":"private"`},
+		{"signed-in", `{"visibility":"signed-in"}`, http.StatusOK, `"visibility":"signed-in"`},
+		{"legacy private alias", `{"visibility":"private"}`, http.StatusOK, `"visibility":"signed-in"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

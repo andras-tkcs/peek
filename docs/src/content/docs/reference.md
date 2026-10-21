@@ -17,7 +17,7 @@ kicker: peekd reference
 | `--retention-days` | `PEEK_RETENTION_DAYS` | `0` | Delete uploads older than N days. `0` disables. |
 | `--trusted-proxy` | `PEEK_TRUSTED_PROXY` | `false` | Trust `X-Forwarded-For` for analytics and audit IP fields. |
 | `--trusted-proxy-cidrs` | `PEEK_TRUSTED_PROXY_CIDRS` | `127.0.0.0/8,::1/128` | Proxies allowed to set `X-Forwarded-For` (with `--trusted-proxy`). |
-| `--metrics-token` | `PEEK_METRICS_TOKEN` | empty | Bearer token required on `/metrics`, at least 16 characters. Or `PEEK_METRICS_TOKEN_FILE` with the path to a file; setting both is an error. Empty leaves `/metrics` unauthenticated. |
+| `--metrics-token` | `PEEK_METRICS_TOKEN` | empty | Bearer token required on `/metrics`, at least 16 characters. Or `PEEK_METRICS_TOKEN_FILE` with the path to a file; setting both is an error. When empty, `/metrics` requires an admin API token; it is never anonymous. |
 | `--storage` | `PEEK_STORAGE` | `file` | Storage backend: `file` or `s3`. |
 | `--s3-endpoint` | `PEEK_S3_ENDPOINT` | empty | S3-compatible endpoint URL. |
 | `--s3-bucket` | `PEEK_S3_BUCKET` | empty | S3 bucket name. Must be DNS-compatible (3–63 lowercase letters, digits, dots, hyphens); the SSRF guard also blocks CGNAT, NAT64/6to4/Teredo, benchmarking, multicast and reserved ranges. |
@@ -86,9 +86,9 @@ peek login --token <value>
 ## CLI Commands
 
 ```text
-peek upload <file.html> [--visibility public|password|private|restricted] [--password <pw> | --password-stdin] [--name <filename>]
+peek upload <file.html> [--visibility public|password|signed-in|restricted] [--password <pw> | --password-stdin] [--name <filename>]
 peek upload <file.html> --slug <slug>
-peek visibility <slug> public|private|password|restricted [--password <pw> | --password-stdin]
+peek visibility <slug> public|signed-in|password|restricted [--password <pw> | --password-stdin]
 peek rename <slug> <new name>
 peek grant <slug> <email> [--group]
 peek revoke <slug> <email> [--group]
@@ -136,7 +136,7 @@ curl -s -X POST -H "Authorization: Bearer $PEEK_TOKEN" \
 | --- | --- |
 | `/healthz` | Liveness. |
 | `/readyz` | Readiness, including database reachability. Failures answer `not ready` without details; the cause is logged. |
-| `/metrics` | Prometheus text metrics. Requires `Authorization: Bearer <token>` when `--metrics-token` is set; otherwise protect it before exposing Peek outside a trusted network. |
+| `/metrics` | Prometheus text metrics. Requires `Authorization: Bearer <token>`: the `--metrics-token` value when set, otherwise an admin API token. |
 | `/setup` | First-run setup only. Closes after the first account exists. |
 | `/oauth/google/callback` | Google OAuth callback. |
 | `/oauth/github/callback` | GitHub OAuth callback. |

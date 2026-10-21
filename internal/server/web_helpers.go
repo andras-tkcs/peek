@@ -103,7 +103,7 @@ var flashMessages = map[string]string{
 
 	"upload_empty_file":             "empty file",
 	"upload_invalid_html":           "file does not look like HTML",
-	"upload_invalid_visibility":     "visibility must be public, password, private, or restricted",
+	"upload_invalid_visibility":     "visibility must be public, password, signed-in, or restricted",
 	"upload_password_required":      "password visibility requires a password",
 	"upload_password_not_allowed":   "password is only allowed with password visibility",
 	"upload_password_too_long":      "password must be 72 characters or fewer",

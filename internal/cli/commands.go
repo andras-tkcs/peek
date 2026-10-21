@@ -76,13 +76,13 @@ Usage:
   peek config show
   peek upload <file.html> --password <pw> [--name <filename>]
   peek upload <file.html> --password-stdin
-  peek upload <file.html> --visibility public|private
+  peek upload <file.html> --visibility public|signed-in
   peek upload <file.html> --visibility restricted
   peek upload <file.html> --slug <slug>        upload a new version of an existing page
   peek list
   peek delete <slug>
   peek visibility <slug> public
-  peek visibility <slug> private
+  peek visibility <slug> signed-in
   peek visibility <slug> restricted
   peek visibility <slug> password --password <pw>
   peek visibility <slug> password --password-stdin

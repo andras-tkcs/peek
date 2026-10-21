@@ -83,7 +83,7 @@ volumes:
       claimName: peek-data
 ```
 
-Use a `ReadWriteOnce` claim unless your storage class and SQLite operating model have been deliberately tested. Set `PEEK_BASE_URL` to the public Ingress URL and set `PEEK_METRICS_TOKEN` (or `PEEK_METRICS_TOKEN_FILE`) to require a bearer token on `/metrics`, and protect it at the Ingress or network layer.
+Use a `ReadWriteOnce` claim unless your storage class and SQLite operating model have been deliberately tested. Set `PEEK_BASE_URL` to the public Ingress URL and set `PEEK_METRICS_TOKEN` (or `PEEK_METRICS_TOKEN_FILE`) to set the bearer token for `/metrics` (without it, an admin API token is required).
 
 ## Sources
 

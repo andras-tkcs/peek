@@ -31,7 +31,7 @@ Visibility is a review policy, not a storage location.
 | --- | --- | --- |
 | `public` | Anyone with the link | Fast internal sharing where the URL itself is enough control. |
 | `password` | Anyone with the link and upload password | Sharing outside the signed-in group without creating accounts. |
-| `private` | Signed-in Peek users | Internal reports that should stay behind the company login surface. |
+| `signed-in` | Any signed-in Peek user (the whole organisation when Google org sign-in is on; use `restricted` for named people only) | Internal reports that should stay behind the company login surface. |
 | `restricted` | Owner, admins, and signed-in users matching a grant | Reports for a named person or Google group. |
 
 Change visibility after upload when the audience changes:
@@ -39,7 +39,7 @@ Change visibility after upload when the audience changes:
 ```sh
 peek visibility <slug> public
 peek visibility <slug> password --password newpass
-peek visibility <slug> private
+peek visibility <slug> signed-in
 peek visibility <slug> restricted
 peek rename <slug> "New name"
 ```
@@ -130,7 +130,7 @@ peek login --host https://peek.example.com
 Common user commands:
 
 ```text
-peek upload <file.html> --visibility public|password|private|restricted
+peek upload <file.html> --visibility public|password|signed-in|restricted
 peek upload <file.html> --slug <slug>
 peek versions <slug>
 peek grant|revoke <slug> <email> [--group]
@@ -139,7 +139,7 @@ peek list
 peek stats <slug>
 peek comments <slug> [--version <n>]
 peek export <slug>
-peek visibility <slug> public|password|private|restricted
+peek visibility <slug> public|password|signed-in|restricted
 peek rename <slug> <new name>
 peek delete <slug>
 peek delete-all

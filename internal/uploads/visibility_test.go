@@ -9,7 +9,7 @@ import (
 )
 
 func TestPrepareVisibility(t *testing.T) {
-	const invalidMsg = "visibility must be public, password, private, or restricted"
+	const invalidMsg = "visibility must be public, password, signed-in, or restricted"
 	cases := []struct {
 		name       string
 		visibility string
@@ -18,7 +18,7 @@ func TestPrepareVisibility(t *testing.T) {
 		msg        string
 	}{
 		{name: "public", visibility: "public"},
-		{name: "private", visibility: "private"},
+		{name: "signed-in", visibility: "signed-in"},
 		{name: "restricted", visibility: "restricted"},
 		{name: "public with password", visibility: "public", password: "x", kind: KindPasswordNotAllowed},
 		{name: "restricted with password", visibility: "restricted", password: "x", kind: KindPasswordNotAllowed},
@@ -60,6 +60,19 @@ func TestPrepareVisibility(t *testing.T) {
 		}
 		if err := bcrypt.CompareHashAndPassword([]byte(got.PasswordHash), []byte("pw")); err != nil {
 			t.Fatalf("hash does not match trimmed password: %v", err)
+		}
+	})
+
+	t.Run("legacy private is stored as signed-in", func(t *testing.T) {
+		got, err := PrepareVisibility(" private ", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Visibility != "signed-in" || got.PasswordHash != "" {
+			t.Fatalf("got %+v, want signed-in with empty hash", got)
+		}
+		if _, err := PrepareVisibility("private", "x"); err == nil {
+			t.Fatal("private with a password must still be rejected")
 		}
 	})
 }

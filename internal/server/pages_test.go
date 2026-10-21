@@ -135,7 +135,7 @@ func TestPrivatePageRequiresActiveWebSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "private", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", "", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -457,7 +457,7 @@ func TestPageCovPageVersionMissingUpload(t *testing.T) {
 
 func TestPageCovStaleSessionCookieIsCleared(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "priv", "private", "", "<html></html>")
+	pageCovSeed(t, s, token, "priv", "signed-in", "", "<html></html>")
 	pageCovSeed(t, s, token, "restr", "restricted", "", "<html></html>")
 	for _, slug := range []string{"priv", "restr"} {
 		rec := doRequest(t, s, http.MethodGet, "/p/"+slug+"?x=1", nil, func(r *http.Request) {
