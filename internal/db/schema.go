@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS uploads (
 	owner_token_id INTEGER REFERENCES tokens(id),
 	filename TEXT NOT NULL,
 	size INTEGER NOT NULL,
-	visibility TEXT NOT NULL DEFAULT 'password',
+	visibility TEXT NOT NULL DEFAULT 'restricted',
 	password_hash TEXT NOT NULL DEFAULT '',
 	created_at INTEGER NOT NULL
 );
