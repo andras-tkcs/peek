@@ -37,7 +37,6 @@ func TestCmdDeleteSendsAuthenticatedDelete(t *testing.T) {
 func TestCmdVisibilitySendsSetVisibilityRequest(t *testing.T) {
 	type requestBody struct {
 		Visibility string `json:"visibility"`
-		Password   string `json:"password"`
 	}
 	seen := make(chan requestBody, 1)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -60,25 +59,38 @@ func TestCmdVisibilitySendsSetVisibilityRequest(t *testing.T) {
 		}
 		seen <- body
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"visibility": "password"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"visibility": "restricted"})
 	}))
 	defer ts.Close()
 	configureTestClient(t, ts.URL)
 
 	if _, err := captureStdout(t, func() error {
-		return cmdVisibility([]string{"page", "password", "--password", "secret"})
+		return cmdVisibility([]string{"page", "restricted"})
 	}); err != nil {
 		t.Fatalf("cmdVisibility: %v", err)
 	}
-	if got := <-seen; got.Visibility != "password" || got.Password != "secret" {
+	if got := <-seen; got.Visibility != "restricted" {
 		t.Fatalf("request body = %+v", got)
 	}
 }
 
-func TestCmdVisibilityRejectsConflictingOptions(t *testing.T) {
-	err := cmdVisibility([]string{"page", "password", "--password", "secret", "--password-stdin"})
-	if err == nil {
-		t.Fatal("expected conflict error")
+func TestVisibilityPasswordFlagRemoved(t *testing.T) {
+	var requests int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests++ }))
+	defer ts.Close()
+	configureTestClient(t, ts.URL)
+	for _, args := range [][]string{
+		{"page", "restricted", "--password", "secret"},
+		{"page", "restricted", "--password-stdin"},
+	} {
+		flag := args[2]
+		want := flag + " is no longer supported: password-protected pages were removed; use --visibility restricted and 'peek grant'"
+		if err := cmdVisibility(args); err == nil || err.Error() != want {
+			t.Fatalf("%v: error = %v, want %q", args, err, want)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("requests = %d, want 0", requests)
 	}
 }
 
@@ -164,27 +176,5 @@ func TestCmdRenameSendsRenameRequest(t *testing.T) {
 	}
 	if err := cmdRename([]string{"page"}); err == nil || !strings.Contains(err.Error(), "usage: peek rename") {
 		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestCmdVisibilityWarnsAboutPasswordFlag(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"visibility": "password"})
-	}))
-	defer ts.Close()
-	configureTestClient(t, ts.URL)
-
-	stderr, err := captureStderr(t, func() error {
-		_, err := captureStdout(t, func() error {
-			return cmdVisibility([]string{"page", "password", "--password", "secret"})
-		})
-		return err
-	})
-	if err != nil {
-		t.Fatalf("cmdVisibility: %v", err)
-	}
-	if !strings.Contains(stderr, "--password is exposed") {
-		t.Fatalf("stderr = %q", stderr)
 	}
 }

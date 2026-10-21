@@ -74,8 +74,7 @@ Usage:
   peek login --token-stdin              read an access token from stdin
   peek config set --host <url>          set host (use 'login' / --token-stdin for the token)
   peek config show
-  peek upload <file.html> --password <pw> [--name <filename>]
-  peek upload <file.html> --password-stdin
+  peek upload <file.html> [--name <filename>]
   peek upload <file.html> --visibility public|signed-in
   peek upload <file.html> --visibility restricted
   peek upload <file.html> --slug <slug>        upload a new version of an existing page
@@ -84,8 +83,6 @@ Usage:
   peek visibility <slug> public
   peek visibility <slug> signed-in
   peek visibility <slug> restricted
-  peek visibility <slug> password --password <pw>
-  peek visibility <slug> password --password-stdin
   peek rename <slug> <new name>        rename a page; its link follows the name and old links redirect
   peek grant <slug> <email> [--group]  give a user (or Google group) access to a restricted page
   peek revoke <slug> <email> [--group] remove a grant
