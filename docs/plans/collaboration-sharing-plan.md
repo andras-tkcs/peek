@@ -7,6 +7,7 @@ Make Peek feel like a collaboration tool for one organization rather than a link
 - The dashboard lists a page by its **title only**. The copy-link icon and the `/p/<slug>` text are gone, because the row was too dense.
 - The dashboard also lists the pages **shared with me**: restricted pages that have a grant for my email address or for a Google group I belong to. An icon on each row says whether I **own** the page (I can edit it), whether I can edit it **as an admin**, or whether it is only **shared with me** (view only).
 - Sharing a restricted page **sends a notification email** with the link to each new grantee. Switching a page to restricted emails everyone who already has a grant. Email is sent over SMTP, which admins configure on a new **Email** tab of the Admin page. That tab has a **Send test email** button.
+- The dashboard upload card gets a third mode, **Empty page**: type a name and click **Create page** to get a new page that holds a minimal HTML document titled with that name. You can then upload versions to it.
 - The **password** visibility goes away everywhere (dashboard, API, CLI, page gate). A migration turns existing password pages into restricted pages. The new default visibility is **restricted**.
 - With **Google org sign-in** on, the Admin page no longer mentions invites anywhere. The Invitations card is already hidden today (`internal/web/templates/admin.gohtml:30`, since 7bdcb18); what is left is setting help text that still talks about invites.
 
@@ -229,7 +230,23 @@ Rejected: Gmail API through the Workspace service account (Google-only, needs an
 - Dashboard feedback: on a send error the redirect carries both the success code and `err=share_notify_failed`, with the message `saved, but the notification email could not be sent`. On success, or when email is off, it is unchanged. `resolveFlash` already shows both `Error` and `Success`.
 - API: `POST /api/uploads/{slug}/grants` answers `grantAddOut{grantOut; Notified bool `json:"notified"`}` (the embedded struct flattens into the JSON). `PUT /api/uploads/{slug}/visibility` answers `{"visibility": v, "notified": bool}`. A send error never changes the status code (still 200).
 
-### 3.6 Non-goals
+### 3.6 New empty page from the dashboard
+
+- The mode toggle of the upload card (`dashboard.gohtml`, radios `name="mode"`) gets a third option after **Paste HTML**: `<input type="radio" name="mode" value="empty" x-model="mode" class="sr-only"> Empty page`, styled like the other two.
+- In empty mode the file picker and textarea are hidden (they are already `x-show` on `mode`). The name input gets `x-model="name"`, its placeholder is `page name` (instead of `name (optional)`) and it is `:required="mode === 'empty'"`. The submit button's text is `Create page` in empty mode and `Upload &amp; get link` otherwise (`x-text`).
+- `dashboard-alpine.js`: the state gains `name: ""`, and `canUpload()` returns `this.name.trim() !== ""` when `this.mode === "empty"`.
+- `handleDashboardUpload`: `mode == "empty"` → if `name == ""`, `dashboardError(w, r, "upload_name_required")` (that flash code already exists). Otherwise `data = []byte(emptyPageHTML(name))`, and the request goes through the same `uploadService().Create` path with the selected visibility (default restricted), the same audit (`upload.create`) and the same `dashboardUploaded` redirect.
+  ```go
+  // emptyPageHTML is the starter document of a page created empty from the dashboard.
+  func emptyPageHTML(name string) string {
+  	return "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>" + html.EscapeString(name) + "</title>\n</head>\n<body>\n</body>\n</html>\n"
+  }
+  ```
+  (`html` is the standard library `html` package.) This passes `looksLikeHTML` (`internal/uploads/validate.go`), so no domain change is needed.
+
+Rejected: a separate "New page" button and dialog (it repeats the visibility picker; a third mode reuses the form).
+
+### 3.7 Non-goals
 
 No change to `GET /api/uploads` or `peek list` (they still list owned pages only). No email on invites. No HTML email. No per-user opt-out.
 
@@ -435,6 +452,27 @@ phases:
       - grep -rn '"password"' internal/web/assets/dashboard-alpine.js internal/web/assets/app.js prints nothing
       - mise run check passes
 
+  - id: p5b-empty-page
+    title: "Dashboard: create a new empty page with a given name"
+    depends_on: [p5-dashboard-pages]
+    complexity: S
+    touches:
+      - internal/server/web_dashboard.go
+      - internal/server/web_dashboard_test.go
+      - internal/web/templates/dashboard.gohtml
+      - internal/web/assets/dashboard-alpine.js
+    brief: |
+      Read Design 3.6 of docs/plans/collaboration-sharing-plan.md; it fixes the markup, the strings and `emptyPageHTML`.
+      1. internal/server/web_dashboard.go: add `emptyPageHTML` and the `mode == "empty"` branch in `handleDashboardUpload`, before the file branch, as specified.
+      2. internal/web/templates/dashboard.gohtml: add the third mode option, the name input changes and the button text from Design 3.6. Use only classes that already appear in the template, so pines.css does not change. Stop with status=blocked if `mise run build` changes internal/web/assets/pines.css.
+      3. internal/web/assets/dashboard-alpine.js: add `name: ""` and the empty-mode clause of `canUpload`.
+      4. Tests in internal/server/web_dashboard_test.go (copy the setup of the existing dashboard upload test): `TestDashboardCreateEmptyPage` (mode=empty, name "Q3 notes", no visibility field sent → 303 with uploaded=<slug>; the stored upload has name "Q3 notes" and visibility restricted, and its object bytes equal emptyPageHTML("Q3 notes")); `TestDashboardCreateEmptyPageRequiresName` (mode=empty, blank name → redirect with err=upload_name_required, no upload created); `TestEmptyPageHTMLEscapesName` (emptyPageHTML("<b>&") contains `<title>&lt;b&gt;&amp;</title>`); `TestDashboardHasEmptyPageMode` (the dashboard body contains `value="empty"`).
+      5. Run `mise run check`.
+    acceptance:
+      - go test ./internal/server -run '^(TestDashboardCreateEmptyPage|TestDashboardCreateEmptyPageRequiresName|TestEmptyPageHTMLEscapesName|TestDashboardHasEmptyPageMode)$' -count=1 passes
+      - git diff --stat origin/feat/collaboration-sharing -- internal/web/assets/pines.css prints nothing
+      - mise run check passes
+
   - id: p6-smtp-settings
     title: SMTP settings on the Admin page, a test-email button, and invite-free wording under Google org sign-in
     depends_on: [p4-mail-package, p5-dashboard-pages]
@@ -469,7 +507,7 @@ phases:
 
   - id: p7-share-notifications
     title: Email grantees when a restricted page is shared or switched to restricted
-    depends_on: [p6-smtp-settings]
+    depends_on: [p6-smtp-settings, p5b-empty-page]
     complexity: M
     touches:
       - internal/db/grants.go
@@ -502,7 +540,7 @@ phases:
 
   - id: p8-docs-and-retire
     title: Update docs, skills and scripts for the new sharing model; delete the plan
-    depends_on: [p1-remove-password-gate, p2-remove-password-input, p3-cli-drop-password, p4-mail-package, p5-dashboard-pages, p6-smtp-settings, p7-share-notifications]
+    depends_on: [p1-remove-password-gate, p2-remove-password-input, p3-cli-drop-password, p4-mail-package, p5-dashboard-pages, p5b-empty-page, p6-smtp-settings, p7-share-notifications]
     complexity: M
     touches:
       - README.md
@@ -515,10 +553,10 @@ phases:
       - docs/plans/collaboration-sharing-plan.md
       - docs/plans/collaboration-sharing-plan-manual-steps.html
     brief: |
-      Read Design 3.1–3.6 of docs/plans/collaboration-sharing-plan.md and the code as merged. Write prose as natural lines without manual wrapping (AGENTS.md).
+      Read Design 3.1–3.7 of docs/plans/collaboration-sharing-plan.md and the code as merged. Write prose as natural lines without manual wrapping (AGENTS.md).
       1. docs/operations.md: Page Access lists three visibilities (public, signed-in, restricted) and drops the password text, including the page-gate lockout sentence in Startup Configuration (keep the account sign-in lockout). Add an "Email" section: the smtp_* settings, the on-condition (host + From), the TLS modes and that PLAIN auth needs TLS unless the host is localhost, the test button, when share emails are sent and that send failures are logged and audited as upload.share.notify. Add to Google Group Grants that the dashboard's shared-with-me list checks at most 25 groups per render, each a cached lookup of up to 5 s. Under Upgrades And Rollbacks: migration 15 turns password pages into restricted pages (owner and admins only until shared); a rollback cannot restore them as password pages; the CLI's --password flags are gone and the default visibility is restricted.
       2. docs/architecture.md: add `internal/mail` to Package Boundaries ("owns SMTP delivery and message formatting for notification emails; knows nothing about uploads or HTTP") and to Dependency Direction (server may depend on mail; mail depends on no internal package). Remove "bcrypt password limit enforcement for upload passwords" and "password hashing" from the uploads and Storage text.
-      3. README.md, docs/src/content/docs/*.md (auth-access, using-peek, manual, index, reference and any other page grep finds), skills/peek/SKILL.md, skills/peek-server/SKILL.md: remove page-password usage; describe restricted as the default, the dashboard's shared-with-me list and role icons, title-only rows, share emails, and the Email admin tab (reference.md gets the six smtp_* settings in its settings table). Keep account-password and setup text.
+      3. README.md, docs/src/content/docs/*.md (auth-access, using-peek, manual, index, reference and any other page grep finds), skills/peek/SKILL.md, skills/peek-server/SKILL.md: remove page-password usage; describe restricted as the default, the dashboard's Empty page mode, the shared-with-me list and role icons, title-only rows, share emails, and the Email admin tab (reference.md gets the six smtp_* settings in its settings table). Keep account-password and setup text.
       4. scripts/gen-screenshots.sh: replace `-F "visibility=password" -F "password=review"` with `-F "visibility=restricted"` (do not regenerate screenshots).
       5. Delete docs/plans/collaboration-sharing-plan.md and docs/plans/collaboration-sharing-plan-manual-steps.html; grep that nothing links to them.
       6. Dispatch the `pages.yml` workflow against the feature branch with the GitHub MCP `actions_run_trigger` (it is on the default branch) and read the result with `actions_get`; the docs site must build. Run `mise run check-full`.
