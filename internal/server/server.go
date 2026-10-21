@@ -71,12 +71,10 @@ type Server struct {
 	loginLimiter    *limiter
 	commentLimiter  *limiter
 	uploadLimiter   *limiter
-	passwordLimiter *limiter
 	globalLimiter   *limiter
 	cliLoginLimiter *limiter
 	apiKeyLimiter   *limiter
 
-	pagePasswordFailLimiter *limiter
 	accountLoginLimiter     *limiter
 
 	trustedProxy             bool
@@ -209,11 +207,9 @@ func New(cfg Config) (*Server, error) {
 		loginLimiter:            newLimiter(10, time.Minute),
 		commentLimiter:          newLimiter(30, time.Minute),
 		uploadLimiter:           newLimiter(20, time.Minute),
-		passwordLimiter:         newLimiter(10, time.Minute),
 		globalLimiter:           newLimiter(300, time.Minute),
 		cliLoginLimiter:         newLimiter(120, time.Minute),
 		apiKeyLimiter:           newLimiter(10, time.Minute),
-		pagePasswordFailLimiter: newLimiter(pagePasswordFailureMax, pagePasswordFailureWindow),
 		accountLoginLimiter:     newLimiter(accountLoginFailureMax, accountLoginFailureWindow),
 		metricsToken:            cfg.MetricsToken,
 		trustedProxy:            cfg.TrustedProxy,

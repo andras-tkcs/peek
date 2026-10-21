@@ -1,10 +1,7 @@
 package server_test
 
 import (
-	"bytes"
 	"html"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -34,72 +31,6 @@ func TestUploadVisibilityE2E(t *testing.T) {
 
 		views := app.request(t, http.MethodGet, "/api/uploads/"+up.Slug+"/views", nil)
 		assertStatus(t, views, http.StatusOK)
-	})
-
-	t.Run("password gate protects page and APIs", func(t *testing.T) {
-		up := uploadMultipartHTML(t, app, "password-page", "password", "secret")
-
-		page := app.request(t, http.MethodGet, "/p/"+up.Slug, nil)
-		assertStatus(t, page, http.StatusOK)
-		if !strings.Contains(string(page.Body), "Enter the password") {
-			t.Fatalf("password upload did not render gate: %s", page.Body)
-		}
-
-		addComment(t, app, up.Slug, nil, http.StatusUnauthorized)
-		views := app.request(t, http.MethodGet, "/api/uploads/"+up.Slug+"/views", nil)
-		assertStatus(t, views, http.StatusUnauthorized)
-
-		wrong := postPagePassword(t, app, up.Slug, "wrong")
-		assertStatus(t, wrong, http.StatusUnauthorized)
-		if c := findCookie(wrong.Cookies, "hn_auth_"+up.Slug); c != nil {
-			t.Fatalf("wrong password set auth cookie: %+v", c)
-		}
-
-		unlocked := postPagePassword(t, app, up.Slug, "secret")
-		assertStatus(t, unlocked, http.StatusSeeOther)
-		authCookie := findCookie(unlocked.Cookies, "hn_auth_"+up.Slug)
-		if authCookie == nil {
-			t.Fatalf("password response did not set page auth cookie: %+v", unlocked.Cookies)
-		}
-
-		page = app.request(t, http.MethodGet, "/p/"+up.Slug, nil, withCookies(authCookie))
-		assertStatus(t, page, http.StatusOK)
-		addComment(t, app, up.Slug, []*http.Cookie{authCookie}, http.StatusOK)
-		views = app.request(t, http.MethodGet, "/api/uploads/"+up.Slug+"/views", nil, withCookies(authCookie))
-		assertStatus(t, views, http.StatusOK)
-	})
-
-	t.Run("password change revokes earlier unlocks", func(t *testing.T) {
-		up := uploadMultipartHTML(t, app, "rotate-page", "password", "old")
-		setVisibility := func(body string) {
-			t.Helper()
-			resp := app.requestString(t, http.MethodPost, "/api/uploads/"+up.Slug+"/visibility", body, withAuth(app.AdminToken), withContentType("application/json"))
-			assertStatus(t, resp, http.StatusOK)
-		}
-
-		resp := postPagePassword(t, app, up.Slug, "old")
-		assertStatus(t, resp, http.StatusSeeOther)
-		oldCookie := findCookie(resp.Cookies, "hn_auth_"+up.Slug)
-		if oldCookie == nil {
-			t.Fatalf("password response did not set page auth cookie: %+v", resp.Cookies)
-		}
-		addComment(t, app, up.Slug, []*http.Cookie{oldCookie}, http.StatusOK)
-
-		setVisibility(`{"visibility":"password","password":"new"}`)
-		addComment(t, app, up.Slug, []*http.Cookie{oldCookie}, http.StatusUnauthorized)
-
-		assertStatus(t, postPagePassword(t, app, up.Slug, "old"), http.StatusUnauthorized)
-		resp = postPagePassword(t, app, up.Slug, "new")
-		assertStatus(t, resp, http.StatusSeeOther)
-		newCookie := findCookie(resp.Cookies, "hn_auth_"+up.Slug)
-		if newCookie == nil {
-			t.Fatalf("password response did not set page auth cookie: %+v", resp.Cookies)
-		}
-		addComment(t, app, up.Slug, []*http.Cookie{newCookie}, http.StatusOK)
-
-		setVisibility(`{"visibility":"public"}`)
-		setVisibility(`{"visibility":"password","password":"new"}`)
-		addComment(t, app, up.Slug, []*http.Cookie{newCookie}, http.StatusUnauthorized)
 	})
 
 	t.Run("signed-in requires active non-owner account", func(t *testing.T) {
@@ -207,43 +138,6 @@ func uploadRawHTML(t *testing.T, app testApp, name, visibility string) uploadRes
 		t.Fatalf("unexpected upload response: %+v", out)
 	}
 	return out
-}
-
-func uploadMultipartHTML(t *testing.T, app testApp, name, visibility, password string) uploadResult {
-	t.Helper()
-	var body bytes.Buffer
-	mw := multipart.NewWriter(&body)
-	if err := mw.WriteField("visibility", visibility); err != nil {
-		t.Fatal(err)
-	}
-	if password != "" {
-		if err := mw.WriteField("password", password); err != nil {
-			t.Fatal(err)
-		}
-	}
-	part, err := mw.CreateFormFile("file", name+".html")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := io.WriteString(part, "<!doctype html><html><body>e2e body</body></html>"); err != nil {
-		t.Fatal(err)
-	}
-	if err := mw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	resp := app.request(t, http.MethodPost, "/api/upload", &body, withAuth(app.AdminToken), withContentType(mw.FormDataContentType()))
-	assertStatus(t, resp, http.StatusOK)
-	out := decodeResponseJSON[uploadResult](t, resp)
-	if out.Slug == "" || out.Visibility != visibility {
-		t.Fatalf("unexpected upload response: %+v", out)
-	}
-	return out
-}
-
-func postPagePassword(t *testing.T, app testApp, slug, password string) testResponse {
-	t.Helper()
-	form := url.Values{"password": {password}}
-	return app.requestString(t, http.MethodPost, "/p/"+slug, form.Encode(), withContentType("application/x-www-form-urlencoded"))
 }
 
 func addComment(t *testing.T, app testApp, slug string, cookies []*http.Cookie, want int) {

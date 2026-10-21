@@ -15,7 +15,6 @@ const (
 	TemplateAdmin         = "admin"
 	TemplateStats         = "stats"
 	TemplatePage          = "page"
-	TemplateGate          = "gate"
 	TemplateIndex         = "index"
 	TemplateError         = "error"
 	TemplateCLILogin      = "cli-login"
@@ -266,12 +265,6 @@ type PageData struct {
 	Visibility    string
 	Version       int
 	LatestVersion int
-}
-
-type GateData struct {
-	Slug   string
-	Action string
-	Error  bool
 }
 
 type IndexData struct {

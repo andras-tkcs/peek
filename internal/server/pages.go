@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/andras-tkcs/peek/internal/models"
 	webui "github.com/andras-tkcs/peek/internal/web"
@@ -85,10 +84,6 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 	if r.URL.RawQuery != "" {
 		pageQuery += "?" + r.URL.RawQuery
 	}
-	if u.Visibility == models.UploadVisibilityPassword && !s.viewerCanAccessUpload(r, u) {
-		s.renderHTML(w, http.StatusOK, webui.TemplateGate, webui.GateData{Slug: slug, Action: pageQuery})
-		return
-	}
 	if u.Visibility == models.UploadVisibilitySignedIn && !s.viewerCanAccessUpload(r, u) {
 		s.setNextPath(w, nextPathWithQuery(pagePath, r.URL.RawQuery))
 		if _, err := r.Cookie(sessionCookie); err == nil {
@@ -122,9 +117,6 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 		s.renderWebError(w, http.StatusForbidden, "Access denied", "This page is not available.")
 		return
 	}
-	if u.Visibility == models.UploadVisibilityPassword {
-		s.setPageAuthCookie(w, u)
-	}
 	vid := s.visitorID(w, r)
 	s.recordVisit(r, u, vid, version)
 
@@ -136,13 +128,6 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 	}
 	w.Header().Set("Content-Security-Policy", webui.PageCSP)
 	s.renderHTML(w, http.StatusOK, webui.TemplatePage, d)
-}
-
-func querysuffix(r *http.Request) string {
-	if r.URL.RawQuery == "" {
-		return ""
-	}
-	return "?" + r.URL.RawQuery
 }
 
 // frameURL appends the page's query string to the iframe URL as a fragment.
@@ -163,59 +148,6 @@ func nextPathWithQuery(path, query string) string {
 		return path
 	}
 	return path + "?" + query
-}
-
-func (s *Server) handlePagePassword(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	u, err := s.store.GetUpload(r.Context(), slug)
-	if err != nil {
-		s.renderWebError(w, http.StatusNotFound, "Page not found", "This shared page does not exist or is no longer available.")
-		return
-	}
-	pagePath := "/p/" + slug
-	if r.PathValue("n") != "" {
-		n, ok := s.parseExistingVersion(r, u)
-		if !ok {
-			s.renderVersionNotFound(w)
-			return
-		}
-		pagePath += "/v/" + strconv.Itoa(n)
-	}
-	if u.Visibility != models.UploadVisibilityPassword {
-		http.Redirect(w, r, pagePath, http.StatusSeeOther)
-		return
-	}
-	failKey := strconv.FormatInt(u.ID, 10) // upload id: stable across renames
-	if s.pagePasswordFailLimiter.blocked(failKey) {
-		rateLimitError(w, r)
-		return
-	}
-	if err := r.ParseForm(); err != nil {
-		s.renderWebError(w, http.StatusBadRequest, "Bad request", "The password form could not be read.")
-		return
-	}
-	pw := r.FormValue("password")
-	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(pw)) != nil {
-		s.pagePasswordFailLimiter.recordFailure(failKey)
-		s.renderHTML(w, http.StatusUnauthorized, webui.TemplateGate, webui.GateData{Slug: slug, Action: pagePath + querysuffix(r), Error: true})
-		return
-	}
-	s.setPageAuthCookie(w, u)
-	if r.URL.RawQuery != "" {
-		pagePath += "?" + r.URL.RawQuery
-	}
-	http.Redirect(w, r, pagePath, http.StatusSeeOther)
-}
-
-func (s *Server) setPageAuthCookie(w http.ResponseWriter, u *models.Upload) {
-	s.setCookie(w, &http.Cookie{
-		Name:     authCookieName(u.Slug),
-		Value:    makePageAuthCookieValue(s.secret, u.Slug, u.PasswordHash, sessionTTL),
-		Path:     "/",
-		MaxAge:   int(sessionTTL.Seconds()),
-		SameSite: http.SameSiteLaxMode,
-		HttpOnly: true,
-	})
 }
 
 // rawViewerID returns the visitor id from the HttpOnly hn_vid cookie. The raw URL

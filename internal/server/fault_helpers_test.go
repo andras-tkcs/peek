@@ -111,11 +111,9 @@ func newFaultServer(t *testing.T) (s *Server, store *db.Store, storage *faultSto
 		loginLimiter:            lim(),
 		commentLimiter:          lim(),
 		uploadLimiter:           lim(),
-		passwordLimiter:         lim(),
 		globalLimiter:           lim(),
 		cliLoginLimiter:         lim(),
 		apiKeyLimiter:           lim(),
-		pagePasswordFailLimiter: lim(),
 		accountLoginLimiter:     lim(),
 	}
 	return s, store, storage, admin.ID
