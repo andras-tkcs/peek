@@ -435,9 +435,40 @@ func TestPageCovRawStorageFailures(t *testing.T) {
 
 func TestPageCovWriteRawHTMLWriteFailures(t *testing.T) {
 	body := func() io.Reader { return strings.NewReader("<html><body>hi</body></html>") }
-	writeRawHTML(&failingWriter{}, "s", body(), 12)                  // prefix copy fails
-	writeRawHTML(&failingWriter{}, "s", body(), 0)                   // bridge tag write fails
-	writeRawHTML(&pageCovLimitedWriter{okWrites: 1}, "s", body(), 0) // body copy fails
+	var logs bytes.Buffer
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(oldLogger) })
+	checkLogged := func(name string) {
+		t.Helper()
+		if !strings.Contains(logs.String(), "write raw html response") || !strings.Contains(logs.String(), "slug=s") {
+			t.Errorf("%s: write failure was not logged: %s", name, logs.String())
+		}
+	}
+
+	logs.Reset()
+	prefixFail := &failingWriter{ResponseRecorder: *httptest.NewRecorder()}
+	writeRawHTML(prefixFail, "s", body(), 12) // prefix copy fails
+	checkLogged("prefix copy")
+	if csp := prefixFail.Header().Get("Content-Security-Policy"); csp != rawContentCSP {
+		t.Errorf("prefix copy CSP = %q, want rawContentCSP", csp)
+	}
+
+	logs.Reset()
+	bridgeFail := &failingWriter{ResponseRecorder: *httptest.NewRecorder()}
+	writeRawHTML(bridgeFail, "s", body(), 0) // bridge tag write fails
+	checkLogged("bridge tag")
+	if csp := bridgeFail.Header().Get("Content-Security-Policy"); csp != rawContentCSP {
+		t.Errorf("bridge tag CSP = %q, want rawContentCSP", csp)
+	}
+
+	logs.Reset()
+	bodyFail := &pageCovLimitedWriter{ResponseRecorder: *httptest.NewRecorder(), okWrites: 1}
+	writeRawHTML(bodyFail, "s", body(), 0) // body copy fails
+	checkLogged("body copy")
+	if got := bodyFail.Body.String(); got != string(bridgeScriptTag()) {
+		t.Errorf("body copy wrote %q, want only the bridge tag", got)
+	}
 }
 
 func TestPageCovServeDownloadCopyFailure(t *testing.T) {
@@ -446,7 +477,18 @@ func TestPageCovServeDownloadCopyFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &Server{storage: st}
-	s.serveDownload(&failingWriter{}, httptest.NewRequest(http.MethodGet, "/", nil), "s", "n", "k")
+	var logs bytes.Buffer
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(oldLogger) })
+	w := &failingWriter{ResponseRecorder: *httptest.NewRecorder()}
+	s.serveDownload(w, httptest.NewRequest(http.MethodGet, "/", nil), "s", "n", "k")
+	if !strings.Contains(logs.String(), "write download response") || !strings.Contains(logs.String(), "slug=s") {
+		t.Errorf("copy failure was not logged: %s", logs.String())
+	}
+	if cd := w.Header().Get("Content-Disposition"); !strings.HasPrefix(cd, "attachment") {
+		t.Errorf("Content-Disposition = %q, want attachment", cd)
+	}
 }
 
 func TestPageCovIndexRoutes(t *testing.T) {

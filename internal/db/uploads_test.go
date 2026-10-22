@@ -123,9 +123,12 @@ func TestCreateUploadCheckedFailsMidTransaction(t *testing.T) {
 		t.Run(table, func(t *testing.T) {
 			s := openTestStore(t)
 			t.Cleanup(func() { s.Close() })
-			owner, _ := s.CreateAccount(ctx, "o@example.test", "o", false)
+			owner, err := s.CreateAccount(ctx, "o@example.test", "o", false)
+			if err != nil {
+				t.Fatalf("seed: %v", err)
+			}
 			failOn(t, s, table, "INSERT")
-			wantErr(t, "CreateUploadChecked", s.CreateUploadChecked(ctx, "x", owner.ID, 0, "x.html", 1, "public", uploadquota.Limits{}))
+			wantErr(t, "CreateUploadChecked", s.CreateUploadChecked(ctx, "x", owner.ID, 0, "x.html", 1, "public", uploadquota.Limits{}), errInjected)
 			if n, _ := s.CountUploads(ctx); n != 0 {
 				t.Fatalf("upload row survived the failed transaction: %d", n)
 			}
@@ -137,13 +140,16 @@ func TestUploadScanErrors(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)
 	t.Cleanup(func() { s.Close() })
-	owner, _ := s.CreateAccount(ctx, "o@example.test", "o", false)
+	owner, err := s.CreateAccount(ctx, "o@example.test", "o", false)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
 	if err := s.CreateUploadChecked(ctx, "x", owner.ID, 0, "x.html", 1, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	corruptInt(t, s, "uploads", "created_at")
-	_, err := s.ListAllUploads(ctx)
-	wantErr(t, "ListAllUploads", err)
+	_, err = s.ListAllUploads(ctx)
+	wantErr(t, "ListAllUploads", err, errScan)
 	_, err = s.GetUpload(ctx, "x")
-	wantErr(t, "GetUpload", err)
+	wantErr(t, "GetUpload", err, errScan)
 }

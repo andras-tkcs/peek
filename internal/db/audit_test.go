@@ -36,5 +36,5 @@ func TestAuditLogScanError(t *testing.T) {
 	}
 	corruptInt(t, s, "audit_log", "created_at")
 	_, err := s.ListAuditLog(ctx, 10)
-	wantErr(t, "ListAuditLog", err)
+	wantErr(t, "ListAuditLog", err, errScan)
 }

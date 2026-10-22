@@ -160,17 +160,17 @@ func TestGrantWritesAndScanErrors(t *testing.T) {
 	corruptInt(t, s, "upload_grants", "created_at")
 	// The duplicate insert is a no-op, so the follow-up SELECT hits the bad row.
 	_, _, err := s.AddUploadGrant(ctx, uploadID, "user", "a@example.test", accountID)
-	wantErr(t, "AddUploadGrant select", err)
+	wantErr(t, "AddUploadGrant select", err, errScan)
 	_, err = s.ListUploadGrants(ctx, uploadID)
-	wantErr(t, "ListUploadGrants", err)
+	wantErr(t, "ListUploadGrants", err, errScan)
 	_, err = s.ListUploadGrantsForUploads(ctx, []int64{uploadID})
-	wantErr(t, "ListUploadGrantsForUploads", err)
+	wantErr(t, "ListUploadGrantsForUploads", err, errScan)
 
 	failOn(t, s, "upload_grants", "INSERT")
 	_, _, err = s.AddUploadGrant(ctx, uploadID, "user", "new@example.test", 0)
-	wantErr(t, "AddUploadGrant insert", err)
+	wantErr(t, "AddUploadGrant insert", err, errInjected)
 	failOn(t, s, "upload_grants", "DELETE")
-	wantErr(t, "RemoveUploadGrant", s.RemoveUploadGrant(ctx, uploadID, "user", "a@example.test"))
+	wantErr(t, "RemoveUploadGrant", s.RemoveUploadGrant(ctx, uploadID, "user", "a@example.test"), errInjected)
 }
 
 func TestListUploadsSharedWith(t *testing.T) {

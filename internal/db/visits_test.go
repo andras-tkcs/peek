@@ -74,14 +74,14 @@ func TestVisitScanErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := s.GetVisitor(ctx, "bad")
-	wantErr(t, "GetVisitor", err)
+	wantErr(t, "GetVisitor", err, errScan)
 	// A REAL timestamp makes the bucket expression a float, which cannot scan into int64.
 	if _, err := s.Exec(`UPDATE visits SET visited_at=1e300`); err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.VisitBuckets(ctx, uploadID, time.Unix(0, 0), 60)
-	wantErr(t, "VisitBuckets", err)
+	wantErr(t, "VisitBuckets", err, errScan)
 	corruptInt(t, s, "visits", "visited_at")
 	_, err = s.RecentVisits(ctx, uploadID, 5)
-	wantErr(t, "RecentVisits", err)
+	wantErr(t, "RecentVisits", err, errScan)
 }
