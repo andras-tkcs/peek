@@ -246,7 +246,7 @@ func cmdBackendRemove(args []string) error {
 
 func cmdBackendEnv(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: peek backend env set|unset <slug> <NAME> ...")
+		return fmt.Errorf("usage: peek backend env set|unset <slug> <NAME> [flags]")
 	}
 	switch args[0] {
 	case "set":

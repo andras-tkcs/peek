@@ -29,6 +29,9 @@ kicker: peekd reference
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | empty | Workspace admin user the service account impersonates. Requires `--google-sa-key-file`. |
 | `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | How long group membership answers are cached. Between `1s` and `1h`. |
 | `--oidc-allow-private-issuer` | `PEEK_OIDC_ALLOW_PRIVATE_ISSUER` | `false` | Allows HTTP/private OIDC issuers for local SSO testing. |
+| `--backends` | `PEEK_BACKENDS` | `off` | Page backends: `off` or `docker`. With `docker`, peekd must reach the engine at startup. |
+| `--docker-host` | `PEEK_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker or Podman API address, `unix://` or `tcp://`. |
+| `--backend-network` | `PEEK_BACKEND_NETWORK` | `peek-backends` | Docker network backend containers join. peekd must be able to reach it. |
 
 `PEEK_LOG_LEVEL` accepts `debug`, `info`, or `warn`. Any other value falls back to info.
 
@@ -63,6 +66,14 @@ Admins can change these from the **Admin** page (the **Admin** button next to **
 | `smtp_username` | string | Blank means no authentication. PLAIN auth needs TLS unless the host is localhost. |
 | `smtp_password` | secret string | Password or app password for the SMTP username. |
 | `smtp_from` | email address | Sender address of Peek emails. Email is off while it is blank. |
+| `backend_allowed_images` | comma-separated list | Registry prefixes ending in `/` (`ghcr.io/acme/`) or exact repositories. Empty allows no backend. |
+| `backend_memory_mb` | integer 16–65536 | Memory limit per backend container. Default 256. |
+| `backend_cpu_millis` | integer 50–64000 | CPU limit per backend container; 1000 is one core. Default 500. |
+| `backend_idle_minutes` | integer 1–1440 | Stop a backend after this many minutes without requests. Default 15. |
+| `backend_max_running` | integer 1–1000 | Stop the least recently used backend when more would run. Default 10. |
+| `backend_registry_server` | string | Registry host the credentials below apply to, such as `ghcr.io`. |
+| `backend_registry_username` | string | Username for pulling private backend images. |
+| `backend_registry_password` | secret string | Password or token for pulling private backend images. |
 | `max_upload` | bytes | Maximum individual upload size. |
 | `max_total_size` | bytes | Server-wide storage cap; `0` means unlimited. |
 | `max_uploads_per_token` | count | Per-owner upload count cap; `0` means unlimited. |
@@ -101,6 +112,14 @@ peek revoke <slug> <email> [--group]
 peek grants <slug>
 peek versions <slug>
 peek comments <slug> [--version <n>]
+peek upload <file.html> --backend <image> [--backend-port <n>]
+peek backend <slug>
+peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
+peek backend remove <slug> [--version <n>|latest]
+peek backend env set <slug> <NAME> (--value-stdin | --value <v>)
+peek backend env unset <slug> <NAME>
+peek backend restart <slug>
+peek backend logs <slug> [--version <n>|latest] [--tail <n>]
 ```
 
 `--slug` uploads a new version of an existing page you own (admins can target any page). It cannot be combined with `--visibility` or `--name`. A new upload is `restricted` unless `--visibility` says otherwise. `grant` and `revoke` take a user email by default and a Google group email with `--group`; group grants need the `PEEK_GOOGLE_*` server settings. `grants` lists a page's grants. `versions` lists a page's versions with size, time and URL. `comments` shows the latest version's comments unless `--version` is given. Page names (the `--name` value or the file name) are limited to 200 characters. The former `--password` flags were removed together with page passwords.
@@ -118,6 +137,14 @@ peek comments <slug> [--version <n>]
 | `DELETE /api/uploads/<slug>/grants` | Remove a grant. Same JSON body. |
 | `POST /api/uploads/<slug>/name` | Rename a page. JSON body `{"name":"..."}`; returns the new `slug`, `url` and `name`. The link follows the name; old links redirect. |
 | `GET /api/uploads/<slug>/comments?v=<n>` | Comments for version `n`; defaults to the latest. |
+| `GET /api/uploads/<slug>/backend` | Backends per version (`image`, `port`, `running`) and variable names (owner or admin). Values are never returned. |
+| `PUT /api/uploads/<slug>/versions/<n\|latest>/backend` | Set a version's backend. JSON body `{"image":"...","port":8080}`. |
+| `DELETE /api/uploads/<slug>/versions/<n\|latest>/backend` | Remove a version's backend. |
+| `GET /api/uploads/<slug>/versions/<n\|latest>/backend/logs?tail=<n>` | Last log lines (1–2000, default 200) of a running backend, as plain text. |
+| `PUT /api/uploads/<slug>/backend/env/<NAME>` | Set a variable. JSON body `{"value":"..."}`; applies on the next container start. |
+| `DELETE /api/uploads/<slug>/backend/env/<NAME>` | Remove a variable. |
+| `POST /api/uploads/<slug>/backend/restart` | Stop the page's backends; they start again on the next request. |
+| `GET\|POST\|PUT\|PATCH\|DELETE /svc/<slug>/v/<n>/<path>` | Relay to the version's backend; used by `peek.fetch`, not called directly. Same access check as the page, and requires the `X-Peek-Svc: 1` header. |
 
 ## Account Comment API
 

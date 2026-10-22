@@ -127,6 +127,20 @@ peek versions <slug>
 The link stays the same and serves the latest version; `/p/<slug>/v/<n>` serves
 version `n`. `--slug` cannot be combined with `--visibility` or `--name`.
 
+### Give a page a backend (send email, keep data, use secrets)
+
+A page cannot do these by itself. If the server has page backends enabled, attach a Docker image and call it from the page with `peek.fetch`:
+
+```sh
+peek upload page.html --slug <slug> --backend ghcr.io/acme/contact-form:1.2   # --backend-port <n> if not 8080
+printf '%s' "$SMTP_PASSWORD" | peek backend env set <slug> SMTP_PASSWORD --value-stdin
+peek backend restart <slug>      # apply variable changes
+peek backend <slug>              # versions, image, port, running, variable names
+peek backend logs <slug>         # last log lines of the running container
+```
+
+In the page, `peek.fetch(path, init)` works like `fetch` and resolves to a `Response`: `const res = await peek.fetch("/api/contact", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(data)})`. The path starts with `/`; methods are GET, POST, PUT, PATCH, DELETE; only `content-type` and `accept` headers are sent; bodies up to 1 MiB. The image must come from a registry prefix the admin allowed, or the upload is refused. Prefer `--value-stdin` over `--value`, which leaks into shell history. The container listens on `$PORT`, has a read-only root filesystem and a writable `/data`, and must reject requests without the `X-Peek-Backend-Token` header equal to `$PEEK_BACKEND_TOKEN`. On signed-in and restricted pages it also gets `X-Peek-User-Email`. A new version without `--backend` keeps the previous version's backend; `peek backend remove <slug>` removes it. `examples/contact-form` in the Peek repository is a complete example.
+
 ### Read the comments on a page
 
 ```sh
