@@ -22,6 +22,9 @@ func cmdUpload(args []string) error {
 		visibility string
 		slug       string
 		nameSet    bool
+
+		backend     string
+		backendPort string
 	)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -47,6 +50,18 @@ func cmdUpload(args []string) error {
 			}
 			slug = strings.TrimSpace(args[i+1])
 			i++
+		case a == "--backend":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--backend requires a value")
+			}
+			backend = strings.TrimSpace(args[i+1])
+			i++
+		case a == "--backend-port":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--backend-port requires a value")
+			}
+			backendPort = strings.TrimSpace(args[i+1])
+			i++
 		case strings.HasPrefix(a, "-"):
 			return fmt.Errorf("unknown flag: %s", a)
 		default:
@@ -57,7 +72,20 @@ func cmdUpload(args []string) error {
 		}
 	}
 	if file == "" {
-		return fmt.Errorf("usage: peek upload <file.html> [--visibility public|signed-in|restricted] [--name <name>] [--slug <slug>]")
+		return fmt.Errorf("usage: peek upload <file.html> [--visibility public|signed-in|restricted] [--name <name>] [--slug <slug>] [--backend <image> [--backend-port <n>]]")
+	}
+	var fields []formField
+	if backendPort != "" && backend == "" {
+		return fmt.Errorf("--backend-port requires --backend")
+	}
+	if backend != "" {
+		fields = append(fields, formField{"backend_image", backend})
+	}
+	if backendPort != "" {
+		if _, err := parsePort(backendPort); err != nil {
+			return fmt.Errorf("--backend-port: %w", err)
+		}
+		fields = append(fields, formField{"backend_port", backendPort})
 	}
 	if slug != "" {
 		if _, err := slugPath(slug); err != nil {
@@ -94,7 +122,7 @@ func cmdUpload(args []string) error {
 	if name == "" {
 		name = fileNameWithoutExt(file)
 	}
-	body, contentType := streamMultipartUpload(f, name, visibility, slug)
+	body, contentType := streamMultipartUpload(f, name, visibility, slug, fields...)
 	resp, err := c.req("POST", "/api/upload", body, contentType)
 	if err != nil {
 		_ = body.Close()
@@ -107,11 +135,15 @@ func cmdUpload(args []string) error {
 		Visibility string `json:"visibility"`
 		Version    int    `json:"version"`
 		VersionURL string `json:"version_url"`
+		Backend    string `json:"backend_image"`
 	}
 	if err := decodeResp(resp, &out); err != nil {
 		return err
 	}
 	fmt.Printf("uploaded: %s\n", out.URL)
+	if out.Backend != "" {
+		fmt.Printf("backend: %s\n", out.Backend)
+	}
 	fmt.Printf("slug:     %s\n", out.Slug)
 	fmt.Printf("version:  %d\n", out.Version)
 	if slug != "" {
@@ -121,11 +153,14 @@ func cmdUpload(args []string) error {
 	return nil
 }
 
-func streamMultipartUpload(file io.Reader, filename, visibility, slug string) (io.ReadCloser, string) {
+// formField is an extra text field written after the file part.
+type formField struct{ name, value string }
+
+func streamMultipartUpload(file io.Reader, filename, visibility, slug string, extra ...formField) (io.ReadCloser, string) {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
-		if err := writeMultipartUpload(mw, file, filename, visibility, slug); err != nil {
+		if err := writeMultipartUpload(mw, file, filename, visibility, slug, extra...); err != nil {
 			_ = pw.CloseWithError(err)
 			return
 		}
@@ -134,7 +169,7 @@ func streamMultipartUpload(file io.Reader, filename, visibility, slug string) (i
 	return pr, mw.FormDataContentType()
 }
 
-func writeMultipartUpload(mw *multipart.Writer, file io.Reader, filename, visibility, slug string) error {
+func writeMultipartUpload(mw *multipart.Writer, file io.Reader, filename, visibility, slug string, extra ...formField) error {
 	fw, err := mw.CreateFormFile("file", filename)
 	if err != nil {
 		return err
@@ -149,6 +184,11 @@ func writeMultipartUpload(mw *multipart.Writer, file io.Reader, filename, visibi
 	}
 	if slug != "" {
 		if err := mw.WriteField("slug", slug); err != nil {
+			return err
+		}
+	}
+	for _, f := range extra {
+		if err := mw.WriteField(f.name, f.value); err != nil {
 			return err
 		}
 	}

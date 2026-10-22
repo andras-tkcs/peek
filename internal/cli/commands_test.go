@@ -66,7 +66,7 @@ func TestRunSubcommandsFailWithoutConfiguration(t *testing.T) {
 	cmds := []string{
 		"login", "config", "upload", "list", "delete", "visibility", "rename",
 		"grant", "revoke", "grants", "versions", "stats", "comments", "export",
-		"delete-all", "token",
+		"delete-all", "token", "backend",
 	}
 	for _, cmd := range cmds {
 		t.Run(cmd, func(t *testing.T) {

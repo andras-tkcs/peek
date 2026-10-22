@@ -262,3 +262,68 @@ func TestCovFileNameWithoutExtFallsBackToPage(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestUploadSendsBackendFields(t *testing.T) {
+	type observed struct{ Image, Port string }
+	got := make(chan observed, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		got <- observed{r.FormValue("backend_image"), r.FormValue("backend_port")}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"slug":"page","url":"http://x/p/page","visibility":"restricted","version":1,"backend_image":"ghcr.io/a/b:1"}`))
+	}))
+	defer ts.Close()
+	configureTestClient(t, ts.URL)
+	file := filepath.Join(t.TempDir(), "page.html")
+	if err := os.WriteFile(file, []byte("<html></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := captureStdout(t, func() error {
+		return cmdUpload([]string{file, "--backend", "ghcr.io/a/b:1", "--backend-port", "9000"})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g := <-got; g.Image != "ghcr.io/a/b:1" || g.Port != "9000" {
+		t.Fatalf("fields = %+v", g)
+	}
+	if !strings.Contains(out, "backend: ghcr.io/a/b:1") {
+		t.Fatalf("output = %q", out)
+	}
+	if _, err := captureStdout(t, func() error {
+		return cmdUpload([]string{file, "--slug", "page", "--backend", "img"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if g := <-got; g.Image != "img" || g.Port != "" {
+		t.Fatalf("fields = %+v", g)
+	}
+}
+
+func TestUploadBackendFlagErrors(t *testing.T) {
+	configureTestClient(t, "http://127.0.0.1:1")
+	file := filepath.Join(t.TempDir(), "page.html")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string][]string{
+		"port without backend": {file, "--backend-port", "8080"},
+		"bad port":             {file, "--backend", "img", "--backend-port", "99999"},
+		"backend no value":     {file, "--backend"},
+		"port no value":        {file, "--backend", "img", "--backend-port"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := cmdUpload(args)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if name == "port without backend" && !strings.Contains(err.Error(), "--backend-port requires --backend") {
+				t.Fatalf("err = %v", err)
+			}
+		})
+	}
+}
