@@ -79,27 +79,47 @@ func TestLoadOrCreateSecretReportsInvalidPath(t *testing.T) {
 }
 
 func TestLoadOrCreateSecretTightensExistingFileMode(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "secret.key")
-	want := strings.Repeat("ab", 32)
-	if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
-		t.Fatal(err)
+	long := strings.Repeat("ab", 32)
+	tests := []struct {
+		name     string
+		existing string
+		keep     bool
+	}{
+		{name: "long_existing_secret_is_kept", existing: long, keep: true},
+		{name: "short_existing_secret_is_replaced", existing: "short"},
 	}
-	if err := os.Chmod(path, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got, err := loadOrCreateSecret(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != want {
-		t.Fatalf("secret = %q, want %q", got, want)
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("mode = %#o, want 0600", info.Mode().Perm())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "secret.key")
+			if err := os.WriteFile(path, []byte(tt.existing), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(path, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			got, err := loadOrCreateSecret(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.keep {
+				if got != tt.existing {
+					t.Fatalf("secret = %q, want %q", got, tt.existing)
+				}
+			} else if got == tt.existing || len(got) != 64 {
+				t.Fatalf("secret = %q, want a new 64 character secret", got)
+			}
+			content, err := os.ReadFile(path)
+			if err != nil || string(content) != got {
+				t.Fatalf("file = %q (%v), want %q", content, err, got)
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Mode().Perm() != 0o600 {
+				t.Fatalf("mode = %#o, want 0600", info.Mode().Perm())
+			}
+		})
 	}
 }
 
