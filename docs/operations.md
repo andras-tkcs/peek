@@ -44,7 +44,7 @@ peekd \
 
 Set `--trusted-proxy` only when a reverse proxy you control appends to `X-Forwarded-For`. Peek then honours the header only on connections from `--trusted-proxy-cidrs` / `PEEK_TRUSTED_PROXY_CIDRS` (default `127.0.0.0/8,::1/128`, a proxy on the same host) and uses the rightmost address that is not one of those proxies. When the proxy runs in another container, pod or platform edge, set the CIDRs to the addresses it connects from; Peek logs one warning naming the peer when it ignores the header. Without `--trusted-proxy`, every request behind a proxy has the proxy's address, so the whole organisation shares one rate-limit bucket (for example 10 sign-in attempts per minute).
 
-Besides per-IP limits, Peek locks password sign-in for an email address after 10 failed attempts for 15 minutes, and a password-protected page's gate after 20 failed attempts for 10 minutes. Anyone can trigger these locks, so a locked admin can still sign in with SSO or an API token, and viewers who already unlocked a page are not affected.
+Besides per-IP limits, Peek locks password sign-in for an email address after 10 failed attempts for 15 minutes. Anyone can trigger this lock, so a locked admin can still sign in with SSO or an API token.
 
 Prefer `_FILE` variables or plain environment variables over `--secret`, `--s3-secret-key` and `--metrics-token` on the command line; flags are visible in `ps` and peekd prints a warning.
 
@@ -56,11 +56,11 @@ For company usage, prefer OAuth/SSO with invite-only signup. Google Workspace or
 
 ## Page Access
 
-Each page has one of four visibilities: `public` (anyone with the link), `password` (link plus upload password), `signed-in` (any signed-in Peek account; renamed from `private`, existing pages are migrated), and `restricted` (only the owner, admins, and signed-in viewers matching a grant). Grants are user emails or Google group emails, managed with `peek grant`, `peek revoke` and `peek grants`, or the grants API, or the dashboard's **Access** dialog. Grants are stored for any visibility but only enforced while the page is `restricted`. They are read from the database on every view of `/p/...`, the comment API and the views API.
+Each page has one of three visibilities: `public` (anyone with the link), `signed-in` (any signed-in Peek account; renamed from `private`, existing pages are migrated), and `restricted` (only the owner, admins, and signed-in viewers matching a grant). New pages are `restricted` unless the uploader chooses otherwise. Page passwords were removed. Grants are user emails or Google group emails, managed with `peek grant`, `peek revoke` and `peek grants`, or the grants API, or the dashboard's **Access** dialog. Grants are stored for any visibility but only enforced while the page is `restricted`. They are read from the database on every view of `/p/...`, the comment API and the views API.
 
 A signed-in viewer without a matching grant gets a 403 "Access denied" page naming the account they are signed in as, and the denial is written to the audit log as `page.access.denied`. Viewers who are not signed in are sent to the login page.
 
-The uploaded HTML is served to the sandboxed iframe through a view token that is minted only after the access check. Every load of that view URL re-checks access, so revoking a grant, changing visibility, or setting a new password applies to the frame on its next load; a frame already displayed keeps what it has rendered. The view URL works only in the browser that opened the page (it is bound to the `hn_vid` cookie) and only inside the page's iframe. Renaming a page redirects its old links (302) to the new one; password-page viewers unlock once more after a rename. Pages already open under the old link must be reloaded before comments work again. Page links are the page name plus a random six-character suffix; links created before this release keep their old form.
+The uploaded HTML is served to the sandboxed iframe through a view token that is minted only after the access check. Every load of that view URL re-checks access, so revoking a grant, or changing visibility applies to the frame on its next load; a frame already displayed keeps what it has rendered. The view URL works only in the browser that opened the page (it is bound to the `hn_vid` cookie) and only inside the page's iframe. Renaming a page redirects its old links (302) to the new one. Pages already open under the old link must be reloaded before comments work again. Page links are the page name plus a random six-character suffix; links created before this release keep their old form.
 
 ## Google Group Grants
 
@@ -75,6 +75,18 @@ The only scope needed is the read-only `https://www.googleapis.com/auth/admin.di
 The key file is not stored in SQLite, so it is not in `peekd backup` output. Back it up and rotate it separately; rotating means replacing the file and restarting `peekd`.
 
 Membership changes take up to the cache TTL to apply. Group grants are checked one after another, and each lookup times out after 5 s, so a page with several group grants can take up to 5 s per group longer to open when the Directory API is slow. A lookup that fails denies access through that group.
+
+The dashboard's shared-with-me list checks at most 25 groups per render, each a cached lookup of up to 5 s, so on a slow Directory API a dashboard render can take up to 25 × 5 s the first time. Groups past the first 25 are not checked and a warning is logged.
+
+## Email
+
+Peek can email people when a restricted page is shared with them. Admins configure it on the **Email** tab of the **Admin** page, using these runtime settings: `smtp_host`, `smtp_port`, `smtp_tls`, `smtp_username`, `smtp_password` and `smtp_from`. Email is on only when both `smtp_host` and `smtp_from` are set; with either blank, sharing works as before and no mail is sent. The password is encrypted at rest, a blank password field on the form keeps the saved one, and values are trimmed, so a password cannot start or end with a space.
+
+`smtp_tls` is `starttls` (the default; STARTTLS is required and the connection is never downgraded), `tls` (implicit TLS from the first byte, usually port 465) or `none` (no encryption, for a local relay only). A blank `smtp_port` means 587, or 465 for `tls`. When `smtp_username` is set Peek authenticates with PLAIN, which the Go SMTP client refuses without TLS unless the host is `localhost`, so `none` with credentials works only against a local relay.
+
+**Send test email** on the tab sends a message to your own address using the saved settings, so save first. The result is audited as `email.test`.
+
+Peek sends a plain-text email with the page link when a grant is added to a restricted page (from the dashboard, the API or the CLI) and, to everyone who already has a grant, when a page is switched to restricted. It sends nothing on removing a grant, on adding a grant that already exists, or when the page is not restricted. The sharer's own address is skipped, and when an allowed email domain is set, only recipients in that domain are mailed. Group grants mail the group address. Each send is bounded by 15 s. A failed send never fails the share: it is logged as `share notification failed` and audited as `upload.share.notify` with `result=failed` (and `result=sent`, the recipient count and the skipped count otherwise), and the dashboard tells the sharer that the notification could not be sent.
 
 ## Quotas, Retention, And Storage
 
@@ -102,7 +114,7 @@ Before upgrading, take a SQLite backup and confirm you know where uploaded objec
 
 This release adds migrations 7 (`upload_versions`, which also adds a `version` column to comments and visits and backfills one version per existing page) and 8 (`upload_grants`). Existing objects are not moved and existing `private` pages keep their meaning.
 
-Migration 9 (`upload_slug_aliases`) keeps the old links of renamed pages reserved. After upgrading, existing password-page unlock cookies stop working once; viewers re-enter the password. Do not roll back to an older binary once a page has been renamed: older binaries do not reserve old links, so a new upload could overwrite a renamed page's first version. Restore the pre-upgrade backup and object storage instead.
+Migration 9 (`upload_slug_aliases`) keeps the old links of renamed pages reserved. Do not roll back to an older binary once a page has been renamed: older binaries do not reserve old links, so a new upload could overwrite a renamed page's first version. Restore the pre-upgrade backup and object storage instead.
 
 Migration 10 (`token_hint_last_used`) adds `hint` and `last_used_at` to `tokens`. Tokens created before it show `—` instead of their last four characters on the dashboard. Older binaries ignore both columns, so tokens keep working after a rollback, but older binaries still cannot revoke a token that uploaded a page.
 
@@ -117,6 +129,8 @@ This release removes the unversioned `/raw/<slug>` route and serves uploaded HTM
 With `--trusted-proxy`, `X-Forwarded-For` is now trusted only from `PEEK_TRUSTED_PROXY_CIDRS` (default loopback). Deployments whose proxy connects from another address must set it, or all clients share the proxy's rate-limit bucket.
 
 This release also applies the allowed email domain and OAuth-required rules to API tokens (see First Run And Access); check which personal API keys that affects before upgrading.
+
+Migration 15 (`drop_password_visibility`) turns every password page into a restricted page and clears its stored password hash. Those pages are visible to their owner and admins only until they are shared with people or groups, and no email is sent for the conversion. A rollback cannot restore them as password pages; restore the pre-upgrade backup if you need the old passwords. The CLI's `--password` and `--password-stdin` flags are gone, and the default visibility of a new upload is `restricted`.
 
 Rollback is simplest when the database has not been migrated by a newer binary. If a release includes migrations, treat rollback as restoring the pre-upgrade backup plus object storage state.
 

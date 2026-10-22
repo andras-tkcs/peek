@@ -21,6 +21,13 @@ type grantOut struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
+// grantAddOut is the answer to adding a grant; Notified is true when a
+// notification email went out.
+type grantAddOut struct {
+	grantOut
+	Notified bool `json:"notified"`
+}
+
 func grantToOut(g models.UploadGrant) grantOut {
 	return grantOut{ID: g.ID, Kind: g.Kind, Email: g.Email, CreatedAt: g.CreatedAt.Unix()}
 }
@@ -66,6 +73,7 @@ func (s *Server) normalizeGrantInput(kind, email string, requireGroupLookup bool
 func (s *Server) decodeGrantBody(w http.ResponseWriter, r *http.Request) (grantBody, bool) {
 	var body grantBody
 	if err := decodeJSON(w, r, &body, smallJSONBodyLimit); err != nil {
+		jsonError(w, http.StatusBadRequest, "bad json")
 		return body, false
 	}
 	email, msg := s.normalizeGrantInput(body.Kind, body.Email, true)
@@ -103,13 +111,17 @@ func (s *Server) handleAddGrant(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	g, err := s.store.AddUploadGrant(r.Context(), u.ID, body.Kind, body.Email, owner.AccountID)
+	g, created, err := s.store.AddUploadGrant(r.Context(), u.ID, body.Kind, body.Email, owner.AccountID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
 	s.auditRequest(r, owner.Name, "upload.grant.add", auditDetail("slug", u.Slug, "kind", body.Kind, "email", body.Email))
-	jsonOK(w, grantToOut(*g))
+	sent := false
+	if created && u.Visibility == models.UploadVisibilityRestricted {
+		sent, _ = s.notifyShare(r, owner.Name, owner.Email, u, []models.UploadGrant{*g})
+	}
+	jsonOK(w, grantAddOut{grantOut: grantToOut(*g), Notified: sent})
 }
 
 func (s *Server) handleRemoveGrant(w http.ResponseWriter, r *http.Request) {

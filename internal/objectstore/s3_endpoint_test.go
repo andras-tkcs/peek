@@ -3,6 +3,7 @@ package objectstore
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestValidateS3EndpointRejectsMalformedAndPrivateHosts(t *testing.T) {
@@ -21,7 +22,8 @@ func TestValidateS3EndpointRejectsMalformedAndPrivateHosts(t *testing.T) {
 }
 
 func TestSafeS3DialContextErrors(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 	dial := safeS3DialContext(true)
 	if _, err := dial(ctx, "tcp", "no-port"); err == nil {
 		t.Fatal("bad address: expected error")

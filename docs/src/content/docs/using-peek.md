@@ -9,14 +9,14 @@ kicker: peek upload
 Use the CLI when a report or generated page already exists on disk:
 
 ```sh
-peek upload demo.html --visibility public
+peek upload demo.html
 ```
 
-The response includes a URL and a slug. Share the URL with reviewers; keep the slug for CLI commands such as `stats`, `comments`, `visibility`, and `export`.
+New pages are `restricted` by default, so only you and admins can open them until you grant access or change the visibility; add `--visibility public` for a link anyone can open. The response includes a URL and a slug. Share the URL with reviewers; keep the slug for CLI commands such as `stats`, `comments`, `visibility`, and `export`.
 
 Links are made from the page name plus a random six-character suffix, for example /p/q3-plan-k7m2xq, so a page cannot be found by guessing its name. Renaming a page gives it a new suffixed link; old links keep redirecting.
 
-The dashboard is better when you want to paste HTML, choose visibility visually, copy links, or manage several uploads at once.
+The dashboard is better when you want to paste HTML, choose visibility visually, or manage several pages at once. Its upload card has three modes: a file, pasted HTML, or **Empty page**, where you type a name and click **Create page** to get a page with a minimal HTML document titled with that name; upload versions to it afterwards. The **Pages** list shows each page by title with an icon: a pencil for pages you own, a shield for pages you can edit as an admin, and an eye for restricted pages shared with you (view only). Shared pages come from user grants on your email address and grants to Google groups you belong to, and show no Access, Stats or Delete actions.
 
 <figure>
   <img src="/peek/assets/screenshots/05-dashboard-uploads.png" alt="Peek dashboard with the upload form and uploads table">
@@ -30,23 +30,21 @@ Visibility is a review policy, not a storage location.
 | Visibility | Who can open it | Good for |
 | --- | --- | --- |
 | `public` | Anyone with the link | Fast internal sharing where the URL itself is enough control. |
-| `password` | Anyone with the link and upload password | Sharing outside the signed-in group without creating accounts. |
 | `signed-in` | Any signed-in Peek user (the whole organisation when Google org sign-in is on; use `restricted` for named people only) | Internal reports that should stay behind the company login surface. |
-| `restricted` | Owner, admins, and signed-in users matching a grant | Reports for a named person or Google group. |
+| `restricted` (default) | Owner, admins, and signed-in users matching a grant | Reports for a named person or Google group. |
 
 Change visibility after upload when the audience changes:
 
 ```sh
 peek visibility <slug> public
-peek visibility <slug> password --password newpass
 peek visibility <slug> signed-in
 peek visibility <slug> restricted
 peek rename <slug> "New name"
 ```
 
-Restricted pages are opened up with grants: `peek grant <slug> alice@example.com` for one person, `peek grant <slug> team@example.com --group` for a Google group, `peek grants <slug>` to list, and `peek revoke <slug> <email>` to remove. Someone signed in without a grant sees a 403 page.
+Restricted pages are opened up with grants: `peek grant <slug> alice@example.com` for one person, `peek grant <slug> team@example.com --group` for a Google group, `peek grants <slug>` to list, and `peek revoke <slug> <email>` to remove. Someone signed in without a grant sees a 403 page. When an admin has set up email under **Admin → Email**, each new grantee gets an email with the link (in an allowed email domain, if one is set), and switching a page to restricted emails everyone who already has a grant. Peek does not email you when you grant yourself access, and a failed send is reported without undoing the grant.
 
-In the dashboard, the **Access** button on an upload's row renames the page, changes its visibility, sets a new password and, for restricted pages, adds or removes people and Google groups. Renaming changes the link to follow the new name; old links keep redirecting and are never given to another page. Setting a new password signs out everyone who unlocked the page with the previous one.
+In the dashboard, the **Access** button on an upload's row renames the page, changes its visibility and, for restricted pages, adds or removes people and Google groups. Renaming changes the link to follow the new name; old links keep redirecting and are never given to another page.
 
 ## Update A Page
 
@@ -130,7 +128,7 @@ peek login --host https://peek.example.com
 Common user commands:
 
 ```text
-peek upload <file.html> --visibility public|password|signed-in|restricted
+peek upload <file.html> --visibility public|signed-in|restricted
 peek upload <file.html> --slug <slug>
 peek versions <slug>
 peek grant|revoke <slug> <email> [--group]
@@ -139,7 +137,7 @@ peek list
 peek stats <slug>
 peek comments <slug> [--version <n>]
 peek export <slug>
-peek visibility <slug> public|password|signed-in|restricted
+peek visibility <slug> public|signed-in|restricted
 peek rename <slug> <new name>
 peek delete <slug>
 peek delete-all

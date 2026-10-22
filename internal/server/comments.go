@@ -58,7 +58,7 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 	}
 	// API callers (the CLI) authenticate with a bearer token and may only read
 	// comments for uploads they own. Browser viewers send no token and go
-	// through the public / password-cookie gate instead.
+	// through the page access check instead.
 	if tok := bearerToken(r); tok != "" {
 		owner, err := s.store.GetToken(r.Context(), tok)
 		if err != nil {
@@ -288,12 +288,6 @@ func (s *Server) viewerCanAccessUpload(r *http.Request, u *models.Upload) bool {
 	switch u.Visibility {
 	case models.UploadVisibilityPublic:
 		return true
-	case models.UploadVisibilityPassword:
-		c, err := r.Cookie(authCookieName(u.Slug))
-		if err != nil {
-			return false
-		}
-		return verifyPageAuthCookie(s.secret, c.Value, u.Slug, u.PasswordHash)
 	case models.UploadVisibilitySignedIn:
 		_, ok := s.webAuth(r)
 		return ok
@@ -309,10 +303,8 @@ func uploadAccessRequiredMessage(u *models.Upload) string {
 	switch u.Visibility {
 	case models.UploadVisibilitySignedIn:
 		return "login required"
-	case models.UploadVisibilityRestricted:
-		return "access denied"
 	}
-	return "password required"
+	return "access denied"
 }
 
 // uploadAccessStatus is the status for a failed viewerCanAccessUpload: 403 for a
@@ -324,10 +316,6 @@ func (s *Server) uploadAccessStatus(r *http.Request, u *models.Upload) int {
 		}
 	}
 	return http.StatusUnauthorized
-}
-
-func authCookieName(slug string) string {
-	return "hn_auth_" + slug
 }
 
 // setNameCookie sets a long-lived, JS-readable cookie so the name is remembered.

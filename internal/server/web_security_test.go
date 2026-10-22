@@ -6,9 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/crypto/bcrypt"
-
-	"github.com/andras-tkcs/peek/internal/models"
 	webui "github.com/andras-tkcs/peek/internal/web"
 )
 
@@ -94,7 +91,7 @@ func urlencodedForm(r *http.Request) {
 
 func TestRequestBodyCapRejectsDeclaredOversizedForm(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	rec := doRequest(t, s, http.MethodPost, "/p/anything", strings.NewReader("password="+strings.Repeat("a", maxRequestBodyBytes)), urlencodedForm)
+	rec := doRequest(t, s, http.MethodPost, "/login", strings.NewReader("token="+strings.Repeat("a", maxRequestBodyBytes)), urlencodedForm)
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413: %s", rec.Code, rec.Body.String())
 	}
@@ -105,16 +102,11 @@ func TestRequestBodyCapRejectsDeclaredOversizedForm(t *testing.T) {
 
 func TestRequestBodyCapCutsChunkedForm(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	hash, err := bcrypt.GenerateFromPassword([]byte("right"), bcrypt.MinCost)
-	if err != nil {
-		t.Fatal(err)
+	rec := doRequest(t, s, http.MethodPost, "/login", strings.NewReader("token="+strings.Repeat("a", 100<<10)), urlencodedForm, func(r *http.Request) { r.ContentLength = -1 })
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	newTwoVersionPage(t, s, "capped", models.UploadVisibilityPassword, string(hash))
-	rec := doRequest(t, s, http.MethodPost, "/p/capped", strings.NewReader("password="+strings.Repeat("a", 100<<10)), urlencodedForm, func(r *http.Request) { r.ContentLength = -1 })
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "The password form could not be read.") {
+	if !strings.Contains(rec.Body.String(), "Invalid session.") {
 		t.Fatalf("body = %s", rec.Body.String())
 	}
 }
@@ -150,13 +142,8 @@ func TestRequestBodyCapAllowsSmallForms(t *testing.T) {
 	if rec := doRequest(t, s, http.MethodGet, "/healthz", nil); rec.Code != http.StatusOK {
 		t.Fatalf("healthz = %d", rec.Code)
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte("right"), bcrypt.MinCost)
-	if err != nil {
-		t.Fatal(err)
-	}
-	newTwoVersionPage(t, s, "smallform", models.UploadVisibilityPassword, string(hash))
-	rec := doRequest(t, s, http.MethodPost, "/p/smallform", strings.NewReader("password=right"), urlencodedForm)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303: %s", rec.Code, rec.Body.String())
+	rec := doRequest(t, s, http.MethodPost, "/login", strings.NewReader("token=small"), urlencodedForm)
+	if rec.Code == http.StatusRequestEntityTooLarge || rec.Code >= http.StatusInternalServerError {
+		t.Fatalf("status = %d, want the form to be read: %s", rec.Code, rec.Body.String())
 	}
 }

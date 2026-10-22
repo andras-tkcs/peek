@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 const pageCovHTML = "<!doctype html><html><body>hello</body></html>"
@@ -205,5 +207,50 @@ func TestPageCovDeleteAllByOwner(t *testing.T) {
 	rec = doRequest(t, s, http.MethodDelete, "/api/uploads-by-owner", nil, asBearer(token))
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("list failure status = %d", rec.Code)
+	}
+}
+
+func TestAPIUploadRejectsPasswordField(t *testing.T) {
+	s, admin := newHandlerTestServer(t)
+	rec := uploadPage(t, s, admin, pageCovHTML, map[string]string{"visibility": "restricted", "password": "x"})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), passwordRemovedMessage) {
+		t.Fatalf("body = %s, want it to contain %q", rec.Body.String(), passwordRemovedMessage)
+	}
+}
+
+func TestAPISetVisibilityRejectsPassword(t *testing.T) {
+	s, admin := newHandlerTestServer(t)
+	slug := seedVersionPage(t, s, admin)
+	post := func(body string) *httptest.ResponseRecorder {
+		return doRequest(t, s, http.MethodPost, "/api/uploads/"+slug+"/visibility", strings.NewReader(body), asBearer(admin), func(r *http.Request) { r.Header.Set("Content-Type", "application/json") })
+	}
+
+	if rec := post(`{"visibility":"password"}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("visibility password: status = %d: %s", rec.Code, rec.Body.String())
+	}
+	rec := post(`{"visibility":"restricted","password":"x"}`)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), passwordRemovedMessage) {
+		t.Fatalf("password field: status = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAPISetVisibilityRestrictedNotifies(t *testing.T) {
+	s, token := newHandlerTestServer(t)
+	fake := &fakeMailer{}
+	s.mailer = fake
+	configureSMTP(t, s)
+	slug := pageCovUpload(t, s, token, "")
+	u, err := s.store.GetUpload(context.Background(), slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant(t, s, u, models.UploadGrantUser, "bob@example.com")
+	path := "/api/uploads/" + slug + "/visibility"
+	rec := doRequest(t, s, http.MethodPost, path, strings.NewReader(`{"visibility":"restricted"}`), asBearer(token), withJSON())
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"notified":true`) || fake.sends() != 1 {
+		t.Fatalf("%d %s sends=%d", rec.Code, rec.Body.String(), fake.sends())
 	}
 }

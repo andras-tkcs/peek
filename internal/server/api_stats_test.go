@@ -30,7 +30,7 @@ func TestExportUploadReportsVisitQueryFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "page", owner.AccountID, owner.ID, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", owner.AccountID, owner.ID, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Exec(`DROP TABLE visits`); err != nil {
@@ -70,7 +70,7 @@ func TestHandleViewsReturnsAlignedBuckets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "page", owner.AccountID, owner.ID, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", owner.AccountID, owner.ID, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	upload, err := store.GetUpload(context.Background(), "page")
@@ -131,7 +131,7 @@ func TestHandleViewsRespectsPrivateVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,7 +160,7 @@ func TestExportMarksVerifiedComments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(ctx, "page", admin.AccountID, admin.ID, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(ctx, "page", admin.AccountID, admin.ID, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	u, _ := s.store.GetUpload(ctx, "page")

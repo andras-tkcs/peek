@@ -2,10 +2,12 @@ package server
 
 import (
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +15,13 @@ import (
 	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/uploads"
 	webui "github.com/andras-tkcs/peek/internal/web"
+)
+
+// Roles of a dashboard row, shown as an icon.
+const (
+	dashRoleOwner  = "owner"
+	dashRoleAdmin  = "admin"
+	dashRoleViewer = "viewer"
 )
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -46,24 +55,50 @@ func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request, owner *
 	if listErr != nil {
 		slog.Error("dashboard upload list failed", "account_id", owner.ID, "admin", owner.IsAdmin, "err", listErr)
 	}
-	uploads := make([]dashUpload, 0, len(list))
+	type dashRow struct {
+		upload models.Upload
+		role   string
+	}
+	rows := make([]dashRow, 0, len(list))
 	for _, u := range list {
+		role := dashRoleOwner
+		if u.OwnerAccountID != owner.ID {
+			role = dashRoleAdmin
+		}
+		rows = append(rows, dashRow{u, role})
+	}
+	if !owner.IsAdmin {
+		// A failure is logged by sharedWithAccount; the owned rows still show.
+		if shared, err := s.sharedWithAccount(r.Context(), owner); err == nil {
+			for _, u := range shared {
+				rows = append(rows, dashRow{u, dashRoleViewer})
+			}
+			sort.SliceStable(rows, func(i, j int) bool { return rows[i].upload.CreatedAt.After(rows[j].upload.CreatedAt) })
+		}
+	}
+	uploads := make([]dashUpload, 0, len(rows))
+	ids := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		u := row.upload
 		uploads = append(uploads, dashUpload{
 			Slug: u.Slug, Name: u.Name,
 			SizeHuman: humanSize(u.Size), Visibility: u.Visibility,
 			CreatedHuman: u.CreatedAt.Format("2006-01-02 15:04"),
+			Role:         row.role, OwnerName: u.OwnerName,
 		})
-	}
-	ids := make([]int64, 0, len(list))
-	for _, u := range list {
-		ids = append(ids, u.ID)
+		if row.role != dashRoleViewer {
+			ids = append(ids, u.ID)
+		}
 	}
 	grantsByUpload, err := s.store.ListUploadGrantsForUploads(r.Context(), ids)
 	if err != nil {
 		slog.Error("dashboard grant list failed", "account_id", owner.ID, "err", err)
 	}
-	for i, u := range list {
-		for _, g := range grantsByUpload[u.ID] {
+	for i, row := range rows {
+		if row.role == dashRoleViewer {
+			continue
+		}
+		for _, g := range grantsByUpload[row.upload.ID] {
 			uploads[i].Grants = append(uploads[i].Grants, dashGrant{Kind: g.Kind, Email: g.Email})
 		}
 	}
@@ -96,6 +131,11 @@ func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request, owner *
 	s.renderHTML(w, status, webui.TemplateDashboard, dashData_)
 }
 
+// emptyPageHTML is the starter document of a page created empty from the dashboard.
+func emptyPageHTML(name string) string {
+	return "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>" + html.EscapeString(name) + "</title>\n</head>\n<body>\n</body>\n</html>\n"
+}
+
 func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 	owner, ok := s.webAuth(r)
 	if !ok {
@@ -122,17 +162,22 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 
 	mode := r.FormValue("mode")
 	visibility := strings.TrimSpace(r.FormValue("visibility"))
-	password := strings.TrimSpace(r.FormValue("password"))
 	name := strings.TrimSpace(r.FormValue("name"))
 
 	var data []byte
-	if mode == "paste" {
-		html := strings.TrimSpace(r.FormValue("html"))
-		if html == "" {
+	if mode == "empty" {
+		if name == "" {
+			dashboardError(w, r, "upload_name_required")
+			return
+		}
+		data = []byte(emptyPageHTML(name))
+	} else if mode == "paste" {
+		pasted := strings.TrimSpace(r.FormValue("html"))
+		if pasted == "" {
 			dashboardError(w, r, flashNoHTML)
 			return
 		}
-		data = []byte(html)
+		data = []byte(pasted)
 		if name == "" {
 			name = "pasted"
 		}
@@ -157,7 +202,6 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 		OwnerAccountID: owner.ID,
 		Name:           name,
 		Visibility:     visibility,
-		Password:       password,
 		Data:           data,
 		Limits:         s.uploadLimits(r.Context()),
 	})
@@ -217,23 +261,32 @@ func (s *Server) handleDashboardVisibility(w http.ResponseWriter, r *http.Reques
 		dashboardError(w, r, flashNotOwner)
 		return
 	}
-	change, err := uploads.PrepareVisibility(r.FormValue("visibility"), r.FormValue("password"))
+	visibility, err := uploads.PrepareVisibility(r.FormValue("visibility"))
 	if err != nil {
 		dashboardError(w, r, uploadFlashCode(err))
 		return
 	}
-	if err := s.store.SetUploadVisibility(r.Context(), u.ID, change.Visibility, change.PasswordHash); err != nil {
+	oldVisibility := u.Visibility
+	if err := s.store.SetUploadVisibility(r.Context(), u.ID, visibility); err != nil {
 		slog.Error("dashboard visibility update failed", "slug", slug, "err", err)
 		dashboardError(w, r, flashVisibilityFailed)
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.visibility.set", visibilityAuditDetail(slug, change.Visibility))
-	if change.Visibility == models.UploadVisibilityPassword {
-		dashboardOKSlug(w, r, flashPasswordUpdated, slug)
-		return
+	s.auditRequest(r, owner.Name, "upload.visibility.set", auditDetail("slug", slug, "visibility", visibility))
+	notifyFailed := false
+	if oldVisibility != models.UploadVisibilityRestricted && visibility == models.UploadVisibilityRestricted {
+		if grants, err := s.store.ListUploadGrants(r.Context(), u.ID); err != nil {
+			slog.Error("share notification grant list failed", "slug", slug, "err", err)
+		} else if _, err := s.notifyShare(r, owner.Name, owner.Email, u, grants); err != nil {
+			notifyFailed = true
+		}
 	}
-	if change.Visibility == models.UploadVisibilityRestricted {
-		dashboardFlashManage(w, r, "ok", flashVisibilitySet, slug)
+	if visibility == models.UploadVisibilityRestricted {
+		q := url.Values{"ok": {flashVisibilitySet}, "manage": {slug}, "slug": {slug}}
+		if notifyFailed {
+			q.Set("err", flashShareNotifyFailed)
+		}
+		dashboardFlash(w, r, q)
 		return
 	}
 	dashboardOKSlug(w, r, flashVisibilitySet, slug)

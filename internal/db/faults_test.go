@@ -31,11 +31,18 @@ func corruptInt(t *testing.T, s *Store, table, col string) {
 	}
 }
 
-// wantErr fails the test unless err is non-nil.
-func wantErr(t *testing.T, what string, err error) {
+// Substrings of the errors the fault helpers produce.
+const (
+	errInjected = "injected"           // failOn triggers
+	errScan     = "Scan error"         // corruptInt
+	errClosed   = "database is closed" // closed store
+)
+
+// wantErr fails the test unless err is non-nil and contains want.
+func wantErr(t *testing.T, what string, err error, want string) {
 	t.Helper()
-	if err == nil {
-		t.Fatalf("%s: expected an error", what)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("%s: err = %v, want error containing %q", what, err, want)
 	}
 }
 
@@ -72,7 +79,7 @@ func TestStoreMethodsFailOnClosedStore(t *testing.T) {
 		"ExpireCLILogin":              func() error { return s.ExpireCLILogin(ctx, 1) },
 		"AddComment":                  func() error { _, err := s.AddComment(ctx, 1, 1, "s", "t", "k", "a", "c", "b", 0); return err },
 		"ListComments":                func() error { _, err := s.ListComments(ctx, 1, 0); return err },
-		"AddUploadGrant":              func() error { _, err := s.AddUploadGrant(ctx, 1, "user", "a@x.test", 0); return err },
+		"AddUploadGrant":              func() error { _, _, err := s.AddUploadGrant(ctx, 1, "user", "a@x.test", 0); return err },
 		"RemoveUploadGrant":           func() error { return s.RemoveUploadGrant(ctx, 1, "user", "a@x.test") },
 		"ListUploadGrants":            func() error { _, err := s.ListUploadGrants(ctx, 1); return err },
 		"ListUploadGrantsForUploads":  func() error { _, err := s.ListUploadGrantsForUploads(ctx, []int64{1}); return err },
@@ -105,13 +112,13 @@ func TestStoreMethodsFailOnClosedStore(t *testing.T) {
 		"CountAdminTokens":            func() error { _, err := s.CountAdminTokens(ctx); return err },
 		"ListTokens":                  func() error { _, err := s.ListTokens(ctx); return err },
 		"CountTokens":                 func() error { _, err := s.CountTokens(ctx); return err },
-		"CreateUploadChecked":         func() error { return s.CreateUploadChecked(ctx, "s", 1, 0, "n", 1, "public", "", lim) },
+		"CreateUploadChecked":         func() error { return s.CreateUploadChecked(ctx, "s", 1, 0, "n", 1, "public", lim) },
 		"GetUpload":                   func() error { _, err := s.GetUpload(ctx, "s"); return err },
 		"UploadSlugExists":            func() error { _, err := s.UploadSlugExists(ctx, "s"); return err },
 		"GetUploadByID":               func() error { _, err := s.GetUploadByID(ctx, 1); return err },
 		"ListUploadsByOwner":          func() error { _, err := s.ListUploadsByOwner(ctx, 1); return err },
 		"ListAllUploads":              func() error { _, err := s.ListAllUploads(ctx); return err },
-		"SetUploadVisibility":         func() error { return s.SetUploadVisibility(ctx, 1, "public", "") },
+		"SetUploadVisibility":         func() error { return s.SetUploadVisibility(ctx, 1, "public") },
 		"DeleteUpload":                func() error { return s.DeleteUpload(ctx, 1) },
 		"CountUploads":                func() error { _, err := s.CountUploads(ctx); return err },
 		"SumUploadSizes":              func() error { _, err := s.SumUploadSizes(ctx); return err },
@@ -132,7 +139,7 @@ func TestStoreMethodsFailOnClosedStore(t *testing.T) {
 	}
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) {
-			wantErr(t, name, call())
+			wantErr(t, name, call(), errClosed)
 		})
 	}
 }
@@ -143,5 +150,5 @@ func (errResult) LastInsertId() (int64, error) { return 0, errors.New("no id") }
 func (errResult) RowsAffected() (int64, error) { return 0, errors.New("no rows count") }
 
 func TestRequireRowsAffectedReportsDriverError(t *testing.T) {
-	wantErr(t, "requireRowsAffected", requireRowsAffected(errResult{}))
+	wantErr(t, "requireRowsAffected", requireRowsAffected(errResult{}), "no rows count")
 }

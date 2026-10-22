@@ -45,13 +45,20 @@ func (s *Server) handleDashboardGrantAdd(w http.ResponseWriter, r *http.Request)
 		dashboardFlashManage(w, r, "err", grantFlashCode(msg), slug)
 		return
 	}
-	if _, err := s.store.AddUploadGrant(r.Context(), u.ID, kind, email, owner.ID); err != nil {
+	g, created, err := s.store.AddUploadGrant(r.Context(), u.ID, kind, email, owner.ID)
+	if err != nil {
 		slog.Error("dashboard grant add failed", "slug", slug, "err", err)
 		dashboardFlashManage(w, r, "err", flashGrantFailed, slug)
 		return
 	}
 	s.auditRequest(r, owner.Name, "upload.grant.add", auditDetail("slug", u.Slug, "kind", kind, "email", email))
-	dashboardFlash(w, r, url.Values{"ok": {flashGrantAdded}, "manage": {slug}, "slug": {slug}, "email": {email}})
+	q := url.Values{"ok": {flashGrantAdded}, "manage": {slug}, "slug": {slug}, "email": {email}}
+	if created && u.Visibility == models.UploadVisibilityRestricted {
+		if _, err := s.notifyShare(r, owner.Name, owner.Email, u, []models.UploadGrant{*g}); err != nil {
+			q.Set("err", flashShareNotifyFailed)
+		}
+	}
+	dashboardFlash(w, r, q)
 }
 
 func (s *Server) handleDashboardGrantRemove(w http.ResponseWriter, r *http.Request) {

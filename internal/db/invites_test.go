@@ -88,14 +88,17 @@ func TestInviteScanErrors(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)
 	t.Cleanup(func() { s.Close() })
-	admin, _ := s.CreateAccount(ctx, "admin@example.test", "admin", true)
+	admin, err := s.CreateAccount(ctx, "admin@example.test", "admin", true)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
 	inv, err := s.CreateInvite(ctx, "raw", "c", "a@example.test", admin.ID, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	corruptInt(t, s, "invites", "created_at")
 	_, err = s.ListInvites(ctx)
-	wantErr(t, "ListInvites", err)
+	wantErr(t, "ListInvites", err, errScan)
 	_, err = s.GetInviteByID(ctx, inv.ID)
-	wantErr(t, "GetInviteByID", err)
+	wantErr(t, "GetInviteByID", err, errScan)
 }

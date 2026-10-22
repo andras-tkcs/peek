@@ -36,13 +36,25 @@ func TestFlashMessagesCoverAllCodes(t *testing.T) {
 		flashAPIKeyName, flashAPIKeyCreateFailed, flashAPIKeyRegenerateFailed, flashAPIKeyRevokeFailed,
 		flashUploadFailed, flashUploadPersistenceFailure,
 		flashInviteCreated, flashInviteRevoked, flashUserUpdated, flashSettingsSaved, flashAPIKeyRevoked,
-		flashPasswordUpdated, flashVisibilitySet, flashGrantAdded, flashGrantRemoved, flashRenamed,
+		flashVisibilitySet, flashGrantAdded, flashGrantRemoved, flashRenamed,
 		flashSessionsRevoked, flashSessionsRevokeFailed,
+		flashEmailTestSent, flashEmailNotConfigured, flashEmailNoAddress, flashEmailTestFailed, flashShareNotifyFailed,
 	}
 	for _, code := range codes {
 		if flashMessages[code] == "" {
 			t.Errorf("flashMessages[%q] is missing or empty", code)
 		}
+	}
+	for code, msg := range flashMessages {
+		if msg == "" || msg == code {
+			t.Errorf("flashMessages[%q] = %q, want human-readable text", code, msg)
+		}
+	}
+}
+
+func TestFlashInvalidSessionText(t *testing.T) {
+	if got := flashMessages[flashInvalidSession]; got != "invalid session" {
+		t.Fatalf("flashMessages[flashInvalidSession] = %q, want %q", got, "invalid session")
 	}
 }
 
@@ -55,28 +67,23 @@ func (noRenameRepo) ResolveSlugAlias(context.Context, string) (string, error) {
 func (noRenameRepo) RenameUpload(context.Context, int64, string, string) error { return nil }
 
 func TestUploadFlashCodeMatchesUploadErrors(t *testing.T) {
-	_, visErr1 := uploads.PrepareVisibility("bogus", "")
-	_, visErr2 := uploads.PrepareVisibility("password", "")
-	_, visErr3 := uploads.PrepareVisibility("public", "x")
-	_, visErr4 := uploads.PrepareVisibility("password", strings.Repeat("a", 73))
+	_, visErr1 := uploads.PrepareVisibility("bogus")
+	_, visErr2 := uploads.PrepareVisibility("password")
 	_, nameErr1 := uploads.Rename(context.Background(), noRenameRepo{}, "", uploads.RenameInput{Name: " "})
 	_, nameErr2 := uploads.Rename(context.Background(), noRenameRepo{}, "", uploads.RenameInput{Name: strings.Repeat("a", 201)})
 	cases := map[string]error{
-		"bogus visibility":     visErr1,
-		"password required":    visErr2,
-		"password not allowed": visErr3,
-		"password too long":    visErr4,
-		"name required":        nameErr1,
-		"name too long":        nameErr2,
-		"empty file":           &uploads.Error{Kind: uploads.KindEmptyFile, Message: "empty file"},
-		"invalid html":         &uploads.Error{Kind: uploads.KindInvalidHTML, Message: "file does not look like HTML"},
-		"password hash":        &uploads.Error{Kind: uploads.KindPasswordHash, Message: "hash failed"},
-		"slug generation":      &uploads.Error{Kind: uploads.KindSlugGeneration, Message: "slug generation failed"},
-		"storage write":        &uploads.Error{Kind: uploads.KindStorageWrite, Message: "storage failed"},
-		"total quota":          &uploads.Error{Kind: uploads.KindTotalQuotaExceeded, Message: "total storage quota exceeded"},
-		"owner count":          &uploads.Error{Kind: uploads.KindOwnerCountExceeded, Message: "per-token upload count quota exceeded"},
-		"owner storage":        &uploads.Error{Kind: uploads.KindOwnerStorageExceeded, Message: "per-token storage quota exceeded"},
-		"persistence":          &uploads.Error{Kind: uploads.KindPersistenceFailure, Message: "db failed"},
+		"bogus visibility":    visErr1,
+		"password visibility": visErr2,
+		"name required":       nameErr1,
+		"name too long":       nameErr2,
+		"empty file":          &uploads.Error{Kind: uploads.KindEmptyFile, Message: "empty file"},
+		"invalid html":        &uploads.Error{Kind: uploads.KindInvalidHTML, Message: "file does not look like HTML"},
+		"slug generation":     &uploads.Error{Kind: uploads.KindSlugGeneration, Message: "slug generation failed"},
+		"storage write":       &uploads.Error{Kind: uploads.KindStorageWrite, Message: "storage failed"},
+		"total quota":         &uploads.Error{Kind: uploads.KindTotalQuotaExceeded, Message: "total storage quota exceeded"},
+		"owner count":         &uploads.Error{Kind: uploads.KindOwnerCountExceeded, Message: "per-token upload count quota exceeded"},
+		"owner storage":       &uploads.Error{Kind: uploads.KindOwnerStorageExceeded, Message: "per-token storage quota exceeded"},
+		"persistence":         &uploads.Error{Kind: uploads.KindPersistenceFailure, Message: "db failed"},
 	}
 	for name, err := range cases {
 		t.Run(name, func(t *testing.T) {

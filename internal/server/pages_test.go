@@ -13,13 +13,11 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
-	"time"
 
 	"github.com/andras-tkcs/peek/internal/db"
 	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/uploadquota"
 	webui "github.com/andras-tkcs/peek/internal/web"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type rawPageStorage struct {
@@ -68,63 +66,6 @@ func TestHandlePageMissingUploadRendersWebError(t *testing.T) {
 	}
 }
 
-func TestPagePasswordCookieAuthorizesProtectedCommentAPI(t *testing.T) {
-	s := newTestServer(t)
-	account, err := s.store.CreateAccount(context.Background(), "owner@example.test", "Owner", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte("lolololo"), bcrypt.DefaultCost)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.store.CreateUploadChecked(context.Background(), "protected", account.ID, 0, "protected.html", 42, "password", string(hash), uploadquota.Limits{}); err != nil {
-		t.Fatal(err)
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/uploads/protected/comments", strings.NewReader(`{"name":"Ada","body":"Looks good"}`))
-	req.SetPathValue("slug", "protected")
-	rec := httptest.NewRecorder()
-	s.handleAddComment(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthorized status = %d, body = %s", rec.Code, rec.Body.String())
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/p/protected", strings.NewReader("password=lolololo"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetPathValue("slug", "protected")
-	rec = httptest.NewRecorder()
-	s.handlePagePassword(rec, req)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("password status = %d, body = %s", rec.Code, rec.Body.String())
-	}
-	var authCookie *http.Cookie
-	for _, c := range rec.Result().Cookies() {
-		if c.Name == authCookieName("protected") {
-			authCookie = c
-			break
-		}
-	}
-	if authCookie == nil {
-		t.Fatalf("password response did not set %s cookie", authCookieName("protected"))
-	}
-	if authCookie.Path != "/" {
-		t.Fatalf("auth cookie path = %q, want /", authCookie.Path)
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/api/uploads/protected/comments", strings.NewReader(`{"name":"Ada","body":"Looks good"}`))
-	req.SetPathValue("slug", "protected")
-	req.AddCookie(authCookie)
-	rec = httptest.NewRecorder()
-	s.handleAddComment(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("comment status = %d, body = %s", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), `"author":"Ada"`) {
-		t.Fatalf("comment response missing saved author: %s", rec.Body.String())
-	}
-}
-
 func TestPrivatePageRequiresActiveWebSession(t *testing.T) {
 	s := newTestServer(t)
 	owner, err := s.store.CreateAccount(context.Background(), "owner@example.test", "Owner", false)
@@ -135,7 +76,7 @@ func TestPrivatePageRequiresActiveWebSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -173,7 +114,7 @@ func TestHandleRawStreamsHTMLWithBridgeInjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	secret := strings.Repeat("0", 64)
@@ -322,51 +263,16 @@ func TestDownloadFilename(t *testing.T) {
 	}
 }
 
-func TestPagePasswordFailuresLockPageAfterLimit(t *testing.T) {
-	s, _ := newHandlerTestServer(t)
-	hash, err := bcrypt.GenerateFromPassword([]byte("right"), bcrypt.MinCost)
-	if err != nil {
-		t.Fatal(err)
-	}
-	newTwoVersionPage(t, s, "pwlock", models.UploadVisibilityPassword, string(hash))
-	newTwoVersionPage(t, s, "pwother", models.UploadVisibilityPassword, string(hash))
-	now := time.Unix(1700000000, 0)
-	s.pagePasswordFailLimiter.now = func() time.Time { return now }
-	post := func(slug, pw string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodPost, "/p/"+slug, strings.NewReader("password="+pw))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.SetPathValue("slug", slug)
-		rec := httptest.NewRecorder()
-		s.handlePagePassword(rec, req)
-		return rec
-	}
-	for i := 0; i < pagePasswordFailureMax; i++ {
-		if rec := post("pwlock", "wrong"); rec.Code != http.StatusUnauthorized {
-			t.Fatalf("attempt %d status = %d", i, rec.Code)
-		}
-	}
-	if rec := post("pwlock", "right"); rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("locked status = %d", rec.Code)
-	}
-	if rec := post("pwother", "right"); rec.Code != http.StatusSeeOther {
-		t.Fatalf("other page status = %d", rec.Code)
-	}
-	now = now.Add(pagePasswordFailureWindow + time.Second)
-	if rec := post("pwlock", "right"); rec.Code != http.StatusSeeOther {
-		t.Fatalf("after window status = %d", rec.Code)
-	}
-}
-
 // pageCovSeed creates a one-version upload owned by the admin token's account
 // and stores html under its version-1 object key.
-func pageCovSeed(t *testing.T, s *Server, token, slug, visibility, passwordHash, html string) *models.Upload {
+func pageCovSeed(t *testing.T, s *Server, token, slug, visibility, html string) *models.Upload {
 	t.Helper()
 	ctx := context.Background()
 	tok, err := s.store.GetToken(ctx, token)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(ctx, slug, tok.AccountID, tok.ID, slug+".html", int64(len(html)), visibility, passwordHash, uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(ctx, slug, tok.AccountID, tok.ID, slug+".html", int64(len(html)), visibility, uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	u, err := s.store.GetUpload(ctx, slug)
@@ -457,8 +363,8 @@ func TestPageCovPageVersionMissingUpload(t *testing.T) {
 
 func TestPageCovStaleSessionCookieIsCleared(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "priv", "signed-in", "", "<html></html>")
-	pageCovSeed(t, s, token, "restr", "restricted", "", "<html></html>")
+	pageCovSeed(t, s, token, "priv", "signed-in", "<html></html>")
+	pageCovSeed(t, s, token, "restr", "restricted", "<html></html>")
 	for _, slug := range []string{"priv", "restr"} {
 		rec := doRequest(t, s, http.MethodGet, "/p/"+slug+"?x=1", nil, func(r *http.Request) {
 			r.AddCookie(&http.Cookie{Name: sessionCookie, Value: "garbage"})
@@ -475,54 +381,9 @@ func TestPageCovStaleSessionCookieIsCleared(t *testing.T) {
 	}
 }
 
-func TestPageCovPasswordPostBranches(t *testing.T) {
-	s, token := newHandlerTestServer(t)
-	hash, err := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.MinCost)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pageCovSeed(t, s, token, "pw", "password", string(hash), "<html></html>")
-	pageCovSeed(t, s, token, "open", "public", "", "<html></html>")
-	form := func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") }
-
-	if rec := doRequest(t, s, http.MethodPost, "/p/missing", strings.NewReader("password=x"), form); rec.Code != http.StatusNotFound {
-		t.Fatalf("missing upload status = %d", rec.Code)
-	}
-	if rec := doRequest(t, s, http.MethodPost, "/p/pw/v/9", strings.NewReader("password=x"), form); rec.Code != http.StatusNotFound {
-		t.Fatalf("bad version status = %d", rec.Code)
-	}
-	rec := doRequest(t, s, http.MethodPost, "/p/open", strings.NewReader("password=x"), form)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/p/open" {
-		t.Fatalf("non-password status = %d location = %q", rec.Code, rec.Header().Get("Location"))
-	}
-	rec = doRequest(t, s, http.MethodPost, "/p/pw?x=1", strings.NewReader("password=wrong"), form)
-	if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "/p/pw?x=1") {
-		t.Fatalf("wrong password status = %d body = %s", rec.Code, rec.Body.String())
-	}
-	rec = doRequest(t, s, http.MethodPost, "/p/pw/v/1?x=1", strings.NewReader("password=secret"), form)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/p/pw/v/1?x=1" {
-		t.Fatalf("good password status = %d location = %q", rec.Code, rec.Header().Get("Location"))
-	}
-}
-
-func TestPageCovPasswordPostBadForm(t *testing.T) {
-	s, token := newHandlerTestServer(t)
-	hash, err := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.MinCost)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pageCovSeed(t, s, token, "pw", "password", string(hash), "<html></html>")
-	rec := doRequest(t, s, http.MethodPost, "/p/pw", strings.NewReader("%zz=1"), func(r *http.Request) {
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d", rec.Code)
-	}
-}
-
 func TestPageCovRawVersionBranches(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "page", "public", "", "<html><body>hi</body></html>")
+	pageCovSeed(t, s, token, "page", "public", "<html><body>hi</body></html>")
 
 	if rec := doRequest(t, s, http.MethodGet, "/raw/page/v/abc", nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("bad version status = %d", rec.Code)
@@ -541,7 +402,7 @@ func TestPageCovRawVersionBranches(t *testing.T) {
 
 func TestPageCovRawStorageFailures(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "page", "public", "", "<html><body>hi</body></html>")
+	pageCovSeed(t, s, token, "page", "public", "<html><body>hi</body></html>")
 	html := "<html><body>hi</body></html>"
 	tests := []struct {
 		name  string
@@ -574,9 +435,40 @@ func TestPageCovRawStorageFailures(t *testing.T) {
 
 func TestPageCovWriteRawHTMLWriteFailures(t *testing.T) {
 	body := func() io.Reader { return strings.NewReader("<html><body>hi</body></html>") }
-	writeRawHTML(&failingWriter{}, "s", body(), 12)                  // prefix copy fails
-	writeRawHTML(&failingWriter{}, "s", body(), 0)                   // bridge tag write fails
-	writeRawHTML(&pageCovLimitedWriter{okWrites: 1}, "s", body(), 0) // body copy fails
+	var logs bytes.Buffer
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(oldLogger) })
+	checkLogged := func(name string) {
+		t.Helper()
+		if !strings.Contains(logs.String(), "write raw html response") || !strings.Contains(logs.String(), "slug=s") {
+			t.Errorf("%s: write failure was not logged: %s", name, logs.String())
+		}
+	}
+
+	logs.Reset()
+	prefixFail := &failingWriter{ResponseRecorder: *httptest.NewRecorder()}
+	writeRawHTML(prefixFail, "s", body(), 12) // prefix copy fails
+	checkLogged("prefix copy")
+	if csp := prefixFail.Header().Get("Content-Security-Policy"); csp != rawContentCSP {
+		t.Errorf("prefix copy CSP = %q, want rawContentCSP", csp)
+	}
+
+	logs.Reset()
+	bridgeFail := &failingWriter{ResponseRecorder: *httptest.NewRecorder()}
+	writeRawHTML(bridgeFail, "s", body(), 0) // bridge tag write fails
+	checkLogged("bridge tag")
+	if csp := bridgeFail.Header().Get("Content-Security-Policy"); csp != rawContentCSP {
+		t.Errorf("bridge tag CSP = %q, want rawContentCSP", csp)
+	}
+
+	logs.Reset()
+	bodyFail := &pageCovLimitedWriter{ResponseRecorder: *httptest.NewRecorder(), okWrites: 1}
+	writeRawHTML(bodyFail, "s", body(), 0) // body copy fails
+	checkLogged("body copy")
+	if got := bodyFail.Body.String(); got != string(bridgeScriptTag()) {
+		t.Errorf("body copy wrote %q, want only the bridge tag", got)
+	}
 }
 
 func TestPageCovServeDownloadCopyFailure(t *testing.T) {
@@ -585,7 +477,18 @@ func TestPageCovServeDownloadCopyFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &Server{storage: st}
-	s.serveDownload(&failingWriter{}, httptest.NewRequest(http.MethodGet, "/", nil), "s", "n", "k")
+	var logs bytes.Buffer
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(oldLogger) })
+	w := &failingWriter{ResponseRecorder: *httptest.NewRecorder()}
+	s.serveDownload(w, httptest.NewRequest(http.MethodGet, "/", nil), "s", "n", "k")
+	if !strings.Contains(logs.String(), "write download response") || !strings.Contains(logs.String(), "slug=s") {
+		t.Errorf("copy failure was not logged: %s", logs.String())
+	}
+	if cd := w.Header().Get("Content-Disposition"); !strings.HasPrefix(cd, "attachment") {
+		t.Errorf("Content-Disposition = %q, want attachment", cd)
+	}
 }
 
 func TestPageCovIndexRoutes(t *testing.T) {
@@ -608,5 +511,58 @@ func TestPageCovBridgeInsertOffsetReaders(t *testing.T) {
 	}
 	if got := lastMarkerOffset(nil, []byte("</body>"), 0, 0, 5); got != 5 {
 		t.Fatalf("lastMarkerOffset on empty input = %d, want 5", got)
+	}
+}
+
+func TestPagePasswordRoutesRemoved(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	newTwoVersionPage(t, s, "pwgone", models.UploadVisibilityPublic)
+	form := func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") }
+	for _, path := range []string{"/p/pwgone", "/p/pwgone/v/1"} {
+		rec := doRequest(t, s, http.MethodPost, path, strings.NewReader("password=x"), form)
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("POST %s = %d, want 405", path, rec.Code)
+		}
+	}
+}
+
+// TestStrayPasswordVisibilityFailsClosed uses the literal string rather than the
+// model constant so it keeps passing once the constant is removed.
+func TestStrayPasswordVisibilityFailsClosed(t *testing.T) {
+	e := newMatrixEnv(t)
+	ctx := context.Background()
+	body := []byte("<html><body>stray secret body</body></html>")
+	if err := e.s.storage.Save(ctx, "stray-pw", body); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.store.CreateUploadChecked(ctx, "stray-pw", e.owner.ID, 0, "stray.html", int64(len(body)), "password", uploadquota.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	actors := map[string]func(*http.Request){
+		"anonymous": func(*http.Request) {},
+		"owner":     asSession(e.s, e.owner.ID),
+		"admin":     asSession(e.s, e.admin.ID),
+	}
+	for name, opts := range actors {
+		t.Run(name, func(t *testing.T) {
+			page := doRequest(t, e.s, http.MethodGet, "/p/stray-pw", nil, opts)
+			if page.Code != http.StatusForbidden {
+				t.Errorf("GET /p = %d, want 403", page.Code)
+			}
+			if strings.Contains(page.Body.String(), "/raw/stray-pw") || strings.Contains(page.Body.String(), "stray secret body") {
+				t.Error("page response exposes content")
+			}
+			// No bearer token: the session cookie alone must not open the API.
+			if c := doRequest(t, e.s, http.MethodGet, "/api/uploads/stray-pw/comments", nil); c.Code != http.StatusUnauthorized {
+				t.Errorf("GET comments without token = %d, want 401", c.Code)
+			}
+			raw := doRequest(t, e.s, http.MethodGet, "/raw/stray-pw/v/1", nil, opts)
+			if raw.Code != http.StatusForbidden && raw.Code != http.StatusNotFound {
+				t.Errorf("GET raw = %d, want 403 or 404", raw.Code)
+			}
+			if strings.Contains(raw.Body.String(), "stray secret body") {
+				t.Error("raw response exposes content")
+			}
+		})
 	}
 }

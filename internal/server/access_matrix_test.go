@@ -6,54 +6,44 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/uploadquota"
 )
 
+// strayPasswordVisibility is the removed visibility, still possible in a row written
+// by an older binary; pages with it must fail closed.
+const strayPasswordVisibility = "password"
+
 // matrixEnv is one server with an owner, a grantee, an unrelated signed-in user and
 // an admin, each with a session cookie and a bearer token.
 type matrixEnv struct {
-	s        *Server
-	owner    *models.Account
-	grantee  *models.Account
-	other    *models.Account
-	admin    *models.Account
-	password string
+	s       *Server
+	owner   *models.Account
+	grantee *models.Account
+	other   *models.Account
+	admin   *models.Account
 }
-
-const matrixPagePassword = "matrix-secret"
 
 func newMatrixEnv(t *testing.T) *matrixEnv {
 	t.Helper()
 	s, _ := newHandlerTestServer(t)
 	return &matrixEnv{
-		s:        s,
-		owner:    newAccountWithToken(t, s, "owner@example.test", "owner-token", false),
-		grantee:  newAccountWithToken(t, s, "grantee@example.test", "grantee-token", false),
-		other:    newAccountWithToken(t, s, "other@example.test", "other-token", false),
-		admin:    newAccountWithToken(t, s, "admin@example.test", "admin-token", true),
-		password: matrixPagePassword,
+		s:       s,
+		owner:   newAccountWithToken(t, s, "owner@example.test", "owner-token", false),
+		grantee: newAccountWithToken(t, s, "grantee@example.test", "grantee-token", false),
+		other:   newAccountWithToken(t, s, "other@example.test", "other-token", false),
+		admin:   newAccountWithToken(t, s, "admin@example.test", "admin-token", true),
 	}
 }
 
 func (e *matrixEnv) page(t *testing.T, slug, visibility string) *models.Upload {
 	t.Helper()
 	ctx := context.Background()
-	hash := ""
-	if visibility == models.UploadVisibilityPassword {
-		b, err := bcrypt.GenerateFromPassword([]byte(e.password), bcrypt.MinCost)
-		if err != nil {
-			t.Fatal(err)
-		}
-		hash = string(b)
-	}
 	body := []byte("<html><body>matrix secret body</body></html>")
 	if err := e.s.storage.Save(ctx, slug, body); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.store.CreateUploadChecked(ctx, slug, e.owner.ID, 0, "matrix.html", int64(len(body)), visibility, hash, uploadquota.Limits{}); err != nil {
+	if err := e.s.store.CreateUploadChecked(ctx, slug, e.owner.ID, 0, "matrix.html", int64(len(body)), visibility, uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	u, err := e.s.store.GetUpload(ctx, slug)
@@ -62,23 +52,6 @@ func (e *matrixEnv) page(t *testing.T, slug, visibility string) *models.Upload {
 	}
 	grant(t, e.s, u, models.UploadGrantUser, "grantee@example.test")
 	return u
-}
-
-// unlockCookie returns the page-password cookie a viewer gets by entering the right password.
-func (e *matrixEnv) unlockCookie(t *testing.T, slug string) *http.Cookie {
-	t.Helper()
-	rec := doRequest(t, e.s, http.MethodPost, "/p/"+slug, strings.NewReader("password="+e.password),
-		func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") })
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("unlock status = %d: %s", rec.Code, rec.Body.String())
-	}
-	for _, c := range rec.Result().Cookies() {
-		if c.Name == authCookieName(slug) {
-			return c
-		}
-	}
-	t.Fatal("unlock set no page auth cookie")
-	return nil
 }
 
 // TestPageAccessMatrix checks every page-side read and write route for every
@@ -114,9 +87,9 @@ func TestPageAccessMatrix(t *testing.T) {
 		{models.UploadVisibilityPublic, map[string]want{
 			"anonymous": {ok, ok}, "owner": {ok, ok}, "grantee": {ok, ok}, "other": {ok, ok}, "admin": {ok, ok},
 		}},
-		// The gate page is a 200 that must not carry content. Accounts do not bypass it.
-		{models.UploadVisibilityPassword, map[string]want{
-			"anonymous": {ok, noauth}, "owner": {ok, noauth}, "grantee": {ok, noauth}, "other": {ok, noauth}, "admin": {ok, noauth},
+		// A stray password row fails closed for everyone, accounts included.
+		{strayPasswordVisibility, map[string]want{
+			"anonymous": {deny, noauth}, "owner": {deny, noauth}, "grantee": {deny, noauth}, "other": {deny, noauth}, "admin": {deny, noauth},
 		}},
 		{models.UploadVisibilitySignedIn, map[string]want{
 			"anonymous": {redir, noauth}, "owner": {ok, ok}, "grantee": {ok, ok}, "other": {ok, ok}, "admin": {ok, ok},
@@ -136,7 +109,7 @@ func TestPageAccessMatrix(t *testing.T) {
 					t.Fatalf("GET /p = %d, want %d", page.Code, w.page)
 				}
 				hasIframe := strings.Contains(page.Body.String(), "/raw/"+u.Slug)
-				if wantFrame := tc.visibility != models.UploadVisibilityPassword && w.page == ok; hasIframe != wantFrame {
+				if wantFrame := tc.visibility != strayPasswordVisibility && w.page == ok; hasIframe != wantFrame {
 					t.Fatalf("page has raw iframe = %v, want %v", hasIframe, wantFrame)
 				}
 				if strings.Contains(page.Body.String(), "matrix secret body") {
@@ -167,59 +140,17 @@ func TestPageAccessMatrix(t *testing.T) {
 	}
 }
 
-// TestPasswordPageAccessMatrix covers the unlocked and wrong-password states.
-func TestPasswordPageAccessMatrix(t *testing.T) {
-	e := newMatrixEnv(t)
-	u := e.page(t, "m-pw", models.UploadVisibilityPassword)
-	other := e.page(t, "m-pw-other", models.UploadVisibilityPassword)
-
-	cookie := e.unlockCookie(t, u.Slug)
-	withCookie := func(r *http.Request) { r.AddCookie(cookie) }
-	if rec := doRequest(t, e.s, http.MethodGet, "/api/uploads/"+u.Slug+"/views", nil, withCookie); rec.Code != http.StatusOK {
-		t.Fatalf("unlocked views = %d, want 200", rec.Code)
-	}
-	// The unlock cookie is per page: it opens nothing else.
-	if rec := doRequest(t, e.s, http.MethodGet, "/api/uploads/"+other.Slug+"/views", nil, withCookie); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("cookie for another page = %d, want 401", rec.Code)
-	}
-	// A cookie renamed to another slug must not verify either.
-	renamed := &http.Cookie{Name: authCookieName(other.Slug), Value: cookie.Value}
-	if rec := doRequest(t, e.s, http.MethodGet, "/api/uploads/"+other.Slug+"/views", nil, func(r *http.Request) { r.AddCookie(renamed) }); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("relabelled cookie = %d, want 401", rec.Code)
-	}
-	for _, bad := range []string{"", "x", "a.b.c", cookie.Value + "0", u.Slug + ".9999999999.deadbeef"} {
-		c := &http.Cookie{Name: authCookieName(u.Slug), Value: bad}
-		if rec := doRequest(t, e.s, http.MethodGet, "/api/uploads/"+u.Slug+"/views", nil, func(r *http.Request) { r.AddCookie(c) }); rec.Code != http.StatusUnauthorized {
-			t.Fatalf("forged cookie %q = %d, want 401", bad, rec.Code)
-		}
-	}
-	wrong := doRequest(t, e.s, http.MethodPost, "/p/"+u.Slug, strings.NewReader("password=nope"),
-		func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") })
-	if wrong.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong password = %d, want 401", wrong.Code)
-	}
-	for _, c := range wrong.Result().Cookies() {
-		if c.Name == authCookieName(u.Slug) {
-			t.Fatal("wrong password set an auth cookie")
-		}
-	}
-}
-
 // TestRawAccessMatrix checks that /raw serves content only to viewers who may see
 // the page, even when they hold a validly signed view token and visitor cookie.
 func TestRawAccessMatrix(t *testing.T) {
 	e := newMatrixEnv(t)
-	for _, visibility := range []string{models.UploadVisibilitySignedIn, models.UploadVisibilityRestricted, models.UploadVisibilityPassword} {
+	for _, visibility := range []string{models.UploadVisibilitySignedIn, models.UploadVisibilityRestricted} {
 		t.Run(visibility, func(t *testing.T) {
 			u := e.page(t, "raw-"+strings.ReplaceAll(visibility, "-", ""), visibility)
 			authorized := asSession(e.s, e.owner.ID)
-			if visibility == models.UploadVisibilityPassword {
-				c := e.unlockCookie(t, u.Slug)
-				authorized = func(r *http.Request) { r.AddCookie(c) }
-			}
 			src, pageCookies := rawSrcFromPage(t, e.s, "/p/"+u.Slug, authorized)
-			// Only the visitor cookie: the page response may also carry the
-			// password-unlock cookie, which is a credential in its own right.
+			// Only the visitor cookie: the page response may also carry other
+			// credentials of its own.
 			var cookies []*http.Cookie
 			for _, c := range pageCookies {
 				if c.Name == visitorCookie {
@@ -329,7 +260,7 @@ func TestOwnerOnlyAPIMatrix(t *testing.T) {
 	}
 
 	for _, visibility := range []string{
-		models.UploadVisibilityPublic, models.UploadVisibilityPassword,
+		models.UploadVisibilityPublic, strayPasswordVisibility,
 		models.UploadVisibilitySignedIn, models.UploadVisibilityRestricted,
 	} {
 		u := e.page(t, "own-"+strings.ReplaceAll(visibility, "-", ""), visibility)

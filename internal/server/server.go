@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/mail"
 	"github.com/andras-tkcs/peek/internal/objectstore"
 	webui "github.com/andras-tkcs/peek/internal/web"
 )
@@ -71,13 +72,11 @@ type Server struct {
 	loginLimiter    *limiter
 	commentLimiter  *limiter
 	uploadLimiter   *limiter
-	passwordLimiter *limiter
 	globalLimiter   *limiter
 	cliLoginLimiter *limiter
 	apiKeyLimiter   *limiter
 
-	pagePasswordFailLimiter *limiter
-	accountLoginLimiter     *limiter
+	accountLoginLimiter *limiter
 
 	trustedProxy             bool
 	trustedProxyCIDRs        []netip.Prefix
@@ -87,6 +86,7 @@ type Server struct {
 	visitQueue               chan visitEvent
 	groups                   GroupChecker
 	metricsToken             string
+	mailer                   mail.Sender
 }
 
 func New(cfg Config) (*Server, error) {
@@ -197,30 +197,29 @@ func New(cfg Config) (*Server, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	srv := &Server{
-		store:                   store,
-		secret:                  secret,
-		baseURL:                 baseURL,
-		dataDir:                 cfg.DataDir,
-		storage:                 st,
-		renderer:                renderer,
-		secure:                  secure,
-		ctx:                     ctx,
-		cancel:                  cancel,
-		loginLimiter:            newLimiter(10, time.Minute),
-		commentLimiter:          newLimiter(30, time.Minute),
-		uploadLimiter:           newLimiter(20, time.Minute),
-		passwordLimiter:         newLimiter(10, time.Minute),
-		globalLimiter:           newLimiter(300, time.Minute),
-		cliLoginLimiter:         newLimiter(120, time.Minute),
-		apiKeyLimiter:           newLimiter(10, time.Minute),
-		pagePasswordFailLimiter: newLimiter(pagePasswordFailureMax, pagePasswordFailureWindow),
-		accountLoginLimiter:     newLimiter(accountLoginFailureMax, accountLoginFailureWindow),
-		metricsToken:            cfg.MetricsToken,
-		trustedProxy:            cfg.TrustedProxy,
-		trustedProxyCIDRs:       cidrs,
-		s3AllowPrivateEndpoint:  cfg.S3AllowPrivateEndpoint,
-		oidcAllowPrivateIssuer:  cfg.OIDCAllowPrivateIssuer,
-		visitQueue:              make(chan visitEvent, 256),
+		store:                  store,
+		secret:                 secret,
+		baseURL:                baseURL,
+		dataDir:                cfg.DataDir,
+		storage:                st,
+		renderer:               renderer,
+		secure:                 secure,
+		ctx:                    ctx,
+		cancel:                 cancel,
+		loginLimiter:           newLimiter(10, time.Minute),
+		commentLimiter:         newLimiter(30, time.Minute),
+		uploadLimiter:          newLimiter(20, time.Minute),
+		globalLimiter:          newLimiter(300, time.Minute),
+		cliLoginLimiter:        newLimiter(120, time.Minute),
+		apiKeyLimiter:          newLimiter(10, time.Minute),
+		accountLoginLimiter:    newLimiter(accountLoginFailureMax, accountLoginFailureWindow),
+		mailer:                 mail.SMTPSender{},
+		metricsToken:           cfg.MetricsToken,
+		trustedProxy:           cfg.TrustedProxy,
+		trustedProxyCIDRs:      cidrs,
+		s3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
+		oidcAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
+		visitQueue:             make(chan visitEvent, 256),
 	}
 
 	if cfg.Groups != nil {
@@ -243,4 +242,12 @@ func New(cfg Config) (*Server, error) {
 
 	closeStoreOnError = false
 	return srv, nil
+}
+
+// mailSender returns the configured mail sender, or the SMTP one when none is set.
+func (s *Server) mailSender() mail.Sender {
+	if s.mailer == nil {
+		return mail.SMTPSender{}
+	}
+	return s.mailer
 }

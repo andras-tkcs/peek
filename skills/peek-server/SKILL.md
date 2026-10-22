@@ -1,14 +1,14 @@
 ---
 name: peek-server
-description: Run and administer a self-hosted peek server — the HTML sharing service behind the peek CLI. Use when the user wants to install, start, deploy, or self-host a peek server, create or revoke access tokens, set or clear page passwords, or configure peekd. Triggers on "run a peek server", "self-host peek", "deploy peek", "create a peek token", "peek admin", "set up peekd". For just uploading HTML and reading comments as a client, use the peek skill instead.
+description: Run and administer a self-hosted peek server — the HTML sharing service behind the peek CLI. Use when the user wants to install, start, deploy, or self-host a peek server, create or revoke access tokens, configure SMTP email, or configure peekd. Triggers on "run a peek server", "self-host peek", "deploy peek", "create a peek token", "peek admin", "set up peekd". For just uploading HTML and reading comments as a client, use the peek skill instead.
 ---
 
 # peek-server — Run and administer a peek server
 
 peek is a self-hosted HTML sharing server (`peekd`) with a companion CLI
 (`peek`). This skill covers **running and administering** the server: starting
-`peekd`, issuing access tokens, managing page passwords, configuring runtime
-limits/storage, and deploying behind a reverse proxy.
+`peekd`, issuing access tokens, managing page access and share emails, configuring
+runtime limits/storage, and deploying behind a reverse proxy.
 
 > Just uploading HTML and reading comments as a client? Use the **peek** skill.
 
@@ -16,7 +16,7 @@ limits/storage, and deploying behind a reverse proxy.
 
 - The user wants to **install, run, deploy, or self-host** a peek server.
 - The user needs to **create, list, or revoke access tokens** for users/agents.
-- The user wants to **set or clear a page password** as an admin/owner.
+- The user wants to **change who can open a page** or **set up share emails** as an admin/owner.
 - The user mentions **peekd**, peek server setup, or peek deployment.
 
 ## Install the server binary
@@ -74,7 +74,7 @@ uid `65532`.
 | `--data` | `PEEK_DATA` | `./data` | Data dir (db + uploads + secret) |
 | `--base-url` | `PEEK_BASE_URL` | `http://localhost:7700` | Public base URL in share links. **Use `https://…` in production** — it enables `Secure` cookies + HSTS. |
 | `--max-upload` | `PEEK_MAX_UPLOAD` | `2097152` (2 MiB) | Max upload size in bytes |
-| `--secret` | `PEEK_SECRET` | *(stored in data dir)* | HMAC/encryption secret. Set explicitly when multiple instances must share signed cookies/settings. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
+| `--secret` | `PEEK_SECRET` | *(stored in data dir)* | HMAC/encryption secret. Set explicitly when multiple instances must share signed cookies/settings. Or `PEEK_SECRET_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--max-total-size` | `PEEK_MAX_TOTAL_SIZE` | `0` | Total upload storage limit in bytes (`0` = unlimited) |
 | `--retention-days` | `PEEK_RETENTION_DAYS` | `0` | Auto-delete uploads older than N days (`0` = off) |
 | `--trusted-proxy` | `PEEK_TRUSTED_PROXY` | `false` | Trust `X-Forwarded-For` for analytics/audit IPs. Enable only behind your reverse proxy. |
@@ -85,7 +85,7 @@ uid `65532`.
 | `--s3-bucket` | `PEEK_S3_BUCKET` | *(empty)* | S3 bucket name |
 | `--s3-region` | `PEEK_S3_REGION` | `us-east-1` | S3 region |
 | `--s3-access-key` | `PEEK_S3_ACCESS_KEY` | *(empty)* | S3 access key |
-| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | *(empty)* | S3 secret key, encrypted in settings after initialization. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
+| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | *(empty)* | S3 secret key, encrypted in settings after initialization. Or `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--google-sa-key-file` | `PEEK_GOOGLE_SA_KEY_FILE` | *(empty)* | Service account JSON key (domain-wide delegation) for Google group grants. Needs `--google-admin-email`. Not in the SQLite backup. |
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | *(empty)* | Workspace admin user to impersonate |
 | `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | Group membership cache lifetime (1s to 1h) |
@@ -145,14 +145,19 @@ Admins can disable users or promote/demote admins in the dashboard later.
 
 Google Workspace organizations can instead turn on `auth_google_org_signup` in Settings. It requires Google login with client credentials and an allowed email domain (not gmail.com or googlemail.com). While it is on, a Google Workspace account (Google's `hd` claim) with a verified email in the allowed domain gets a non-admin account on first sign-in, GitHub and OIDC sign-in are inactive, and invites are inactive (existing invites return when it is off). Non-admin password and token login stay disabled and admins keep the password form. Enable it in this order: make sure an active admin has an email in the allowed domain, set the domain, configure Google login, then turn the mode on.
 
-### Manage page passwords
+### Manage page access
 
 ```sh
-peek visibility <slug> password --password newpass   # protect a page
-peek visibility <slug> public                        # remove protection
+peek visibility <slug> restricted                    # the default for new pages
+peek grant <slug> alice@example.com                  # let a person open it
+peek visibility <slug> public                        # anyone with the link
 ```
 
-Setting a new password revokes every earlier unlock of the page. Owners and admins can also do this, manage grants and rename pages from the dashboard's **Access** row action; `peek rename <slug> <new name>` renames from the CLI (old links redirect).
+Pages are restricted by default: only the owner, admins and grantees can open them. Page passwords were removed; migration 15 turned existing password pages into restricted pages. Owners and admins can also change visibility, manage grants and rename pages from the dashboard's **Access** row action; `peek rename <slug> <new name>` renames from the CLI (old links redirect).
+
+### Share emails (SMTP)
+
+Admins configure email on the **Email** tab of the Admin page: `smtp_host`, `smtp_port`, `smtp_tls` (`starttls` default, `tls`, or `none` for a local relay), `smtp_username`, `smtp_password` and `smtp_from`. Email is on when the host and From address are set; **Send test email** checks the saved settings. With email on, adding a grant to a restricted page, or switching a page to restricted, emails the grantees a link (only recipients in the allowed email domain, when one is set). A failed send is logged and audited as `upload.share.notify` and never blocks the share.
 
 ### Data export and deletion
 
@@ -200,7 +205,8 @@ resolve to private/link-local IPs.
 ## Web dashboard
 
 The server also serves a browser dashboard at `/login`. Sign in with a token or
-an enabled OAuth provider to upload (file or paste HTML), list/delete uploads,
-set passwords, and view stats. Admins can also edit runtime limits, retention,
-S3 settings, OAuth providers, invites, and users — no CLI required. Direct
+an enabled OAuth provider to upload (file, paste HTML, or an empty page), list
+and delete pages, see the restricted pages shared with them, manage access, and
+view stats. Admins can also edit runtime limits, retention,
+S3 and SMTP email settings, OAuth providers, invites, and users — no CLI required. Direct
 non-technical users there.

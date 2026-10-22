@@ -53,6 +53,12 @@ func backupArgs(args []string) (dataDir, backupPath string, err error) {
 // the original peek.db.
 func backupDatabase(dataDir, destPath string) error {
 	dbPath := filepath.Join(dataDir, "peek.db")
+	if _, err := os.Stat(dbPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("source database %s does not exist (check --data)", dbPath)
+		}
+		return fmt.Errorf("stat source db: %w", err)
+	}
 	dsn := "file:" + dbPath + "?_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

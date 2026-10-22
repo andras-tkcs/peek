@@ -13,8 +13,8 @@ import (
 	"testing"
 )
 
-func TestStreamMultipartUploadEncodesFileVisibilityAndPassword(t *testing.T) {
-	body, contentType := streamMultipartUpload(strings.NewReader("<html></html>"), "page.html", "password", "secret", "")
+func TestStreamMultipartUploadEncodesFileAndVisibility(t *testing.T) {
+	body, contentType := streamMultipartUpload(strings.NewReader("<html></html>"), "page.html", "restricted", "")
 	defer body.Close()
 
 	mediaType, params, err := mime.ParseMediaType(contentType)
@@ -29,10 +29,7 @@ func TestStreamMultipartUploadEncodesFileVisibilityAndPassword(t *testing.T) {
 		t.Fatalf("read multipart form: %v", err)
 	}
 	defer form.RemoveAll()
-	if got := form.Value["password"]; len(got) != 1 || got[0] != "secret" {
-		t.Fatalf("password field = %+v", got)
-	}
-	if got := form.Value["visibility"]; len(got) != 1 || got[0] != "password" {
+	if got := form.Value["visibility"]; len(got) != 1 || got[0] != "restricted" {
 		t.Fatalf("visibility field = %+v", got)
 	}
 	files := form.File["file"]
@@ -56,13 +53,12 @@ func TestStreamMultipartUploadEncodesFileVisibilityAndPassword(t *testing.T) {
 	}
 }
 
-func TestCmdUploadStreamsPasswordMultipart(t *testing.T) {
+func TestUploadDefaultsToRestricted(t *testing.T) {
 	type observedRequest struct {
 		Auth          string
 		ContentLength int64
 		Filename      string
 		Visibility    string
-		Password      string
 		Body          string
 	}
 	observed := make(chan observedRequest, 1)
@@ -77,7 +73,6 @@ func TestCmdUploadStreamsPasswordMultipart(t *testing.T) {
 			return
 		}
 		got.Visibility = r.FormValue("visibility")
-		got.Password = r.FormValue("password")
 		file, header, err := r.FormFile("file")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -98,7 +93,7 @@ func TestCmdUploadStreamsPasswordMultipart(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"slug":       "page",
 			"url":        "http://example.test/p/page",
-			"visibility": "password",
+			"visibility": "restricted",
 		})
 	}))
 	defer ts.Close()
@@ -111,7 +106,7 @@ func TestCmdUploadStreamsPasswordMultipart(t *testing.T) {
 		t.Fatalf("write upload file: %v", err)
 	}
 
-	if err := cmdUpload([]string{file, "--password", "secret"}); err != nil {
+	if err := cmdUpload([]string{file}); err != nil {
 		t.Fatalf("cmdUpload: %v", err)
 	}
 	got := <-observed
@@ -124,10 +119,7 @@ func TestCmdUploadStreamsPasswordMultipart(t *testing.T) {
 	if got.Filename != "page" {
 		t.Fatalf("filename = %q", got.Filename)
 	}
-	if got.Password != "secret" {
-		t.Fatalf("password = %q", got.Password)
-	}
-	if got.Visibility != "password" {
+	if got.Visibility != "restricted" {
 		t.Fatalf("visibility = %q", got.Visibility)
 	}
 	if got.Body != "<!doctype html><html></html>" {
@@ -139,7 +131,6 @@ func TestUploadWithSlugSendsSlugAndNoVisibility(t *testing.T) {
 	type observed struct {
 		Slug          string
 		HasVisibility bool
-		HasPassword   bool
 		Filename      string
 	}
 	got := make(chan observed, 1)
@@ -152,7 +143,6 @@ func TestUploadWithSlugSendsSlugAndNoVisibility(t *testing.T) {
 		_, header, _ := r.FormFile("file")
 		o := observed{Slug: r.FormValue("slug")}
 		_, o.HasVisibility = r.MultipartForm.Value["visibility"]
-		_, o.HasPassword = r.MultipartForm.Value["password"]
 		if header != nil {
 			o.Filename = header.Filename
 		}
@@ -176,7 +166,7 @@ func TestUploadWithSlugSendsSlugAndNoVisibility(t *testing.T) {
 		t.Fatalf("cmdUpload: %v", err)
 	}
 	o := <-got
-	if o.Slug != "page" || o.HasVisibility || o.HasPassword || o.Filename != "page" {
+	if o.Slug != "page" || o.HasVisibility || o.Filename != "page" {
 		t.Fatalf("observed = %+v", o)
 	}
 }
@@ -197,30 +187,27 @@ func TestUploadWithSlugRejectsNameFlag(t *testing.T) {
 	}
 }
 
-func TestCmdUploadWarnsAboutPasswordFlag(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"slug": "page", "url": "http://example.test/p/page", "visibility": "password"})
-	}))
+func TestUploadPasswordFlagRemoved(t *testing.T) {
+	var requests int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests++ }))
 	defer ts.Close()
 	configureTestClient(t, ts.URL)
 	file := filepath.Join(t.TempDir(), "page.html")
 	if err := os.WriteFile(file, []byte("<html></html>"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-
-	stderr, err := captureStderr(t, func() error {
-		_, err := captureStdout(t, func() error {
-			return cmdUpload([]string{file, "--password", "secret"})
-		})
-		return err
-	})
-	if err != nil {
-		t.Fatalf("cmdUpload: %v", err)
+	for _, args := range [][]string{
+		{file, "--password", "secret"},
+		{file, "--password-stdin"},
+	} {
+		flag := args[1]
+		want := flag + " is no longer supported: password-protected pages were removed; use --visibility restricted and 'peek grant'"
+		if err := cmdUpload(args); err == nil || err.Error() != want {
+			t.Fatalf("%v: error = %v, want %q", args, err, want)
+		}
 	}
-	if !strings.Contains(stderr, "--password is exposed") {
-		t.Fatalf("stderr = %q", stderr)
+	if requests != 0 {
+		t.Fatalf("requests = %d, want 0", requests)
 	}
 }
 
@@ -238,21 +225,17 @@ func TestCovUploadFlagAndValidationErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string][]string{
-		"password value":     {"--password"},
-		"name value":         {"--name"},
-		"visibility value":   {"--visibility"},
-		"slug value":         {"--slug"},
-		"unknown flag":       {"--nope"},
-		"two files":          {file, file},
-		"no file":            {},
-		"slug and password":  {file, "--slug", "demo", "--password", "x"},
-		"slug and name":      {file, "--slug", "demo", "--name", "n"},
-		"invalid visibility": {file, "--visibility", "weird"},
-		"password and stdin": {file, "--password", "x", "--password-stdin"},
-		"password required":  {file},
-		"password mismatch":  {file, "--visibility", "public", "--password", "x"},
-		"missing file":       {filepath.Join(t.TempDir(), "nope.html"), "--visibility", "public"},
-		"directory as file":  {t.TempDir(), "--visibility", "public"},
+		"name value":          {"--name"},
+		"visibility value":    {"--visibility"},
+		"slug value":          {"--slug"},
+		"unknown flag":        {"--nope"},
+		"two files":           {file, file},
+		"no file":             {},
+		"slug and name":       {file, "--slug", "demo", "--name", "n"},
+		"invalid visibility":  {file, "--visibility", "weird"},
+		"password visibility": {file, "--visibility", "password"},
+		"missing file":        {filepath.Join(t.TempDir(), "nope.html"), "--visibility", "public"},
+		"directory as file":   {t.TempDir(), "--visibility", "public"},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -260,26 +243,6 @@ func TestCovUploadFlagAndValidationErrors(t *testing.T) {
 				t.Fatal("expected error")
 			}
 		})
-	}
-}
-
-func TestCovUploadStdinPassword(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "p.html")
-	if err := os.WriteFile(file, []byte("<html></html>"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	withStdin(t, "\n")
-	configureTestClient(t, "http://127.0.0.1:1")
-	if err := cmdUpload([]string{file, "--password-stdin"}); err == nil || !strings.Contains(err.Error(), "no password") {
-		t.Fatalf("expected empty stdin error, got %v", err)
-	}
-
-	ts := covFake(t, map[string]string{"/api/upload": `{"slug":"s","url":"http://x/p/s","visibility":"password","version":1}`}, nil)
-	configureTestClient(t, ts.URL)
-	withStdin(t, "pw")
-	out, err := captureStdout(t, func() error { return cmdUpload([]string{file, "--password-stdin"}) })
-	if err != nil || !strings.Contains(out, "slug:     s") {
-		t.Fatalf("upload: %q %v", out, err)
 	}
 }
 

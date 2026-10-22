@@ -170,41 +170,6 @@
   font-family: var(--font-mono);
 }
 
-.peek-copy-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border: 1px solid hsl(var(--input));
-  border-radius: 7px;
-  background: hsl(var(--card));
-  color: hsl(var(--muted-foreground));
-  cursor: pointer;
-  padding: 0;
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
-}
-
-.peek-copy-button:hover {
-  border-color: hsl(var(--border));
-  background: hsl(var(--secondary));
-  color: hsl(var(--secondary-foreground));
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.10);
-}
-
-.peek-copy-button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.20);
-}
-
-.peek-copy-button-copied,
-.peek-copy-button-copied:hover {
-  border-color: hsl(142 72% 36% / 0.35);
-  background: hsl(142 76% 96%);
-  color: hsl(142 72% 36%);
-}
-
 .peek-copy-icon {
   flex: none;
   width: 14px;

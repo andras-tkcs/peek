@@ -75,7 +75,7 @@ If an account already exists with the verified email, Peek links the OAuth ident
 
 When OAuth is enabled, non-admin password and token web login are disabled. Admins keep password login as a recovery path, as long as the admin email also matches the allowed domain when one is configured.
 
-The same rule applies to API tokens: while OAuth is enabled, a non-admin account's token works only if the account has signed in with OAuth at least once.
+The same rule applies to API tokens of accounts with an email: while OAuth is enabled, a non-admin account's token works only if the account has signed in with OAuth at least once. Automation tokens from `peek token create` have no email and are exempt; only disabling applies to them.
 
 Organizations that only use Google Workspace can skip invites entirely with [Google org sign-in](#google-org-sign-in).
 
@@ -137,14 +137,13 @@ Any signed-in account can also create, regenerate and revoke its own keys under 
 
 ## Upload Visibility
 
-Each upload chooses one of four access modes:
+Each upload chooses one of three access modes:
 
 | Mode | Access |
 | --- | --- |
 | `public` | Anyone with the link can open and comment. |
-| `password` | Visitors must pass the upload password gate before opening and commenting. |
 | `signed-in` | Visitors must have an active Peek account session. Any account qualifies, not only the owner; use `restricted` to limit access to named people. The former name `private` is still accepted. |
-| `restricted` | Only the owner, admins, and signed-in visitors matching a grant. Others see a 403 page. |
+| `restricted` (default) | Only the owner, admins, and signed-in visitors matching a grant. Others see a 403 page. |
 
 Uploaded HTML itself remains sandboxed in all modes.
 
@@ -152,7 +151,7 @@ Uploaded HTML itself remains sandboxed in all modes.
 
 A restricted page is opened up with grants. A user grant names one email address and matches the signed-in account with that email. A group grant names a Google Workspace group address and matches accounts that are direct or nested members of that group.
 
-Owners and admins can change a page's name, mode, password and grants later from the dashboard's **Access** dialog or with `peek rename`, `peek visibility` and `peek grant`. A new password revokes every earlier unlock of that page.
+Owners and admins can change a page's name, mode and grants later from the dashboard's **Access** dialog or with `peek rename`, `peek visibility` and `peek grant`. Restricted pages that someone shared with you, directly or through a Google group, are listed on your dashboard with a view-only icon. When an admin has configured email, each new grantee is emailed the link, and switching a page to restricted emails everyone who already has a grant; only recipients in the allowed email domain, when one is set, are mailed. Page passwords were removed, and pages that had one became restricted.
 
 ```sh
 peek upload report.html --visibility restricted

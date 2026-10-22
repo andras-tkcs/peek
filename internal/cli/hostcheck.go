@@ -75,5 +75,5 @@ func plainHTTPWarning(host string) string {
 	if ip := net.ParseIP(name); ip != nil && ip.IsLoopback() {
 		return ""
 	}
-	return fmt.Sprintf("warning: %s uses plain http://; your token and page passwords are sent unencrypted. Use https:// unless this host is only reachable on a trusted network.", host)
+	return fmt.Sprintf("warning: %s uses plain http://; your token is sent unencrypted. Use https:// unless this host is only reachable on a trusted network.", host)
 }

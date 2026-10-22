@@ -41,8 +41,8 @@ func TestCommentsFailures(t *testing.T) {
 	}
 	corruptInt(t, s, "comments", "created_at")
 	_, err := s.ListComments(ctx, uploadID, 0)
-	wantErr(t, "ListComments scan", err)
+	wantErr(t, "ListComments scan", err, errScan)
 	failOn(t, s, "comments", "INSERT")
 	_, err = s.AddComment(ctx, uploadID, 1, "p", "", "element", "G", "c", "b", 0)
-	wantErr(t, "AddComment insert", err)
+	wantErr(t, "AddComment insert", err, errInjected)
 }

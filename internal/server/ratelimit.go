@@ -17,8 +17,6 @@ const (
 
 	accountLoginFailureMax    = 10
 	accountLoginFailureWindow = 15 * time.Minute
-	pagePasswordFailureMax    = 20
-	pagePasswordFailureWindow = 10 * time.Minute
 )
 
 // limiter is a small fixed-window per-key rate limiter. It is intended for

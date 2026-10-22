@@ -131,7 +131,7 @@
     Alpine.data("pageApp", () => ({
       slug: "",
       version: 0,
-      visibility: "password",
+      visibility: "restricted",
 
       comments: [],
       commentCount: 0,
@@ -165,7 +165,7 @@
         const dataset = document.body ? document.body.dataset : {};
         this.slug = dataset.slug || "";
         this.version = Number(dataset.version) || 0;
-        this.visibility = dataset.visibility || "password";
+        this.visibility = dataset.visibility || "restricted";
 
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {

@@ -18,7 +18,7 @@ func seedVersionUpload(t *testing.T, s *Store, email, slug string, size int64) (
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateUploadChecked(ctx, slug, acct.ID, 0, slug+".html", size, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(ctx, slug, acct.ID, 0, slug+".html", size, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	u, err := s.GetUpload(ctx, slug)
@@ -276,7 +276,7 @@ func TestVersionWritesFailMidTransaction(t *testing.T) {
 				t.Fatal(err)
 			}
 			failOn(t, s, c.table, c.op)
-			wantErr(t, c.name, c.call(s, a, u))
+			wantErr(t, c.name, c.call(s, a, u), errInjected)
 		})
 	}
 }
@@ -294,9 +294,9 @@ func TestVersionScanErrorsAndVersionlessUpload(t *testing.T) {
 	}
 	corruptInt(t, s, "upload_versions", "created_at")
 	_, err := s.GetUploadVersion(ctx, u, 1)
-	wantErr(t, "GetUploadVersion", err)
+	wantErr(t, "GetUploadVersion", err, errScan)
 	_, err = s.ListUploadVersions(ctx, u)
-	wantErr(t, "ListUploadVersions", err)
+	wantErr(t, "ListUploadVersions", err, errScan)
 	if _, err := s.CreateVersionChecked(ctx, u, "k2", 1, 0, uploadquota.Limits{}); err != nil {
 		t.Fatalf("anonymous actor version: %v", err)
 	}

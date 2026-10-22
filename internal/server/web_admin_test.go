@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -155,5 +156,43 @@ func TestParseAdminFormReportsCSRFGenerationFailure(t *testing.T) {
 	}
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+}
+
+func TestAdminGoogleOrgHidesInvites(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	ctx := context.Background()
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	for k, v := range map[string]string{
+		authAllowedEmailDomainSetting: "example.test",
+		"oauth_google_enabled":        "true",
+		"oauth_google_client_id":      "google-client",
+		authGoogleOrgSignupSetting:    "true",
+	} {
+		if err := s.store.SetSetting(ctx, k, v); err != nil {
+			t.Fatalf("set %s: %v", k, err)
+		}
+	}
+	if err := s.encryptedSetSetting(ctx, "oauth_google_client_secret", "google-secret"); err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodGet, "/admin", nil, asSession(s, admin.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin = %d", rec.Code)
+	}
+	if strings.Contains(strings.ToLower(rec.Body.String()), "invite") {
+		t.Fatal("admin page mentions invites under Google org sign-in")
+	}
+}
+
+func TestAdminShowsEmailTab(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	rec := doRequest(t, s, http.MethodGet, "/admin", nil, asSession(s, admin.ID))
+	body := rec.Body.String()
+	for _, want := range []string{`name="smtp_host"`, `action="/dashboard/email/test"`, `<option value="starttls" selected>`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("admin page missing %s", want)
+		}
 	}
 }

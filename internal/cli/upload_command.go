@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -12,30 +11,23 @@ import (
 
 // --- upload ---
 
+func passwordFlagRemoved(flag string) error {
+	return fmt.Errorf("%s is no longer supported: password-protected pages were removed; use --visibility restricted and 'peek grant'", flag)
+}
+
 func cmdUpload(args []string) error {
 	var (
-		file          string
-		password      string
-		passwordStdin bool
-		name          string
-		visibility    string
-		slug          string
-		nameSet       bool
-
-		usedPasswordFlag bool
+		file       string
+		name       string
+		visibility string
+		slug       string
+		nameSet    bool
 	)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
-		case a == "--password":
-			if i+1 >= len(args) {
-				return fmt.Errorf("--password requires a value")
-			}
-			password = args[i+1]
-			usedPasswordFlag = true
-			i++
-		case a == "--password-stdin":
-			passwordStdin = true
+		case a == "--password" || a == "--password-stdin":
+			return passwordFlagRemoved(a)
 		case a == "--name":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--name requires a value")
@@ -65,45 +57,23 @@ func cmdUpload(args []string) error {
 		}
 	}
 	if file == "" {
-		return fmt.Errorf("usage: peek upload <file.html> [--visibility public|password|signed-in|restricted] [--password <pw>] [--name <name>] [--slug <slug>]")
+		return fmt.Errorf("usage: peek upload <file.html> [--visibility public|signed-in|restricted] [--name <name>] [--slug <slug>]")
 	}
 	if slug != "" {
 		if _, err := slugPath(slug); err != nil {
 			return err
 		}
-		if visibility != "" || password != "" || passwordStdin {
+		if visibility != "" {
 			return fmt.Errorf("--slug adds a new version to an existing page; change visibility with 'peek visibility'")
 		}
 		if nameSet {
 			return fmt.Errorf("--name cannot be used with --slug; the page keeps its name")
 		}
 	} else if visibility == "" {
-		visibility = "password"
+		visibility = "restricted"
 	}
 	if slug == "" && !validVisibility(visibility) {
-		return fmt.Errorf("visibility must be public, password, signed-in, or restricted")
-	}
-	if password != "" && passwordStdin {
-		return fmt.Errorf("use only one of --password or --password-stdin")
-	}
-	if passwordStdin {
-		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		if err != nil && err != io.EOF {
-			return err
-		}
-		password = strings.TrimSpace(line)
-		if password == "" {
-			return fmt.Errorf("no password provided on stdin")
-		}
-	}
-	if slug == "" && visibility == "password" && password == "" {
-		return fmt.Errorf("password visibility requires --password or --password-stdin")
-	}
-	if slug == "" && visibility != "password" && password != "" {
-		return fmt.Errorf("--password is only valid with --visibility password")
-	}
-	if usedPasswordFlag {
-		fmt.Fprintln(os.Stderr, "warning: --password is exposed in your shell history and process list (ps). Prefer --password-stdin.")
+		return fmt.Errorf("visibility must be public, signed-in, or restricted")
 	}
 
 	cfg, err := LoadConfig()
@@ -124,7 +94,7 @@ func cmdUpload(args []string) error {
 	if name == "" {
 		name = fileNameWithoutExt(file)
 	}
-	body, contentType := streamMultipartUpload(f, name, visibility, password, slug)
+	body, contentType := streamMultipartUpload(f, name, visibility, slug)
 	resp, err := c.req("POST", "/api/upload", body, contentType)
 	if err != nil {
 		_ = body.Close()
@@ -151,11 +121,11 @@ func cmdUpload(args []string) error {
 	return nil
 }
 
-func streamMultipartUpload(file io.Reader, filename, visibility, password, slug string) (io.ReadCloser, string) {
+func streamMultipartUpload(file io.Reader, filename, visibility, slug string) (io.ReadCloser, string) {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
-		if err := writeMultipartUpload(mw, file, filename, visibility, password, slug); err != nil {
+		if err := writeMultipartUpload(mw, file, filename, visibility, slug); err != nil {
 			_ = pw.CloseWithError(err)
 			return
 		}
@@ -164,7 +134,7 @@ func streamMultipartUpload(file io.Reader, filename, visibility, password, slug 
 	return pr, mw.FormDataContentType()
 }
 
-func writeMultipartUpload(mw *multipart.Writer, file io.Reader, filename, visibility, password, slug string) error {
+func writeMultipartUpload(mw *multipart.Writer, file io.Reader, filename, visibility, slug string) error {
 	fw, err := mw.CreateFormFile("file", filename)
 	if err != nil {
 		return err
@@ -182,16 +152,11 @@ func writeMultipartUpload(mw *multipart.Writer, file io.Reader, filename, visibi
 			return err
 		}
 	}
-	if password != "" {
-		if err := mw.WriteField("password", password); err != nil {
-			return err
-		}
-	}
 	return mw.Close()
 }
 
 func validVisibility(visibility string) bool {
-	return visibility == "public" || visibility == "password" || visibility == "signed-in" || visibility == "private" || visibility == "restricted"
+	return visibility == "public" || visibility == "signed-in" || visibility == "private" || visibility == "restricted"
 }
 
 func fileNameWithoutExt(path string) string {

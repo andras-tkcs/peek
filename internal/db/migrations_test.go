@@ -299,3 +299,21 @@ func TestMigrationRenamesPrivateVisibilityToSignedIn(t *testing.T) {
 		}
 	}
 }
+
+func TestMigration15PasswordPagesBecomeRestricted(t *testing.T) {
+	path := migCovPrepare(t, 15,
+		`INSERT INTO accounts(id,name,created_at,updated_at) VALUES(1,'a',1,1)`,
+		`INSERT INTO uploads(slug,owner_account_id,filename,size,visibility,password_hash,created_at) VALUES('was-password',1,'a.html',1,'password','$2a$hash',1)`,
+		`INSERT INTO uploads(slug,owner_account_id,filename,size,visibility,created_at) VALUES('was-public',1,'b.html',1,'public',1)`)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for slug, want := range map[string]string{"was-password": "restricted", "was-public": "public"} {
+		var vis, hash string
+		if err := s.QueryRow(`SELECT visibility, password_hash FROM uploads WHERE slug=?`, slug).Scan(&vis, &hash); err != nil || vis != want || hash != "" {
+			t.Fatalf("%s = %q/%q (err %v), want %q with empty hash", slug, vis, hash, err, want)
+		}
+	}
+}

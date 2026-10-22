@@ -28,7 +28,7 @@ func uploadHTTPError(err error) (int, string) {
 		return http.StatusInternalServerError, "upload failed"
 	}
 	switch uploadErr.Kind {
-	case uploads.KindEmptyFile, uploads.KindInvalidVisibility, uploads.KindPasswordRequired, uploads.KindPasswordNotAllowed, uploads.KindPasswordTooLong, uploads.KindNameRequired, uploads.KindNameTooLong:
+	case uploads.KindEmptyFile, uploads.KindInvalidVisibility, uploads.KindNameRequired, uploads.KindNameTooLong:
 		return http.StatusBadRequest, uploadErr.Message
 	case uploads.KindInvalidHTML:
 		return http.StatusUnsupportedMediaType, uploadErr.Message
