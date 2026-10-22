@@ -261,12 +261,21 @@ func (s *Server) handleSetVisibility(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, status, msg)
 		return
 	}
+	oldVisibility := u.Visibility
 	if err := s.store.SetUploadVisibility(r.Context(), u.ID, v); err != nil {
 		jsonError(w, http.StatusInternalServerError, "db failed")
 		return
 	}
 	s.auditRequest(r, owner.Name, "upload.visibility.set", auditDetail("slug", slug, "visibility", v))
-	jsonOK(w, map[string]any{"visibility": v})
+	sent := false
+	if oldVisibility != models.UploadVisibilityRestricted && v == models.UploadVisibilityRestricted {
+		if grants, err := s.store.ListUploadGrants(r.Context(), u.ID); err != nil {
+			slog.Error("share notification grant list failed", "slug", slug, "err", err)
+		} else {
+			sent, _ = s.notifyShare(r, owner.Name, owner.Email, u, grants)
+		}
+	}
+	jsonOK(w, map[string]any{"visibility": v, "notified": sent})
 }
 
 func (s *Server) handleDeleteAllByOwner(w http.ResponseWriter, r *http.Request) {

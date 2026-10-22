@@ -34,7 +34,7 @@ func newViewer(t *testing.T, s *Server, email, name string, isAdmin bool) *model
 
 func grant(t *testing.T, s *Server, u *models.Upload, kind, email string) {
 	t.Helper()
-	if _, err := s.store.AddUploadGrant(context.Background(), u.ID, kind, email, u.OwnerAccountID); err != nil {
+	if _, _, err := s.store.AddUploadGrant(context.Background(), u.ID, kind, email, u.OwnerAccountID); err != nil {
 		t.Fatalf("add grant: %v", err)
 	}
 }

@@ -303,7 +303,7 @@ func TestRawRefusedAfterGrantRemoved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.store.AddUploadGrant(ctx, u.ID, models.UploadGrantUser, "viewer@example.test", u.OwnerAccountID); err != nil {
+	if _, _, err := s.store.AddUploadGrant(ctx, u.ID, models.UploadGrantUser, "viewer@example.test", u.OwnerAccountID); err != nil {
 		t.Fatal(err)
 	}
 	src, cookies := rawSrcFromPage(t, s, "/p/rawgrant", asSession(s, v.ID))

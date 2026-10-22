@@ -266,14 +266,27 @@ func (s *Server) handleDashboardVisibility(w http.ResponseWriter, r *http.Reques
 		dashboardError(w, r, uploadFlashCode(err))
 		return
 	}
+	oldVisibility := u.Visibility
 	if err := s.store.SetUploadVisibility(r.Context(), u.ID, visibility); err != nil {
 		slog.Error("dashboard visibility update failed", "slug", slug, "err", err)
 		dashboardError(w, r, flashVisibilityFailed)
 		return
 	}
 	s.auditRequest(r, owner.Name, "upload.visibility.set", auditDetail("slug", slug, "visibility", visibility))
+	notifyFailed := false
+	if oldVisibility != models.UploadVisibilityRestricted && visibility == models.UploadVisibilityRestricted {
+		if grants, err := s.store.ListUploadGrants(r.Context(), u.ID); err != nil {
+			slog.Error("share notification grant list failed", "slug", slug, "err", err)
+		} else if _, err := s.notifyShare(r, owner.Name, owner.Email, u, grants); err != nil {
+			notifyFailed = true
+		}
+	}
 	if visibility == models.UploadVisibilityRestricted {
-		dashboardFlashManage(w, r, "ok", flashVisibilitySet, slug)
+		q := url.Values{"ok": {flashVisibilitySet}, "manage": {slug}, "slug": {slug}}
+		if notifyFailed {
+			q.Set("err", flashShareNotifyFailed)
+		}
+		dashboardFlash(w, r, q)
 		return
 	}
 	dashboardOKSlug(w, r, flashVisibilitySet, slug)

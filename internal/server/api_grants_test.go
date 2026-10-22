@@ -181,3 +181,18 @@ func TestAPICovGrantsDBFailures(t *testing.T) {
 	apiCovStatus(t, s, http.MethodPost, "/api/uploads/cov-grants-db/grants", ownerTok, body, http.StatusInternalServerError)
 	apiCovStatus(t, s, http.MethodDelete, "/api/uploads/cov-grants-db/grants", ownerTok, body, http.StatusInternalServerError)
 }
+
+func TestAPIAddGrantNotified(t *testing.T) {
+	s, u, tok := grantsFixture(t, "g-notify")
+	fake := &fakeMailer{}
+	s.mailer = fake
+	configureSMTP(t, s)
+	code, body := grantReq(t, s, http.MethodPost, u.Slug, tok, `{"kind":"user","email":"bob@example.com"}`)
+	if code != http.StatusOK || !strings.Contains(body, `"notified":true`) || fake.sends() != 1 {
+		t.Fatalf("add: %d %s sends=%d", code, body, fake.sends())
+	}
+	code, body = grantReq(t, s, http.MethodPost, u.Slug, tok, `{"kind":"user","email":"bob@example.com"}`)
+	if code != http.StatusOK || !strings.Contains(body, `"notified":false`) || fake.sends() != 1 {
+		t.Fatalf("re-add: %d %s sends=%d", code, body, fake.sends())
+	}
+}

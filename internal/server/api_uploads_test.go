@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/andras-tkcs/peek/internal/models"
 )
 
 const pageCovHTML = "<!doctype html><html><body>hello</body></html>"
@@ -232,5 +234,23 @@ func TestAPISetVisibilityRejectsPassword(t *testing.T) {
 	rec := post(`{"visibility":"restricted","password":"x"}`)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), passwordRemovedMessage) {
 		t.Fatalf("password field: status = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAPISetVisibilityRestrictedNotifies(t *testing.T) {
+	s, token := newHandlerTestServer(t)
+	fake := &fakeMailer{}
+	s.mailer = fake
+	configureSMTP(t, s)
+	slug := pageCovUpload(t, s, token, "")
+	u, err := s.store.GetUpload(context.Background(), slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant(t, s, u, models.UploadGrantUser, "bob@example.com")
+	path := "/api/uploads/" + slug + "/visibility"
+	rec := doRequest(t, s, http.MethodPost, path, strings.NewReader(`{"visibility":"restricted"}`), asBearer(token), withJSON())
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"notified":true`) || fake.sends() != 1 {
+		t.Fatalf("%d %s sends=%d", rec.Code, rec.Body.String(), fake.sends())
 	}
 }
