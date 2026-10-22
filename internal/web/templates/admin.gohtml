@@ -114,6 +114,7 @@
         <button type="button" class="peek-settings-tab" :class="{ 'peek-settings-tab-active': settingsTab === 'storage' }" x-on:click="settingsTab = 'storage'" role="tab" :aria-selected="settingsTab === 'storage'">Storage</button>
         <button type="button" class="peek-settings-tab" :class="{ 'peek-settings-tab-active': settingsTab === 'limits' }" x-on:click="settingsTab = 'limits'" role="tab" :aria-selected="settingsTab === 'limits'">Limits</button>
         <button type="button" class="peek-settings-tab" :class="{ 'peek-settings-tab-active': settingsTab === 'email' }" x-on:click="settingsTab = 'email'" role="tab" :aria-selected="settingsTab === 'email'">Email</button>
+        <button type="button" class="peek-settings-tab" :class="{ 'peek-settings-tab-active': settingsTab === 'backends' }" x-on:click="settingsTab = 'backends'" role="tab" :aria-selected="settingsTab === 'backends'">Backends</button>
       </div>
 
       <div x-show="settingsTab === 'auth'" class="flex flex-col gap-4">
@@ -253,6 +254,19 @@
         <div class="flex flex-col gap-2">
           <button type="submit" form="hn-email-test" class="peek-row-button self-start">Send test email</button>
           <span class="text-xs text-muted-foreground">Sends a test email to your own address using the saved settings. Save first.</span>
+        </div>
+      </div>
+
+      <div x-show="settingsTab === 'backends'" x-cloak class="flex flex-col gap-4">
+        {{if not .SettingsPanel.Backends.Enabled}}<p class="text-sm text-muted-foreground">Backends are off. Start peekd with --backends docker to run page backends.</p>{{end}}
+        <div class="grid gap-3 md:grid-cols-2">
+          {{range .SettingsPanel.Backends.Fields}}
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-secondary-foreground">{{.Label}}</span>
+            <input type="{{if .IsSecret}}password{{else}}text{{end}}" name="{{.Key}}" value="{{.Value}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <span class="text-xs text-muted-foreground">{{.Description}}</span>
+          </label>
+          {{end}}
         </div>
       </div>
 

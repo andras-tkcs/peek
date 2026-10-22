@@ -149,10 +149,18 @@ type SettingRow struct {
 }
 
 type DashboardSettings struct {
-	Auth    AuthSettings
-	Storage StorageSettings
-	Email   EmailSettings
-	Limits  []LimitSetting
+	Auth     AuthSettings
+	Storage  StorageSettings
+	Email    EmailSettings
+	Backends BackendSettings
+	Limits   []LimitSetting
+}
+
+// BackendSettings are the rows of the Admin Backends tab. Enabled is false
+// when peekd runs without --backends docker.
+type BackendSettings struct {
+	Enabled bool
+	Fields  []SettingRow
 }
 
 // EmailSettings are the SMTP rows of the Admin Email tab. TLSValue is the

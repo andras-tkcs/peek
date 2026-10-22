@@ -767,3 +767,25 @@ func TestRenderHTML(t *testing.T) {
 		t.Fatal("nothing should be written on render error")
 	}
 }
+
+func TestAdminRendersBackendsTab(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	render := func(b BackendSettings) string {
+		body, err := renderer.Execute(TemplateAdmin, AdminData{CSRF: "csrf", User: "Admin", SettingsPanel: DashboardSettings{Backends: b}})
+		if err != nil {
+			t.Fatalf("execute admin: %v", err)
+		}
+		return string(body)
+	}
+	empty := render(BackendSettings{})
+	if !strings.Contains(empty, "settingsTab === 'backends'") || !strings.Contains(empty, "Backends are off. Start peekd with --backends docker") {
+		t.Fatalf("empty backends tab wrong: %s", empty)
+	}
+	on := render(BackendSettings{Enabled: true, Fields: []SettingRow{{Key: "backend_registry_password", Label: "Registry password", IsSecret: true}}})
+	if strings.Contains(on, "Backends are off") || !strings.Contains(on, `type="password" name="backend_registry_password"`) {
+		t.Fatalf("enabled backends tab wrong: %s", on)
+	}
+}

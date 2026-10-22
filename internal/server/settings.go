@@ -403,8 +403,9 @@ func dashboardSettingsPanel(raw map[string]string) webui.DashboardSettings {
 			OIDC:      oidc,
 			Providers: []webui.OAuthProviderSettings{google, github, oidc},
 		},
-		Storage: dashboardStorageSettings(raw),
-		Email:   dashboardEmailSettings(raw),
+		Storage:  dashboardStorageSettings(raw),
+		Email:    dashboardEmailSettings(raw),
+		Backends: webui.BackendSettings{Fields: dashboardBackendFields(raw)},
 		Limits: []webui.LimitSetting{
 			dashboardMegabyteLimit(raw, "max_upload", "maxUpload", "Max upload size", "Maximum size per HTML file upload", 1, maxInt64(1024, dashboardSettingMegabytes(raw, "max_upload")), 1),
 			dashboardMegabyteLimit(raw, "max_total_size", "maxTotalSize", "Total storage limit", "Cumulative storage across all uploads (0 = unlimited)", 0, maxInt64(102400, dashboardSettingMegabytes(raw, "max_total_size")), 1),
@@ -471,6 +472,24 @@ func dashboardEmailSettings(raw map[string]string) webui.EmailSettings {
 		From:     dashboardSettingRow(raw, "smtp_from"),
 		TLSValue: tlsValue,
 	}
+}
+
+func dashboardBackendFields(raw map[string]string) []webui.SettingRow {
+	keys := []string{
+		"backend_allowed_images",
+		"backend_memory_mb",
+		"backend_cpu_millis",
+		"backend_idle_minutes",
+		"backend_max_running",
+		"backend_registry_server",
+		"backend_registry_username",
+		"backend_registry_password",
+	}
+	rows := make([]webui.SettingRow, 0, len(keys))
+	for _, key := range keys {
+		rows = append(rows, dashboardSettingRow(raw, key))
+	}
+	return rows
 }
 
 func dashboardSettingRow(raw map[string]string, key string) settingsRow {
