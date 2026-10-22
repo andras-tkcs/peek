@@ -162,8 +162,26 @@ func TestAPICovGrantsAccessAndBadBodies(t *testing.T) {
 	// A malformed body must not create or remove anything.
 	for _, method := range []string{http.MethodPost, http.MethodDelete} {
 		rec := doRequest(t, s, method, "/api/uploads/cov-grants/grants", strings.NewReader(`{`), asBearer(ownerTok), withJSON())
-		if rec.Code < 400 && strings.Contains(rec.Body.String(), "email") {
+		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s with bad JSON = %d: %s", method, rec.Code, rec.Body.String())
+		}
+	}
+	grants, err := s.store.ListUploadGrants(context.Background(), u.ID)
+	if err != nil || len(grants) != 0 {
+		t.Fatalf("grants = %v err = %v", grants, err)
+	}
+}
+
+// The oversized body stays under the global 64 KiB cap so it reaches the 8 KiB grant limit.
+func TestGrantsAPIRejectsMalformedJSON(t *testing.T) {
+	s, u, tok := grantsFixture(t, "g-badjson")
+	bodies := []string{`{`, `{"kind":"user","email":"` + strings.Repeat("a", 20000) + `"}`}
+	for _, method := range []string{http.MethodPost, http.MethodDelete} {
+		for _, b := range bodies {
+			rec := doRequest(t, s, method, "/api/uploads/g-badjson/grants", strings.NewReader(b), asBearer(tok), withJSON())
+			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "bad json") {
+				t.Fatalf("%s %.20q = %d: %s", method, b, rec.Code, rec.Body.String())
+			}
 		}
 	}
 	grants, err := s.store.ListUploadGrants(context.Background(), u.ID)

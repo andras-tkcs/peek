@@ -216,22 +216,30 @@ func TestCheckedAccountChangesProtectLastAdmin(t *testing.T) {
 func TestAccountWritesFailMidTransaction(t *testing.T) {
 	ctx := context.Background()
 	s := openTokenTestStore(t)
-	first, _ := s.CreateAccount(ctx, "first@example.test", "first", true)
-	s.CreateAccount(ctx, "second@example.test", "second", true)
+	first, err := s.CreateAccount(ctx, "first@example.test", "first", true)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := s.CreateAccount(ctx, "second@example.test", "second", true); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
 	failOn(t, s, "accounts", "UPDATE")
-	wantErr(t, "SetAccountAdminChecked", s.SetAccountAdminChecked(ctx, first.ID, false))
-	wantErr(t, "SetAccountDisabledChecked", s.SetAccountDisabledChecked(ctx, first.ID, true))
-	_, err := s.BumpSessionEpoch(ctx, first.ID)
-	wantErr(t, "BumpSessionEpoch", err)
+	wantErr(t, "SetAccountAdminChecked", s.SetAccountAdminChecked(ctx, first.ID, false), errInjected)
+	wantErr(t, "SetAccountDisabledChecked", s.SetAccountDisabledChecked(ctx, first.ID, true), errInjected)
+	_, err = s.BumpSessionEpoch(ctx, first.ID)
+	wantErr(t, "BumpSessionEpoch", err, errInjected)
 }
 
 func TestAccountScanErrors(t *testing.T) {
 	ctx := context.Background()
 	s := openTokenTestStore(t)
-	a, _ := s.CreateAccount(ctx, "a@example.test", "a", false)
+	a, err := s.CreateAccount(ctx, "a@example.test", "a", false)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
 	corruptInt(t, s, "accounts", "created_at")
-	_, err := s.ListAccounts(ctx)
-	wantErr(t, "ListAccounts", err)
+	_, err = s.ListAccounts(ctx)
+	wantErr(t, "ListAccounts", err, errScan)
 	_, err = s.GetAccountByID(ctx, a.ID)
-	wantErr(t, "GetAccountByID", err)
+	wantErr(t, "GetAccountByID", err, errScan)
 }

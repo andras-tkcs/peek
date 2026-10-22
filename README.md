@@ -145,7 +145,7 @@ Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env o
 | `--data` | `PEEK_DATA` | `./data` | Data dir (db + uploads + secret) |
 | `--base-url` | `PEEK_BASE_URL` | `http://localhost:7700` | Public base URL. Use `https://…` in production for Secure cookies + HSTS. |
 | `--max-upload` | `PEEK_MAX_UPLOAD` | `2097152` (2 MiB) | Max upload size in bytes |
-| `--secret` | `PEEK_SECRET` | _(stored in data dir)_ | HMAC/encryption secret for multi-instance cookie/settings sharing. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
+| `--secret` | `PEEK_SECRET` | _(stored in data dir)_ | HMAC/encryption secret for multi-instance cookie/settings sharing. Or `PEEK_SECRET_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--max-total-size` | `PEEK_MAX_TOTAL_SIZE` | `0` | Total upload storage limit in bytes (`0` = unlimited) |
 | `--retention-days` | `PEEK_RETENTION_DAYS` | `0` | Auto-delete uploads older than N days (`0` = off) |
 | `--trusted-proxy` | `PEEK_TRUSTED_PROXY` | `false` | Trust `X-Forwarded-For` for analytics/audit IPs |
@@ -156,7 +156,7 @@ Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env o
 | `--s3-bucket` | `PEEK_S3_BUCKET` | _(empty)_ | S3 bucket name |
 | `--s3-region` | `PEEK_S3_REGION` | `us-east-1` | S3 region |
 | `--s3-access-key` | `PEEK_S3_ACCESS_KEY` | _(empty)_ | S3 access key |
-| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | _(empty)_ | S3 secret key. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
+| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | _(empty)_ | S3 secret key. Or `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--s3-allow-private-endpoint` | `PEEK_S3_ALLOW_PRIVATE_ENDPOINT` | `false` | Allow private/link-local S3 endpoints for dev |
 | `--google-sa-key-file` | `PEEK_GOOGLE_SA_KEY_FILE` | *(empty)* | Google service account JSON key for group grants (needs `--google-admin-email`) |
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | *(empty)* | Workspace admin to impersonate for group lookups |

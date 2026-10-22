@@ -124,3 +124,25 @@ func TestBackupDatabaseFailsWhenDestinationDirectoryIsMissing(t *testing.T) {
 		t.Fatalf("error = %v, want create backup file", err)
 	}
 }
+
+func TestBackupDatabaseFailsWhenSourceIsMissing(t *testing.T) {
+	dataDir := t.TempDir()
+	dest := filepath.Join(t.TempDir(), "snap.db")
+	err := backupDatabase(dataDir, dest)
+	if err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("backupDatabase err = %v, want does not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "peek.db")); !os.IsNotExist(err) {
+		t.Fatalf("source db was created: %v", err)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Fatalf("destination was created: %v", err)
+	}
+}
+
+func TestRunBackupFailsForMissingSourceDatabase(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "snap.db")
+	if code := runBackup([]string{"--data", t.TempDir(), dest}); code != 1 {
+		t.Fatalf("runBackup = %d, want 1", code)
+	}
+}

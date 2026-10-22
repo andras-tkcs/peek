@@ -75,7 +75,7 @@ If an account already exists with the verified email, Peek links the OAuth ident
 
 When OAuth is enabled, non-admin password and token web login are disabled. Admins keep password login as a recovery path, as long as the admin email also matches the allowed domain when one is configured.
 
-The same rule applies to API tokens: while OAuth is enabled, a non-admin account's token works only if the account has signed in with OAuth at least once.
+The same rule applies to API tokens of accounts with an email: while OAuth is enabled, a non-admin account's token works only if the account has signed in with OAuth at least once. Automation tokens from `peek token create` have no email and are exempt; only disabling applies to them.
 
 Organizations that only use Google Workspace can skip invites entirely with [Google org sign-in](#google-org-sign-in).
 

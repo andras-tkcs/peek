@@ -31,11 +31,18 @@ func corruptInt(t *testing.T, s *Store, table, col string) {
 	}
 }
 
-// wantErr fails the test unless err is non-nil.
-func wantErr(t *testing.T, what string, err error) {
+// Substrings of the errors the fault helpers produce.
+const (
+	errInjected = "injected"           // failOn triggers
+	errScan     = "Scan error"         // corruptInt
+	errClosed   = "database is closed" // closed store
+)
+
+// wantErr fails the test unless err is non-nil and contains want.
+func wantErr(t *testing.T, what string, err error, want string) {
 	t.Helper()
-	if err == nil {
-		t.Fatalf("%s: expected an error", what)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("%s: err = %v, want error containing %q", what, err, want)
 	}
 }
 
@@ -132,7 +139,7 @@ func TestStoreMethodsFailOnClosedStore(t *testing.T) {
 	}
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) {
-			wantErr(t, name, call())
+			wantErr(t, name, call(), errClosed)
 		})
 	}
 }
@@ -143,5 +150,5 @@ func (errResult) LastInsertId() (int64, error) { return 0, errors.New("no id") }
 func (errResult) RowsAffected() (int64, error) { return 0, errors.New("no rows count") }
 
 func TestRequireRowsAffectedReportsDriverError(t *testing.T) {
-	wantErr(t, "requireRowsAffected", requireRowsAffected(errResult{}))
+	wantErr(t, "requireRowsAffected", requireRowsAffected(errResult{}), "no rows count")
 }

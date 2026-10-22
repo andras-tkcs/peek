@@ -101,5 +101,5 @@ func TestCLILoginScanError(t *testing.T) {
 	}
 	corruptInt(t, s, "cli_login_devices", "created_at")
 	_, err := s.GetCLILoginByDevice(ctx, "d")
-	wantErr(t, "GetCLILoginByDevice", err)
+	wantErr(t, "GetCLILoginByDevice", err, errScan)
 }

@@ -74,7 +74,7 @@ uid `65532`.
 | `--data` | `PEEK_DATA` | `./data` | Data dir (db + uploads + secret) |
 | `--base-url` | `PEEK_BASE_URL` | `http://localhost:7700` | Public base URL in share links. **Use `https://…` in production** — it enables `Secure` cookies + HSTS. |
 | `--max-upload` | `PEEK_MAX_UPLOAD` | `2097152` (2 MiB) | Max upload size in bytes |
-| `--secret` | `PEEK_SECRET` | *(stored in data dir)* | HMAC/encryption secret. Set explicitly when multiple instances must share signed cookies/settings. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
+| `--secret` | `PEEK_SECRET` | *(stored in data dir)* | HMAC/encryption secret. Set explicitly when multiple instances must share signed cookies/settings. Or `PEEK_SECRET_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--max-total-size` | `PEEK_MAX_TOTAL_SIZE` | `0` | Total upload storage limit in bytes (`0` = unlimited) |
 | `--retention-days` | `PEEK_RETENTION_DAYS` | `0` | Auto-delete uploads older than N days (`0` = off) |
 | `--trusted-proxy` | `PEEK_TRUSTED_PROXY` | `false` | Trust `X-Forwarded-For` for analytics/audit IPs. Enable only behind your reverse proxy. |
@@ -85,7 +85,7 @@ uid `65532`.
 | `--s3-bucket` | `PEEK_S3_BUCKET` | *(empty)* | S3 bucket name |
 | `--s3-region` | `PEEK_S3_REGION` | `us-east-1` | S3 region |
 | `--s3-access-key` | `PEEK_S3_ACCESS_KEY` | *(empty)* | S3 access key |
-| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | *(empty)* | S3 secret key, encrypted in settings after initialization. Or `PEEK_SECRET_FILE` / `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
+| `--s3-secret-key` | `PEEK_S3_SECRET_KEY` | *(empty)* | S3 secret key, encrypted in settings after initialization. Or `PEEK_S3_SECRET_KEY_FILE` with the path to a file (Docker/Kubernetes secrets); setting both the variable and `_FILE` is an error. |
 | `--google-sa-key-file` | `PEEK_GOOGLE_SA_KEY_FILE` | *(empty)* | Service account JSON key (domain-wide delegation) for Google group grants. Needs `--google-admin-email`. Not in the SQLite backup. |
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | *(empty)* | Workspace admin user to impersonate |
 | `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | Group membership cache lifetime (1s to 1h) |

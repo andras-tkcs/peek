@@ -397,14 +397,17 @@ func TestTokenWritesFailMidTransaction(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s := openTokenTestStore(t)
-			acct, _ := s.CreateAccount(ctx, "a@example.test", "a", false)
+			acct, err := s.CreateAccount(ctx, "a@example.test", "a", false)
+			if err != nil {
+				t.Fatalf("seed: %v", err)
+			}
 			id, err := s.CreateAccountToken(ctx, acct.ID, "seed-token-0001", "seed")
 			if err != nil {
 				t.Fatal(err)
 			}
 			insertTokenUpload(t, s, acct.ID, id) // row-level triggers need a row to fire on
 			failOn(t, s, c.table, c.op)
-			wantErr(t, c.name, c.call(s, acct.ID, id))
+			wantErr(t, c.name, c.call(s, acct.ID, id), errInjected)
 		})
 	}
 }
@@ -412,15 +415,21 @@ func TestTokenWritesFailMidTransaction(t *testing.T) {
 func TestTokenScanErrors(t *testing.T) {
 	ctx := context.Background()
 	s := openTokenTestStore(t)
-	acct, _ := s.CreateAccount(ctx, "a@example.test", "a", false)
-	id, _ := s.CreateAccountToken(ctx, acct.ID, "seed-token-0001", "seed")
+	acct, err := s.CreateAccount(ctx, "a@example.test", "a", false)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	id, err := s.CreateAccountToken(ctx, acct.ID, "seed-token-0001", "seed")
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
 	corruptInt(t, s, "tokens", "created_at")
-	_, err := s.ListTokens(ctx)
-	wantErr(t, "ListTokens", err)
+	_, err = s.ListTokens(ctx)
+	wantErr(t, "ListTokens", err, errScan)
 	_, err = s.GetTokenByID(ctx, id)
-	wantErr(t, "GetTokenByID", err)
+	wantErr(t, "GetTokenByID", err, errScan)
 	_, err = s.ListAccountTokens(ctx, acct.ID)
-	wantErr(t, "ListAccountTokens", err)
+	wantErr(t, "ListAccountTokens", err, errScan)
 	_, err = s.DeleteTokenChecked(ctx, id)
-	wantErr(t, "DeleteTokenChecked", err)
+	wantErr(t, "DeleteTokenChecked", err, errScan)
 }

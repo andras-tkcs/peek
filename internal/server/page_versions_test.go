@@ -287,11 +287,17 @@ func TestRawRefusedAfterVisibilityChange(t *testing.T) {
 	if rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies)); rec.Code != http.StatusOK {
 		t.Fatalf("before change = %d, want 200", rec.Code)
 	}
+	if rec := doRequest(t, s, http.MethodGet, src+"&download=1", nil, withCookieList(cookies), withFetchDest("document")); rec.Code != http.StatusOK {
+		t.Fatalf("download before change = %d, want 200", rec.Code)
+	}
 	if err := s.store.SetUploadVisibility(context.Background(), u.ID, models.UploadVisibilitySignedIn); err != nil {
 		t.Fatal(err)
 	}
 	if rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies)); rec.Code != http.StatusForbidden {
 		t.Fatalf("after going private = %d, want 403", rec.Code)
+	}
+	if rec := doRequest(t, s, http.MethodGet, src+"&download=1", nil, withCookieList(cookies), withFetchDest("document")); rec.Code != http.StatusForbidden {
+		t.Fatalf("download after going private = %d, want 403", rec.Code)
 	}
 }
 

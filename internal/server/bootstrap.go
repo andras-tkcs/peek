@@ -53,6 +53,10 @@ func loadOrCreateSecret(path string) (string, error) {
 	if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
 		return "", fmt.Errorf("write secret: %w", err)
 	}
+	// WriteFile keeps the mode of a file that already existed.
+	if err := os.Chmod(path, 0o600); err != nil {
+		return "", fmt.Errorf("restrict secret: %w", err)
+	}
 	return s, nil
 }
 

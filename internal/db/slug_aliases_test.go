@@ -129,7 +129,7 @@ func TestRenameUploadFailsMidTransaction(t *testing.T) {
 				t.Fatal(err)
 			}
 			failOn(t, s, c.table, c.op)
-			wantErr(t, c.name, s.RenameUpload(ctx, id, "new", "n.html"))
+			wantErr(t, c.name, s.RenameUpload(ctx, id, "new", "n.html"), errInjected)
 			if got, err := s.GetUploadByID(ctx, id); err != nil || got.Slug != "old" {
 				t.Fatalf("rename leaked out of the failed transaction: %+v, %v", got, err)
 			}

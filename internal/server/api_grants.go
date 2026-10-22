@@ -73,6 +73,7 @@ func (s *Server) normalizeGrantInput(kind, email string, requireGroupLookup bool
 func (s *Server) decodeGrantBody(w http.ResponseWriter, r *http.Request) (grantBody, bool) {
 	var body grantBody
 	if err := decodeJSON(w, r, &body, smallJSONBodyLimit); err != nil {
+		jsonError(w, http.StatusBadRequest, "bad json")
 		return body, false
 	}
 	email, msg := s.normalizeGrantInput(body.Kind, body.Email, true)

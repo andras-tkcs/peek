@@ -38,11 +38,23 @@ func TestFlashMessagesCoverAllCodes(t *testing.T) {
 		flashInviteCreated, flashInviteRevoked, flashUserUpdated, flashSettingsSaved, flashAPIKeyRevoked,
 		flashVisibilitySet, flashGrantAdded, flashGrantRemoved, flashRenamed,
 		flashSessionsRevoked, flashSessionsRevokeFailed,
+		flashEmailTestSent, flashEmailNotConfigured, flashEmailNoAddress, flashEmailTestFailed, flashShareNotifyFailed,
 	}
 	for _, code := range codes {
 		if flashMessages[code] == "" {
 			t.Errorf("flashMessages[%q] is missing or empty", code)
 		}
+	}
+	for code, msg := range flashMessages {
+		if msg == "" || msg == code {
+			t.Errorf("flashMessages[%q] = %q, want human-readable text", code, msg)
+		}
+	}
+}
+
+func TestFlashInvalidSessionText(t *testing.T) {
+	if got := flashMessages[flashInvalidSession]; got != "invalid session" {
+		t.Fatalf("flashMessages[flashInvalidSession] = %q, want %q", got, "invalid session")
 	}
 }
 

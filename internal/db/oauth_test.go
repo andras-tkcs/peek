@@ -51,11 +51,14 @@ func TestOAuthIdentityScanError(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)
 	t.Cleanup(func() { s.Close() })
-	a, _ := s.CreateAccount(ctx, "a@example.test", "a", false)
+	a, err := s.CreateAccount(ctx, "a@example.test", "a", false)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
 	if err := s.UpsertOAuthIdentity(ctx, a.ID, "github", "1", "a@example.test", "a"); err != nil {
 		t.Fatal(err)
 	}
 	corruptInt(t, s, "oauth_identities", "created_at")
-	_, err := s.GetOAuthIdentity(ctx, "github", "1")
-	wantErr(t, "GetOAuthIdentity", err)
+	_, err = s.GetOAuthIdentity(ctx, "github", "1")
+	wantErr(t, "GetOAuthIdentity", err, errScan)
 }

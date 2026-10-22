@@ -91,6 +91,9 @@ func checkPassword(hash, password string) bool {
 
 var errLoginThrottled = errors.New("too many failed sign-in attempts")
 
+// RFC 5321 path limit; longer input cannot be an account email.
+const maxLoginEmailLen = 254
+
 func loginFailureKey(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
 
 // loginWithPassword counts failures per email address, whether or not the
@@ -100,6 +103,10 @@ func (s *Server) loginWithPassword(r *http.Request) (*models.Account, error) {
 	password := r.FormValue("password")
 	if email == "" || password == "" {
 		return nil, fmt.Errorf("missing credentials")
+	}
+	if len(email) > maxLoginEmailLen {
+		checkPassword("", password) // one bcrypt compare, like every other failure
+		return nil, fmt.Errorf("invalid credentials")
 	}
 	key := loginFailureKey(email)
 	if s.accountLoginLimiter.blocked(key) {
