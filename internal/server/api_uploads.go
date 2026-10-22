@@ -1,6 +1,8 @@
 package server
 
 import (
+	"database/sql"
+	"errors"
 	"io"
 	"log/slog"
 	"mime"
@@ -18,6 +20,14 @@ type uploadResp struct {
 	Visibility string `json:"visibility"`
 	Version    int    `json:"version"`
 	VersionURL string `json:"version_url"`
+	// BackendImage is the container image attached to this version, if any.
+	BackendImage string `json:"backend_image,omitempty"`
+}
+
+// uploadBackendInput is the optional backend of an upload request.
+type uploadBackendInput struct {
+	Image string
+	Port  int // already normalized by validateBackendInput
 }
 
 type uploadBodyKind int
@@ -50,6 +60,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		name       string
 		visibility string
 		slug       string
+		backendImg string
+		backendRaw string
 	)
 
 	if bodyKind == uploadBodyMultipart {
@@ -63,6 +75,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		visibility = strings.TrimSpace(r.FormValue("visibility"))
 		slug = strings.TrimSpace(r.FormValue("slug"))
+		backendImg = strings.TrimSpace(r.FormValue("backend_image"))
+		backendRaw = strings.TrimSpace(r.FormValue("backend_port"))
 		file, header, err := r.FormFile("file")
 		if err != nil {
 			jsonError(w, http.StatusBadRequest, "missing 'file'")
@@ -78,6 +92,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	} else {
 		visibility = strings.TrimSpace(r.URL.Query().Get("visibility"))
 		slug = strings.TrimSpace(r.URL.Query().Get("slug"))
+		backendImg = strings.TrimSpace(r.URL.Query().Get("backend_image"))
+		backendRaw = strings.TrimSpace(r.URL.Query().Get("backend_port"))
 		name = r.URL.Query().Get("filename")
 		if name == "" {
 			name = "page"
@@ -90,8 +106,29 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var backend *uploadBackendInput
+	if backendImg != "" {
+		port := 0
+		if backendRaw != "" {
+			var err error
+			if port, err = strconv.Atoi(backendRaw); err != nil {
+				jsonError(w, http.StatusBadRequest, "backend port must be between 1 and 65535")
+				return
+			}
+		}
+		if !s.requireBackendsEnabled(w) {
+			return
+		}
+		port, status, msg := s.validateBackendInput(r.Context(), backendImg, port)
+		if status != 0 {
+			jsonError(w, status, msg)
+			return
+		}
+		backend = &uploadBackendInput{Image: backendImg, Port: port}
+	}
+
 	if slug != "" {
-		s.handleUploadVersion(w, r, owner, slug, visibility, data)
+		s.handleUploadVersion(w, r, owner, slug, visibility, data, backend)
 		return
 	}
 
@@ -111,10 +148,37 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditRequest(r, owner.Name, "upload.create", auditDetail("slug", up.Slug, "name", up.Name, "size", strconv.Itoa(up.Size)))
 
-	jsonOK(w, uploadResp{Slug: up.Slug, URL: up.URL, Visibility: up.Visibility, Version: up.Version, VersionURL: up.URL + "/v/" + strconv.Itoa(up.Version)})
+	resp := uploadResp{Slug: up.Slug, URL: up.URL, Visibility: up.Visibility, Version: up.Version, VersionURL: up.URL + "/v/" + strconv.Itoa(up.Version)}
+	if backend != nil {
+		created, err := s.store.GetUpload(r.Context(), up.Slug)
+		if err != nil || !s.saveUploadBackend(r, owner, created.ID, up.Version, *backend) {
+			jsonError(w, http.StatusInternalServerError, uploadBackendSaveFailed)
+			return
+		}
+		resp.BackendImage = backend.Image
+	}
+	jsonOK(w, resp)
 }
 
-func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, owner *models.Token, slug, visibility string, data []byte) {
+const uploadBackendSaveFailed = "page uploaded but its backend could not be saved"
+
+// saveUploadBackend writes the backend row of a freshly uploaded version.
+func (s *Server) saveUploadBackend(r *http.Request, owner *models.Token, uploadID int64, version int, b uploadBackendInput) bool {
+	err := s.store.SetUploadBackend(r.Context(), models.UploadBackend{
+		UploadID:           uploadID,
+		Version:            version,
+		Image:              b.Image,
+		Port:               b.Port,
+		CreatedByAccountID: owner.AccountID,
+	})
+	if err != nil {
+		slog.Error("upload backend save failed", "upload_id", uploadID, "version", version, "err", err)
+		return false
+	}
+	return true
+}
+
+func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, owner *models.Token, slug, visibility string, data []byte, backend *uploadBackendInput) {
 	if visibility != "" {
 		jsonError(w, http.StatusBadRequest, "visibility cannot be set when uploading a new version; use the visibility endpoint")
 		return
@@ -132,6 +196,7 @@ func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, own
 		jsonError(w, http.StatusForbidden, "not owner")
 		return
 	}
+	prevVersion := u.LatestVersion
 	res, err := s.uploadService().AddVersion(r.Context(), uploads.AddVersionInput{
 		UploadID:       u.ID,
 		Slug:           slug,
@@ -146,7 +211,27 @@ func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, own
 		return
 	}
 	s.auditRequest(r, owner.Name, "upload.version.create", auditDetail("slug", slug, "version", strconv.Itoa(res.Version), "size", strconv.Itoa(res.Size)))
-	jsonOK(w, uploadResp{Slug: slug, URL: res.URL, Visibility: u.Visibility, Version: res.Version, VersionURL: res.VersionURL})
+	resp := uploadResp{Slug: slug, URL: res.URL, Visibility: u.Visibility, Version: res.Version, VersionURL: res.VersionURL}
+	if backend == nil {
+		// A new version keeps the backend of the version it follows.
+		prev, err := s.store.GetUploadBackend(r.Context(), u.ID, prevVersion)
+		switch {
+		case err == nil:
+			backend = &uploadBackendInput{Image: prev.Image, Port: prev.Port}
+		case !errors.Is(err, sql.ErrNoRows):
+			slog.Error("upload backend inherit failed", "upload_id", u.ID, "version", prevVersion, "err", err)
+			jsonError(w, http.StatusInternalServerError, uploadBackendSaveFailed)
+			return
+		}
+	}
+	if backend != nil {
+		if !s.saveUploadBackend(r, owner, u.ID, res.Version, *backend) {
+			jsonError(w, http.StatusInternalServerError, uploadBackendSaveFailed)
+			return
+		}
+		resp.BackendImage = backend.Image
+	}
+	jsonOK(w, resp)
 }
 
 func uploadBodyKindFromContentType(contentType string) (uploadBodyKind, bool) {

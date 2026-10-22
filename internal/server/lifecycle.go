@@ -122,6 +122,11 @@ func (s *Server) pruneOldVersions(ctx context.Context, cutoff time.Time) {
 			slog.Error("retention cleanup: delete version", "upload_id", v.UploadID, "version", v.Version, "err", err)
 			continue
 		}
+		if s.backends != nil {
+			if err := s.backends.StopVersion(ctx, v.UploadID, v.Version); err != nil {
+				slog.Warn("retention cleanup: stop backend", "upload_id", v.UploadID, "version", v.Version, "err", err)
+			}
+		}
 		pruned++
 	}
 	if pruned > 0 {
