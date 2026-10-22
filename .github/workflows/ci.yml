@@ -46,3 +46,21 @@ jobs:
         with:
           version: "2026.2.1"
           install-go: false
+
+  backend-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOFLAGS: -mod=readonly
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build example image
+        run: docker build -t peek-example-contact:ci examples/contact-form
+      - name: Docker integration test
+        run: |
+          PEEK_DOCKER_TEST=1 PEEK_DOCKER_TEST_IMAGE=peek-example-contact:ci \
+            go test -count=1 -run '^TestDockerIntegration' -v ./internal/backends

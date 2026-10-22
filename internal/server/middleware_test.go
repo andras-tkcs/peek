@@ -66,3 +66,16 @@ func TestMiddlewareCovTokenLastUsedFailureDoesNotBlockRequest(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestBodyLimitExemptsBackendRelay(t *testing.T) {
+	tb := startTestBackend(t, nil)
+	s, _, _ := proxyFixture(t, "mw-svc", "public", tb)
+	big := strings.NewReader(strings.Repeat("a", 1<<20))
+	rec := svcReq(t, s, http.MethodPost, "/svc/mw-svc/v/1/api/x", big)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("1 MiB POST to /svc = %d %s, want it relayed", rec.Code, rec.Body.String())
+	}
+	if got := len(tb.seen().Body); got != 1<<20 {
+		t.Fatalf("backend received %d bytes, want %d", got, 1<<20)
+	}
+}

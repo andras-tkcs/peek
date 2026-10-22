@@ -88,6 +88,32 @@ Peek can email people when a restricted page is shared with them. Admins configu
 
 Peek sends a plain-text email with the page link when a grant is added to a restricted page (from the dashboard, the API or the CLI) and, to everyone who already has a grant, when a page is switched to restricted. It sends nothing on removing a grant, on adding a grant that already exists, or when the page is not restricted. The sharer's own address is skipped, and when an allowed email domain is set, only recipients in that domain are mailed. Group grants mail the group address. Each send is bounded by 15 s. A failed send never fails the share: it is logged as `share notification failed` and audited as `upload.share.notify` with `result=failed` (and `result=sent`, the recipient count and the skipped count otherwise), and the dashboard tells the sharer that the notification could not be sent.
 
+## Page Backends
+
+A page version can come with a backend: a Docker image that Peek runs as a container and reaches through `/svc/<slug>/v/<n>/...` (the page calls it with `peek.fetch`). The feature is off by default and needs a Docker or Podman API.
+
+Startup settings:
+
+- `PEEK_BACKENDS` (`--backends`, default `off`): `off` or `docker`. With `docker`, peekd pings the engine at startup and refuses to start when it is not reachable.
+- `PEEK_DOCKER_HOST` (`--docker-host`, default `unix:///var/run/docker.sock`): `unix://` or `tcp://` address of the engine API. Proxy environment variables are ignored for it.
+- `PEEK_BACKEND_NETWORK` (`--backend-network`, default `peek-backends`): the bridge network peekd creates for backend containers. peekd reaches containers by their address on this network and never publishes ports. When peekd itself runs in a container it must be attached to the same network, otherwise it cannot reach the backends (in `docker-compose.yml`, the `backends` profile does this).
+
+**The Docker socket is root on the host.** Anyone who controls peekd, or who can make it start an image you allowed, controls the host. Peek never lets page owners choose mounts, capabilities, network mode or privileges, but run backends on rootless Docker or Podman, or on a dedicated VM, and keep the allowed image list short. The socket must be readable and writable by the peekd user: the published image runs as uid 65532, so add the socket's group with `group_add` (compose: `export DOCKER_GID=$(stat -c %g /var/run/docker.sock)`) or point `PEEK_DOCKER_HOST` at a socket proxy or a rootless socket owned by that user. On macOS and Windows Docker Desktop a host-run peekd cannot reach container addresses; run peekd in a container on the backend network there.
+
+Runtime settings, on the **Backends** tab of the **Admin** page (the tab says so when backends are off):
+
+- `backend_allowed_images`: comma-separated registry prefixes ending in `/` (`ghcr.io/acme/`) or exact repositories (`ghcr.io/acme/contact-form`). Empty allows no backend. The check happens when an owner attaches an image, so changing it does not stop backends that already exist.
+- `backend_memory_mb` (default 256) and `backend_cpu_millis` (default 500, 1000 is one core): limits per container. Containers also get a PID limit, a read-only root filesystem with a 64 MB `/tmp`, all capabilities dropped, `no-new-privileges`, no restart policy and rotated logs.
+- `backend_idle_minutes` (default 15): a backend that received no request for this long is stopped; the next request starts it again, so the first one pays the container start time.
+- `backend_max_running` (default 10): when more would run, the least recently used backend is stopped.
+- `backend_registry_server`, `backend_registry_username` and `backend_registry_password` (encrypted at rest): credentials used to pull images from that one registry. Public images need none.
+
+Images are pulled on the first start when the engine does not have them. Owners manage their backends with `peek backend`; environment variables are stored encrypted, never shown again, and apply on the next container start (`peek backend restart`). `peek backend logs <slug>` shows the last lines of a running container. Backends do not use the **Email** tab's SMTP settings: owners set their backend's own SMTP variables.
+
+Each page has a named volume `peek-<instance>-data-u<id>` mounted at `/data` in its backends. Volumes live in the container engine, not in the peekd data directory, so `peekd backup` and a copy of the data directory do not include them; back them up with the engine's own tools if a backend keeps data that matters. The volume is deleted together with the page (also by retention cleanup). Pruning an old version stops its container but keeps the volume. `<instance>` is a random id stored in the `backend_instance_id` setting; at startup and shutdown peekd removes the containers carrying its own instance label, so several peekd instances can share one engine.
+
+Backend actions are audited: `backend.set`, `backend.remove`, `backend.env.set`, `backend.env.unset` and `backend.restart`. Start failures are logged as `backend start failed` and answered with 502; the relay answers 504 when a backend takes longer than 30 s, limits request bodies to 1 MiB and responses to 8 MiB, and rate limits each client address. The relay forwards no cookies, and tells the backend who is calling only through the `X-Peek-*` headers described in the README.
+
 ## Quotas, Retention, And Storage
 
 Use runtime settings for normal day-to-day limits: maximum upload size, total storage cap, per-token count/storage limits, retention days, auth options, and S3 credentials. Storage backend selection itself is a startup concern and requires restart because it changes where object bytes are read and written.
@@ -98,7 +124,7 @@ Retention cleanup runs in the background. It deletes a page when its newest vers
 
 For S3-compatible storage, private/link-local endpoints are blocked by default to avoid SSRF. Set `PEEK_S3_ALLOW_PRIVATE_ENDPOINT=true` only for explicit private deployments such as local MinIO or controlled internal object stores. The SSRF guard also blocks CGNAT (`100.64.0.0/10`), NAT64/6to4/Teredo, benchmarking, multicast and reserved ranges. Bucket names must be DNS-compatible (3–63 lowercase letters, digits, dots, hyphens); a stored bucket that does not match stops startup with `invalid s3 bucket`.
 
-Request bodies are limited to 64 KiB on every route except page uploads, which use the maximum upload size.
+Request bodies are limited to 64 KiB on every route except page uploads, which use the maximum upload size, and the backend relay (`/svc/`), which allows 1 MiB.
 
 ## Observability
 
@@ -131,6 +157,8 @@ With `--trusted-proxy`, `X-Forwarded-For` is now trusted only from `PEEK_TRUSTED
 This release also applies the allowed email domain and OAuth-required rules to API tokens (see First Run And Access); check which personal API keys that affects before upgrading.
 
 Migration 15 (`drop_password_visibility`) turns every password page into a restricted page and clears its stored password hash. Those pages are visible to their owner and admins only until they are shared with people or groups, and no email is sent for the conversion. A rollback cannot restore them as password pages; restore the pre-upgrade backup if you need the old passwords. The CLI's `--password` and `--password-stdin` flags are gone, and the default visibility of a new upload is `restricted`.
+
+Migration 16 (`upload_backends`) adds the `upload_backends` and `upload_backend_env` tables for page backends. Older binaries ignore both tables, so a rollback keeps pages working but their backends stop being served. Containers started by the newer binary are labelled `peek.managed=true`; remove leftovers with `docker ps -a --filter label=peek.managed=true` if you roll back while backends are running.
 
 Rollback is simplest when the database has not been migrated by a newer binary. If a release includes migrations, treat rollback as restoring the pre-upgrade backup plus object storage state.
 

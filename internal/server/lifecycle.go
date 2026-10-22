@@ -19,6 +19,13 @@ func (s *Server) Close() error {
 		s.cancel()
 	}
 	s.wg.Wait()
+	if s.backends != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := s.backends.Close(ctx); err != nil {
+			slog.Error("backends close", "err", err)
+		}
+		cancel()
+	}
 	if s.store != nil {
 		return s.store.Close()
 	}
@@ -114,6 +121,11 @@ func (s *Server) pruneOldVersions(ctx context.Context, cutoff time.Time) {
 		if err := s.store.DeleteUploadVersion(ctx, v.UploadID, v.Version); err != nil {
 			slog.Error("retention cleanup: delete version", "upload_id", v.UploadID, "version", v.Version, "err", err)
 			continue
+		}
+		if s.backends != nil {
+			if err := s.backends.StopVersion(ctx, v.UploadID, v.Version); err != nil {
+				slog.Warn("retention cleanup: stop backend", "upload_id", v.UploadID, "version", v.Version, "err", err)
+			}
 		}
 		pruned++
 	}

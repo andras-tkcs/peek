@@ -48,6 +48,8 @@ func Run(args []string) int {
 		err = cmdDeleteAll(rest)
 	case "token":
 		err = cmdToken(rest)
+	case "backend":
+		err = cmdBackend(rest)
 	case "help", "-h", "--help":
 		usage()
 		return 0
@@ -78,6 +80,7 @@ Usage:
   peek upload <file.html> --visibility public|signed-in
   peek upload <file.html> --visibility restricted
   peek upload <file.html> --slug <slug>        upload a new version of an existing page
+  peek upload <file.html> --backend <image> [--backend-port <n>]  attach a backend container
   peek list
   peek delete <slug>
   peek visibility <slug> public
@@ -87,6 +90,13 @@ Usage:
   peek grant <slug> <email> [--group]  give a user (or Google group) access to a restricted page
   peek revoke <slug> <email> [--group] remove a grant
   peek grants <slug>                   list grants on a page
+  peek backend <slug>                  show backends and environment variable names
+  peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
+  peek backend remove <slug> [--version <n>|latest]
+  peek backend env set <slug> <NAME> --value-stdin   set a backend environment variable
+  peek backend env unset <slug> <NAME>
+  peek backend restart <slug>          stop the backend so it restarts with new variables
+  peek backend logs <slug> [--version <n>|latest] [--tail <n>]
   peek stats <slug>
   peek versions <slug>                 list versions of one of your pages
   peek comments <slug> [--version <n>]  list comments (latest version by default)

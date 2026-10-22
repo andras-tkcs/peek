@@ -194,4 +194,5 @@ var secretSettingKeys = map[string]bool{
 	"oauth_github_client_secret": true,
 	"oauth_oidc_client_secret":   true,
 	"smtp_password":              true,
+	"backend_registry_password":  true,
 }

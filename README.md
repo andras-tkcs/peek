@@ -85,6 +85,7 @@ docker compose --profile s3 up -d # with MinIO storage
 - **Terminal and browser workflows**: upload, list, delete, change visibility, inspect comments, and view stats from the CLI or web dashboard.
 - **Access controls for internal teams**: public links, signed-in-user pages (any active Peek account), restricted pages (the default) with per-user and Google group grants and a notification email to each new grantee, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, Google org sign-in (no invites), allowed login email domain, token expiry, and admin-managed users.
 - **Operational basics included**: health/readiness checks, structured JSON logging, Prometheus metrics, audit log, quota and retention controls, consistent SQLite backup, file or S3-compatible storage, and S3 endpoint SSRF protection.
+- **Page backends**: a page version can come with a Docker image that Peek runs as a container; the page calls it with `peek.fetch("/api/contact", ...)` and Peek relays the call after the same access check that guards the page. Off by default (`--backends docker`).
 - **Small deployment footprint**: one static Go binary, pure-Go SQLite, no runtime dependencies.
 
 Peek is not a SaaS product. It avoids billing, public multi-tenant onboarding, marketplace workflows, and growth-oriented product surfaces.
@@ -99,6 +100,38 @@ Open `/p/<slug>` and use the floating island at the bottom:
 
 Comments live in a side panel. Your name is asked once and remembered. Public pages are open to anyone with the link, signed-in pages require an active Peek account, and restricted pages require an account matching a grant. Comments belong to the version they were written on.
 
+## Page backends
+
+A page is one HTML file in a sandboxed iframe, so by itself it cannot send an email, keep data or use a secret. A page version can therefore come with a **backend**: a Docker image that Peek runs as a container. The page talks to it with `peek.fetch`, a fetch-like call the Peek bridge provides:
+
+```js
+const res = await peek.fetch("/api/contact", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ name, email, message }),
+});
+```
+
+Peek relays the call to the container after the same public / signed-in / restricted check as the page. The path must start with `/`; methods are `GET`, `POST`, `PUT`, `PATCH` and `DELETE`; only the `content-type` and `accept` headers are sent; request bodies are limited to 1 MiB and responses to 8 MiB. Containers start on the first request and stop after an idle timeout.
+
+```sh
+peek upload app.html --slug contact --backend ghcr.io/acme/contact-form:1.2
+peek backend env set contact SMTP_PASSWORD --value-stdin
+peek backend restart contact
+peek backend logs contact
+```
+
+The container listens on `$PORT` (default 8080, change it with `--backend-port`) and gets `/data`, a named volume that survives restarts and is deleted with the page. Besides the variables the owner sets, Peek sets `PORT`, `PEEK_BACKEND_TOKEN`, `PEEK_UPLOAD_ID` and `PEEK_VERSION`. Every relayed request carries these headers, and no cookies or `Authorization`:
+
+| Header | Meaning |
+| --- | --- |
+| `X-Peek-Backend-Token` | Equals `$PEEK_BACKEND_TOKEN`, unique per container start. The backend must reject requests without it. |
+| `X-Peek-Upload-Id`, `X-Peek-Version` | The page and version that made the call. |
+| `X-Peek-Viewer` | A stable per-page id for the viewer's browser (not shared between pages). |
+| `X-Peek-User-Id`, `X-Peek-User-Email` | The signed-in account, only on `signed-in` and `restricted` pages. Public-page backends never learn who a signed-in viewer is. |
+
+Backends need Docker or Podman and an admin who allows image prefixes on the Admin page. See [docs/operations.md](docs/operations.md#page-backends) for the operator setup and [examples/contact-form](examples/contact-form) for a complete backend that sends email and stores submissions.
+
 ## CLI reference
 
 ```
@@ -111,6 +144,7 @@ peek upload <file.html> --visibility public [--name <filename>]
 peek upload <file.html> --visibility signed-in [--name <filename>]
 peek upload <file.html> --visibility restricted [--name <filename>]
 peek upload <file.html> --slug <slug>   upload a new version of an existing page
+peek upload <file.html> --backend <image> [--backend-port <n>]   attach a container backend
 peek list
 peek delete <slug>
 peek delete-all                        delete all your uploads
@@ -122,6 +156,13 @@ peek grant <slug> <email> [--group]    give a user (or Google group) access
 peek revoke <slug> <email> [--group]   remove a grant
 peek grants <slug>                     list grants on a page
 peek versions <slug>                   list versions of a page
+peek backend <slug>                    show a page's backends and variable names
+peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
+peek backend remove <slug> [--version <n>|latest]
+peek backend env set <slug> <NAME> (--value-stdin | --value <v>)
+peek backend env unset <slug> <NAME>
+peek backend restart <slug>            apply variable changes and restart the container
+peek backend logs <slug> [--version <n>|latest] [--tail <n>]
 peek stats <slug>
 peek comments <slug> [--version <n>]   list comments (latest version by default)
 peek export <slug>                     export all data for an upload
@@ -162,8 +203,11 @@ Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env o
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | *(empty)* | Workspace admin to impersonate for group lookups |
 | `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | Group membership cache lifetime |
 | `--oidc-allow-private-issuer` | `PEEK_OIDC_ALLOW_PRIVATE_ISSUER` | `false` | Allow HTTP/private OIDC issuers for local SSO testing |
+| `--backends` | `PEEK_BACKENDS` | `off` | Page backends: `off` or `docker` |
+| `--docker-host` | `PEEK_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker or Podman API address (`unix://` or `tcp://`), used with `--backends docker` |
+| `--backend-network` | `PEEK_BACKEND_NETWORK` | `peek-backends` | Docker network that backend containers join |
 
-Admins can update runtime settings from the **Admin** page (the **Admin** button next to **Sign out**): max upload size, total storage limit, per-token quotas, retention days, and S3 credentials. Changing the storage backend requires a restart.
+Admins can update runtime settings from the **Admin** page (the **Admin** button next to **Sign out**): max upload size, total storage limit, per-token quotas, retention days, S3 credentials, and the page backend limits (allowed images, memory, CPU, idle stop, registry credentials). Changing the storage backend requires a restart.
 
 `peekd --version` prints the version. `peekd backup [path]` writes a consistent SQLite snapshot via `VACUUM INTO`. `peekd healthcheck` checks `/healthz`.
 
@@ -189,6 +233,8 @@ Config saved to `<user-config-dir>/peek/config.json`. Override per-command with 
 | Uploaded HTML steals data | Rendered in `<iframe sandbox="allow-scripts allow-popups">` and served with CSP `sandbox allow-scripts allow-popups`, so it has an opaque origin even when the raw URL is opened directly; `/raw` refuses non-iframe loads (`Sec-Fetch-Dest`). |
 | Cross-origin attacks | Parent and iframe communicate only via `postMessage`. |
 | Bypassing page access | `/raw` requires a short-lived HMAC-signed view token bound to the HttpOnly visitor cookie, and re-checks page access on every load, so revoking a grant or changing visibility takes effect immediately. |
+| Backend container escapes or exhausts the host | Images must match an admin-allowed registry prefix. Every container gets fixed memory, CPU and PID limits, a read-only root filesystem (writable `/tmp` and `/data` only), all capabilities dropped, `no-new-privileges`, and no published ports. Page owners cannot choose mounts, privileges or network mode. The Docker socket is still root on the host; see [docs/operations.md](docs/operations.md#page-backends). |
+| Calling a backend around Peek | `/svc` runs the page's access check on every request, requires a custom `X-Peek-Svc` header (which forces a CORS preflight Peek never answers) and a same-origin `Sec-Fetch-Site`; the browser relay refuses `..` segments and stops relaying once the iframe has navigated away. Containers sit on a private network and require a per-container token (`X-Peek-Backend-Token`). |
 | Brute force / spam | Per-IP rate limits on login and comment posting, plus per-account sign-in failure limits. |
 | Malicious content | HTML sniffed, binaries rejected, configurable `MaxBytesReader`; non-upload requests are capped at 64 KiB. |
 | SSRF via S3 | Endpoints must be HTTP(S); private/link-local IPs blocked unless explicitly allowed. |
@@ -248,6 +294,7 @@ Two skills ship in this repo:
 ```
 cmd/peekd/          server entrypoint
 cmd/peek/           CLI entrypoint
+internal/backends/  container runtime and lifecycle for page backends
 internal/db/        SQLite store + schema
 internal/models/    data types
 internal/server/    HTTP server, handlers, auth, security

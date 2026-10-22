@@ -89,6 +89,17 @@ The image is scratch-based, runs as uid `65532`, exposes port `7700`, and stores
 
 On managed cloud platforms, the `/data` path must be backed by that platform's persistent disk or volume feature. If the service uses only the container filesystem, restarts and redeploys can remove `peek.db`, `secret.key`, and uploaded files. See [Deployment platforms](/peek/docs/deployment-platforms/) before deploying to Render, Fly.io, Railway, Kubernetes, or a stateless app platform.
 
+## Page Backends
+
+Page backends let a page version come with a Docker image that Peek runs as a container; the page calls it with `peek.fetch`. They are off by default. To turn them on:
+
+1. Run `peekd` with `--backends docker` (`PEEK_BACKENDS=docker`). Optionally set `--docker-host` / `PEEK_DOCKER_HOST` (default `unix:///var/run/docker.sock`, `tcp://` also works) and `--backend-network` / `PEEK_BACKEND_NETWORK` (default `peek-backends`). peekd pings the engine at startup and stops with `docker is not reachable at ...` when it cannot.
+2. Make the socket usable by the peekd user. The container image runs as uid `65532`, so add the socket's group: in Compose use `group_add` with the socket's group id (`export DOCKER_GID=$(stat -c %g /var/run/docker.sock)`), or use a rootless Docker or Podman socket.
+3. When peekd runs in a container, attach it to the backend network so it can reach the backend containers. On Docker Desktop (macOS, Windows) a peekd running on the host cannot reach container addresses, so run it in a container there.
+4. On the **Backends** tab of the **Admin** page, set the allowed backend images (`ghcr.io/acme/` or an exact repository). Empty allows no backend. The same tab sets memory, CPU, idle stop, the cap on running backends and registry credentials for private images.
+
+The Docker socket is root on the host. Prefer rootless Docker or Podman, or a dedicated VM, and keep the allowed image list short. Peek runs every backend with fixed limits, a read-only root filesystem, no capabilities and no published ports, and owners cannot change that. Backend data volumes are not part of `peekd backup`. See `docs/operations.md` in the repository for the full operator notes, and `examples/contact-form` for a backend that sends email, with a Compose profile (`docker compose --profile backends up --build`) that runs peekd next to Mailpit.
+
 ## Proxy And Base URL
 
 Caddy example:

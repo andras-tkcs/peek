@@ -196,3 +196,67 @@ func TestAdminShowsEmailTab(t *testing.T) {
 		}
 	}
 }
+
+var backendSettingKeys = []string{
+	"backend_allowed_images", "backend_memory_mb", "backend_cpu_millis", "backend_idle_minutes",
+	"backend_max_running", "backend_registry_server", "backend_registry_username", "backend_registry_password",
+}
+
+func TestAdminBackendsTab(t *testing.T) {
+	const offLine = "Backends are off"
+	check := func(t *testing.T, s *Server, wantOff bool) {
+		t.Helper()
+		admin := newAccountWithToken(t, s, "admin@example.test", "admin-tab-token", true)
+		rec := doRequest(t, s, http.MethodGet, "/admin", nil, asSession(s, admin.ID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /admin = %d", rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, "settingsTab === 'backends'") {
+			t.Fatal("admin page has no Backends tab")
+		}
+		for _, k := range backendSettingKeys {
+			if !strings.Contains(body, `name="`+k+`"`) {
+				t.Fatalf("admin page missing input %s", k)
+			}
+		}
+		if got := strings.Contains(body, offLine); got != wantOff {
+			t.Fatalf("contains %q = %v, want %v", offLine, got, wantOff)
+		}
+	}
+	t.Run("off", func(t *testing.T) {
+		s, _ := newHandlerTestServer(t)
+		check(t, s, true)
+	})
+	t.Run("on", func(t *testing.T) {
+		s, _, _ := newBackendTestServer(t)
+		check(t, s, false)
+	})
+}
+
+func TestAdminBackendsSettingsSave(t *testing.T) {
+	s, _, _ := newBackendTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-save-token", true)
+	post := func(value string) *httptest.ResponseRecorder {
+		form := url.Values{"csrf": {"csrf-token"}, "backend_memory_mb": {value}}
+		return doRequest(t, s, http.MethodPost, "/dashboard/settings", strings.NewReader(form.Encode()),
+			asSession(s, admin.ID),
+			func(r *http.Request) {
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				r.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
+			})
+	}
+	if rec := post("512"); rec.Code >= 400 {
+		t.Fatalf("save = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got, _ := s.store.GetSetting(context.Background(), "backend_memory_mb"); got != "512" {
+		t.Fatalf("backend_memory_mb = %q, want 512", got)
+	}
+	rec := post("1")
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "backend_memory_mb must be between") {
+		t.Fatalf("out-of-range save = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got, _ := s.store.GetSetting(context.Background(), "backend_memory_mb"); got != "512" {
+		t.Fatalf("backend_memory_mb changed to %q", got)
+	}
+}

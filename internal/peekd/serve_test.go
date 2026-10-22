@@ -9,15 +9,20 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/andras-tkcs/peek/internal/backends"
+	"github.com/andras-tkcs/peek/internal/backends/backendstest"
 )
 
 // restoreSlogDefault undoes configureLogging, which replaces slog.Default().
@@ -234,5 +239,81 @@ func TestRunServeHealthcheckRoundTrip(t *testing.T) {
 	})
 	if code != 0 {
 		t.Fatalf("runServe = %d", code)
+	}
+}
+
+func TestRunServeWithDockerBackendsPassesRuntime(t *testing.T) {
+	restoreSlogDefault(t)
+	fake := backendstest.NewFakeRuntime()
+	var gotHost string
+	prev := newBackendRuntime
+	newBackendRuntime = func(host string) (backends.Runtime, error) {
+		gotHost = host
+		return fake, nil
+	}
+	t.Cleanup(func() { newBackendRuntime = prev })
+
+	cfg := serveTestConfig(t)
+	cfg.Backends = "docker"
+	cfg.DockerHost = "unix:///tmp/test-docker.sock"
+	cfg.BackendNetwork = "peek-it"
+	if code := runServeUntilSIGTERM(t, cfg, nil); code != 0 {
+		t.Fatalf("runServe = %d, want 0", code)
+	}
+	if gotHost != cfg.DockerHost {
+		t.Fatalf("runtime host = %q, want %q", gotHost, cfg.DockerHost)
+	}
+	fake.Lock()
+	defer fake.Unlock()
+	if len(fake.Networks) != 1 || fake.Networks[0] != "peek-it" {
+		t.Fatalf("Networks = %v, want [peek-it]", fake.Networks)
+	}
+}
+
+func TestRunServeBackendsOffNeverBuildsRuntime(t *testing.T) {
+	restoreSlogDefault(t)
+	prev := newBackendRuntime
+	newBackendRuntime = func(string) (backends.Runtime, error) {
+		t.Error("runtime built with --backends off")
+		return nil, nil
+	}
+	t.Cleanup(func() { newBackendRuntime = prev })
+	cfg := serveTestConfig(t)
+	cfg.Backends = "off"
+	if code := runServeUntilSIGTERM(t, cfg, nil); code != 0 {
+		t.Fatalf("runServe = %d, want 0", code)
+	}
+}
+
+func TestRunServeStopsWhenDockerIsNotReachable(t *testing.T) {
+	restoreSlogDefault(t)
+	fake := backendstest.NewFakeRuntime()
+	fake.PingErr = errors.New("connection refused")
+	prev := newBackendRuntime
+	newBackendRuntime = func(string) (backends.Runtime, error) { return fake, nil }
+	t.Cleanup(func() { newBackendRuntime = prev })
+
+	cfg := serveTestConfig(t)
+	cfg.Backends = "docker"
+	cfg.DockerHost = "unix:///nope.sock"
+	rt, err := connectBackends(cfg)
+	if rt != nil || err == nil || !strings.Contains(err.Error(), "docker is not reachable at unix:///nope.sock: connection refused") {
+		t.Fatalf("connectBackends = %v, %v", rt, err)
+	}
+	if code := runServe(cfg); code != 1 {
+		t.Fatalf("runServe = %d, want 1", code)
+	}
+}
+
+func TestRunServeStopsWhenRuntimeCannotBeBuilt(t *testing.T) {
+	restoreSlogDefault(t)
+	prev := newBackendRuntime
+	newBackendRuntime = func(string) (backends.Runtime, error) { return nil, errors.New("unsupported docker host") }
+	t.Cleanup(func() { newBackendRuntime = prev })
+	cfg := serveTestConfig(t)
+	cfg.Backends = "docker"
+	cfg.DockerHost = "https://x"
+	if code := runServe(cfg); code != 1 {
+		t.Fatalf("runServe = %d, want 1", code)
 	}
 }

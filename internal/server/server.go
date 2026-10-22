@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/andras-tkcs/peek/internal/backends"
 	"github.com/andras-tkcs/peek/internal/db"
 	"github.com/andras-tkcs/peek/internal/mail"
 	"github.com/andras-tkcs/peek/internal/objectstore"
@@ -54,6 +57,11 @@ type Config struct {
 	TrustedProxyCIDRs []netip.Prefix
 
 	Groups GroupChecker
+
+	// BackendRuntime is the container engine for page backends; nil turns the
+	// feature off. BackendNetwork is the network their containers join.
+	BackendRuntime backends.Runtime
+	BackendNetwork string
 }
 
 type Server struct {
@@ -87,6 +95,10 @@ type Server struct {
 	groups                   GroupChecker
 	metricsToken             string
 	mailer                   mail.Sender
+
+	backends       *backends.Manager // nil = page backends are off
+	backendLimiter *limiter
+	backendClient  *http.Client
 }
 
 func New(cfg Config) (*Server, error) {
@@ -220,6 +232,12 @@ func New(cfg Config) (*Server, error) {
 		s3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		oidcAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
 		visitQueue:             make(chan visitEvent, 256),
+		backendLimiter:         newLimiter(240, time.Minute),
+		backendClient: &http.Client{
+			Timeout:       30 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+			Transport:     &http.Transport{Proxy: nil},
+		},
 	}
 
 	if cfg.Groups != nil {
@@ -228,6 +246,37 @@ func New(cfg Config) (*Server, error) {
 
 	if !cfg.TrustedProxy && !isLocalBaseURL(baseURL) {
 		slog.Warn("trusted-proxy not set — X-Forwarded-For will be ignored. Enable if behind a reverse proxy.")
+	}
+
+	if cfg.BackendRuntime != nil {
+		instance, err := store.GetSetting(startupCtx, backendInstanceSetting)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			cancel()
+			return nil, fmt.Errorf("read backend instance id: %w", err)
+		}
+		if instance == "" {
+			if instance, err = randHex(4); err != nil {
+				cancel()
+				return nil, err
+			}
+			if err := store.SetSetting(startupCtx, backendInstanceSetting, instance); err != nil {
+				cancel()
+				return nil, err
+			}
+		}
+		srv.backends = backends.NewManager(backends.Config{
+			Runtime:  cfg.BackendRuntime,
+			Network:  cfg.BackendNetwork,
+			Instance: instance,
+			Limits:   srv.backendLimits,
+		})
+		bctx, bcancel := context.WithTimeout(startupCtx, 30*time.Second)
+		err = srv.backends.Start(bctx)
+		bcancel()
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("start backends: %w", err)
+		}
 	}
 
 	srv.wg.Add(2)
@@ -239,6 +288,13 @@ func New(cfg Config) (*Server, error) {
 		defer srv.wg.Done()
 		srv.startVisitWorker(ctx)
 	}()
+	if srv.backends != nil {
+		srv.wg.Add(1)
+		go func() {
+			defer srv.wg.Done()
+			srv.backends.Run(ctx)
+		}()
+	}
 
 	closeStoreOnError = false
 	return srv, nil

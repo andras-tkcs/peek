@@ -57,6 +57,35 @@ peek versions <slug>
 
 `/p/<slug>` always serves the latest version and `/p/<slug>/v/<n>` serves a specific one, with a banner linking to the latest. Visibility and name stay as they were. Comments belong to the version they were written on.
 
+## Add A Backend
+
+A page is one HTML file in a sandboxed iframe, so it cannot send email, keep data or use a secret by itself. If your admin has turned on page backends, you can attach a Docker image to a page version and call it from the page:
+
+```sh
+peek upload form.html --slug <slug> --backend ghcr.io/acme/contact-form:1.2 [--backend-port 8080]
+peek backend env set <slug> SMTP_PASSWORD --value-stdin
+peek backend restart <slug>
+peek backend <slug>
+peek backend logs <slug>
+```
+
+The image must be on a registry prefix the admin allowed. Without `--backend`, a new version of the page keeps the backend of the previous latest version; `peek backend set <slug> <image> [--version <n>|latest] [--port <n>]` and `peek backend remove <slug> [--version <n>|latest]` change one version. Variables are encrypted, never shown again, and apply on the next container start, hence `peek backend restart`. `peek backend env unset <slug> <NAME>` removes one. `PORT`, `PEEK_*` and non-`A-Z0-9_` names are reserved.
+
+In the page, call the backend with `peek.fetch`, which returns a normal `Response`:
+
+```js
+const res = await peek.fetch("/api/contact", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ name, email, message }),
+});
+const result = await res.json();
+```
+
+The path starts with `/` and goes to the container; `GET`, `POST`, `PUT`, `PATCH` and `DELETE` are allowed, only the `content-type` and `accept` headers are sent, requests are limited to 1 MiB and responses to 8 MiB, and calls fail after 35 s. Viewers need the same access as to the page, and nothing changes for them. The page cannot use `peek.fetch` after a viewer has clicked a link that navigated the iframe away from it.
+
+The container listens on `$PORT` (default 8080) and has a writable `/data` volume; the rest of its filesystem is read-only. Peek sets `PORT`, `PEEK_BACKEND_TOKEN`, `PEEK_UPLOAD_ID` and `PEEK_VERSION`, and adds `X-Peek-Backend-Token` (the backend must reject requests without it), `X-Peek-Upload-Id`, `X-Peek-Version`, `X-Peek-Viewer` (a stable per-page id for the viewer's browser) and, on signed-in and restricted pages only, `X-Peek-User-Id` and `X-Peek-User-Email` to every request. Deleting a page deletes its data volume. See `examples/contact-form` in the repository for a complete backend.
+
 ## Review In Context
 
 Open `/p/<slug>`. Peek keeps the uploaded page full-screen and adds a small toolbar for comments, view count, and the comments panel. Use the chevron button at the end of the toolbar to hide it while reading; press Shift+H to bring it back (or hide it again). Reloading the page always shows the toolbar.
@@ -130,6 +159,10 @@ Common user commands:
 ```text
 peek upload <file.html> --visibility public|signed-in|restricted
 peek upload <file.html> --slug <slug>
+peek upload <file.html> --backend <image> [--backend-port <n>]
+peek backend <slug>
+peek backend set|remove|restart|logs <slug> ...
+peek backend env set|unset <slug> <NAME> ...
 peek versions <slug>
 peek grant|revoke <slug> <email> [--group]
 peek grants <slug>

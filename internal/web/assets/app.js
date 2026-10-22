@@ -160,6 +160,8 @@
       nameModalOpen: false,
       pendingCommentAfterName: false,
       allowAnonymousComment: false,
+      frameLoads: 0,
+      fetchInFlight: 0,
 
       init() {
         const dataset = document.body ? document.body.dataset : {};
@@ -264,6 +266,7 @@
         const f = document.getElementById("hn-frame");
         if (f) {
           f.addEventListener("load", () => {
+            this.frameLoads += 1;
             this.syncFrame();
           });
         }
@@ -283,6 +286,10 @@
           }
           if (data.hn === "togglebar") {
             this.toggleBar();
+            return;
+          }
+          if (data.hn === "fetch") {
+            this.relayFetch(data);
             return;
           }
           if (data.hn === "pick") {
@@ -311,6 +318,63 @@
               break;
           }
         });
+      },
+
+      // relayFetch forwards a peek.fetch call from the page to /svc with the
+      // viewer's cookies. Everything the page sent is untrusted: validate it,
+      // and only ever build URLs under this page version's /svc prefix.
+      relayFetch(d) {
+        const id = typeof d.id === "string" && d.id.length <= 32 ? d.id : "";
+        const reply = (msg) => postToFrame(Object.assign({ hn: "fetch-result", id }, msg));
+        if (!id) return;
+        // After the second load the iframe has navigated away from the uploaded
+        // page; a site the viewer clicked into must not use the backend.
+        if (this.frameLoads > 1) {
+          reply({ ok: false, error: "page navigated; reload to use the backend" });
+          return;
+        }
+        const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+        let valid = typeof d.path === "string" && d.path.charAt(0) === "/" && d.path.length <= 2048;
+        valid = valid && typeof d.method === "string" && methods.includes(d.method);
+        valid = valid && !!d.headers && typeof d.headers === "object" && !Array.isArray(d.headers);
+        if (valid) {
+          valid = Object.keys(d.headers).every(
+            (k) => (k === "content-type" || k === "accept") && typeof d.headers[k] === "string"
+          );
+        }
+        valid = valid && (d.body === undefined || typeof d.body === "string" || d.body instanceof ArrayBuffer);
+        if (!valid) {
+          reply({ ok: false, error: "invalid peek.fetch request" });
+          return;
+        }
+        if (this.fetchInFlight >= 16) {
+          reply({ ok: false, error: "too many concurrent peek.fetch requests" });
+          return;
+        }
+        const prefix = "/svc/" + encodeURIComponent(this.slug) + "/v/" + this.version + "/";
+        const url = new URL(prefix + d.path.slice(1), location.origin);
+        if (!(url.origin === location.origin && url.pathname.startsWith(prefix))) {
+          reply({ ok: false, error: "invalid peek.fetch path" });
+          return;
+        }
+        this.fetchInFlight += 1;
+        fetch(url, {
+          method: d.method,
+          headers: Object.assign({}, d.headers, { "X-Peek-Svc": "1" }),
+          body: d.body,
+          credentials: "same-origin",
+          redirect: "error",
+          cache: "no-store",
+        })
+          .then((res) =>
+            res.arrayBuffer().then((body) =>
+              reply({ ok: true, status: res.status, contentType: res.headers.get("content-type") || "", body })
+            )
+          )
+          .catch(() => reply({ ok: false, error: "backend request failed" }))
+          .finally(() => {
+            this.fetchInFlight -= 1;
+          });
       },
 
       bindKeyboard() {

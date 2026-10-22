@@ -292,6 +292,16 @@ func TestParseServeConfigRejectsInvalidOperationalConfig(t *testing.T) {
 			want: "retention-days must be zero or greater",
 		},
 		{
+			name: "unknown backends mode",
+			args: []string{"--backends", "kubernetes"},
+			want: "backends must be off or docker",
+		},
+		{
+			name: "invalid backend network",
+			args: []string{"--backend-network", "-bad name"},
+			want: "backend network must be a valid docker network name",
+		},
+		{
 			name: "unknown storage backend",
 			args: []string{"--storage", "postgres"},
 			want: "storage must be file or s3",
@@ -518,5 +528,29 @@ func TestParseServeConfigAcceptsMetricsTokenFlag(t *testing.T) {
 	}
 	if cfg.MetricsToken != "0123456789abcdef" {
 		t.Fatalf("MetricsToken = %q", cfg.MetricsToken)
+	}
+}
+
+func TestParseServeConfigBackendFlagsAndEnv(t *testing.T) {
+	cfg, _, err := parseServeConfig([]string{"--data", t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Backends != "off" || cfg.DockerHost != "unix:///var/run/docker.sock" || cfg.BackendNetwork != "peek-backends" {
+		t.Fatalf("defaults = %+v", cfg)
+	}
+	t.Setenv("PEEK_BACKENDS", "docker")
+	t.Setenv("PEEK_DOCKER_HOST", "tcp://127.0.0.1:2375")
+	t.Setenv("PEEK_BACKEND_NETWORK", "corp-net")
+	cfg, _, err = parseServeConfig([]string{"--data", t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Backends != "docker" || cfg.DockerHost != "tcp://127.0.0.1:2375" || cfg.BackendNetwork != "corp-net" {
+		t.Fatalf("env config = %+v", cfg)
+	}
+	cfg, _, err = parseServeConfig([]string{"--data", t.TempDir(), "--backends", "off", "--backend-network", "n1"})
+	if err != nil || cfg.Backends != "off" || cfg.BackendNetwork != "n1" {
+		t.Fatalf("flag override = %+v, %v", cfg, err)
 	}
 }

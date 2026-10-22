@@ -317,3 +317,21 @@ func TestMigration15PasswordPagesBecomeRestricted(t *testing.T) {
 		}
 	}
 }
+
+func TestMigration16AddsUploadBackends(t *testing.T) {
+	path := migCovPrepare(t, 16, `DROP TABLE upload_backends`, `DROP TABLE upload_backend_env`)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var n int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE id=16`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("migration 16 recorded %d times (err %v)", n, err)
+	}
+	for _, table := range []string{"upload_backends", "upload_backend_env"} {
+		if err := s.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&n); err != nil || n != 1 {
+			t.Fatalf("table %s missing (err %v)", table, err)
+		}
+	}
+}
