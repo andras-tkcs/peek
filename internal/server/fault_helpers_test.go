@@ -103,18 +103,18 @@ func newFaultServer(t *testing.T) (s *Server, store *db.Store, storage *faultSto
 	storage = &faultStorage{}
 	lim := func() *limiter { return newLimiter(1000, time.Minute) }
 	s = &Server{
-		store:                   store,
-		renderer:                renderer,
-		secret:                  strings.Repeat("0", 64),
-		storage:                 storage,
-		baseURL:                 "http://localhost:7700",
-		loginLimiter:            lim(),
-		commentLimiter:          lim(),
-		uploadLimiter:           lim(),
-		globalLimiter:           lim(),
-		cliLoginLimiter:         lim(),
-		apiKeyLimiter:           lim(),
-		accountLoginLimiter:     lim(),
+		store:               store,
+		renderer:            renderer,
+		secret:              strings.Repeat("0", 64),
+		storage:             storage,
+		baseURL:             "http://localhost:7700",
+		loginLimiter:        lim(),
+		commentLimiter:      lim(),
+		uploadLimiter:       lim(),
+		globalLimiter:       lim(),
+		cliLoginLimiter:     lim(),
+		apiKeyLimiter:       lim(),
+		accountLoginLimiter: lim(),
 	}
 	return s, store, storage, admin.ID
 }

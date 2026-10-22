@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-
 	"github.com/andras-tkcs/peek/internal/models"
 	webui "github.com/andras-tkcs/peek/internal/web"
 )

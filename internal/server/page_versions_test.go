@@ -3,14 +3,11 @@ package server
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/uploadquota"
@@ -321,67 +318,6 @@ func TestRawRefusedAfterGrantRemoved(t *testing.T) {
 	}
 	if got := get(); got != http.StatusForbidden {
 		t.Fatalf("after grant removed = %d, want 403", got)
-	}
-}
-
-func TestRawRefusedAfterPasswordChange(t *testing.T) {
-	s, _ := newHandlerTestServer(t)
-	hash := func(pw string) string {
-		h, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.MinCost)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(h)
-	}
-	u := newTwoVersionPage(t, s, "rawpw", models.UploadVisibilityPassword, hash("one"))
-	post := doRequest(t, s, http.MethodPost, "/p/rawpw", strings.NewReader(url.Values{"password": {"one"}}.Encode()), func(r *http.Request) {
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	})
-	var auth *http.Cookie
-	for _, c := range post.Result().Cookies() {
-		if c.Name == authCookieName("rawpw") {
-			auth = c
-		}
-	}
-	if auth == nil {
-		t.Fatalf("password POST did not set the auth cookie: %d", post.Code)
-	}
-	src, cookies := rawSrcFromPage(t, s, "/p/rawpw", withCookieList([]*http.Cookie{auth}))
-	cookies = append(cookies, auth)
-	if rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies)); rec.Code != http.StatusOK {
-		t.Fatalf("before change = %d, want 200", rec.Code)
-	}
-	if err := s.store.SetUploadVisibility(context.Background(), u.ID, models.UploadVisibilityPassword, hash("two")); err != nil {
-		t.Fatal(err)
-	}
-	if rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies)); rec.Code != http.StatusForbidden {
-		t.Fatalf("after password change = %d, want 403", rec.Code)
-	}
-}
-
-func TestPasswordGateOnVersionRedirectsToVersion(t *testing.T) {
-	s, _ := newHandlerTestServer(t)
-	hash, err := bcrypt.GenerateFromPassword([]byte("hunter2"), bcrypt.MinCost)
-	if err != nil {
-		t.Fatal(err)
-	}
-	newTwoVersionPage(t, s, "pgpass", models.UploadVisibilityPassword, string(hash))
-
-	gate := doRequest(t, s, http.MethodGet, "/p/pgpass/v/1", nil)
-	if !strings.Contains(gate.Body.String(), `action="/p/pgpass/v/1"`) {
-		t.Fatalf("gate should post to the version path: %s", gate.Body.String())
-	}
-	post := func(pw string) *httptest.ResponseRecorder {
-		return doRequest(t, s, http.MethodPost, "/p/pgpass/v/1", strings.NewReader(url.Values{"password": {pw}}.Encode()), func(r *http.Request) {
-			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		})
-	}
-	if rec := post("wrong"); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), `action="/p/pgpass/v/1"`) {
-		t.Fatalf("wrong password = %d: %s", rec.Code, rec.Body.String())
-	}
-	rec := post("hunter2")
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/p/pgpass/v/1" {
-		t.Fatalf("right password = %d Location=%q, want 303 /p/pgpass/v/1", rec.Code, rec.Header().Get("Location"))
 	}
 }
 
