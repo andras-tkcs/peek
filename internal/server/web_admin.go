@@ -37,11 +37,13 @@ func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, owner *mode
 	if !ok {
 		return
 	}
+	panel := dashboardSettingsPanel(s.dashboardSettingsMap(r.Context()))
+	panel.Backends.Enabled = s.backends != nil
 	data := adminData{
 		CSRF:            csrf,
 		User:            owner.Name,
 		GoogleOrgSignup: s.googleOrgSignupEnabled(r.Context()),
-		SettingsPanel:   dashboardSettingsPanel(s.dashboardSettingsMap(r.Context())),
+		SettingsPanel:   panel,
 		Invites:         s.dashboardInviteRows(r.Context()),
 		Accounts:        s.dashboardAccountRows(r.Context(), owner.ID),
 	}
