@@ -19,6 +19,13 @@ func (s *Server) Close() error {
 		s.cancel()
 	}
 	s.wg.Wait()
+	if s.backends != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := s.backends.Close(ctx); err != nil {
+			slog.Error("backends close", "err", err)
+		}
+		cancel()
+	}
 	if s.store != nil {
 		return s.store.Close()
 	}
