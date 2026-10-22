@@ -23,12 +23,13 @@ peekd --addr :7700 --data ./data --base-url http://localhost:7700
 # 3. Log in (or create an API key under Dashboard → API keys)
 peek login --host http://localhost:7700
 
-# 4. Share a page
-peek upload mypage.html --visibility public
+# 4. Share a page (restricted by default: only you, admins and people you grant)
+peek upload mypage.html
 #  -> http://localhost:7700/p/mypage-html-k7m2xq
+peek grant mypage-html-k7m2xq alice@example.com    # emails Alice the link when SMTP is configured
 
-# Or upload it with password protection
-peek upload mypage.html --visibility password --password s3cret
+# Or make it open to anyone with the link
+peek upload mypage.html --visibility public
 ```
 
 Common follow-up commands:
@@ -41,7 +42,7 @@ peek comments mypage-html-k7m2xq --version 2
 peek upload mypage.html --slug mypage-html-k7m2xq   # new version at /p/mypage-html-k7m2xq/v/2
 peek versions mypage-html-k7m2xq
 peek grant mypage-html-k7m2xq alice@example.com    # for --visibility restricted pages
-peek visibility mypage-html-k7m2xq password --password newpass
+peek visibility mypage-html-k7m2xq restricted
 peek visibility mypage-html-k7m2xq public
 peek delete mypage-html-k7m2xq
 peek export mypage-html-k7m2xq
@@ -82,7 +83,7 @@ docker compose --profile s3 up -d # with MinIO storage
 - **In-context review**: pinned, text-anchored, and page-level comments with numbered on-page markers. Click a comment to jump back to its anchor.
 - **Safe HTML previews**: uploaded pages render in a sandboxed iframe (`sandbox="allow-scripts"`, no `allow-same-origin`) so they cannot read Peek cookies, call the server as the user, or touch the parent page.
 - **Terminal and browser workflows**: upload, list, delete, change visibility, inspect comments, and view stats from the CLI or web dashboard.
-- **Access controls for internal teams**: public links, password-gated pages, signed-in-user pages (any active Peek account), restricted pages with per-user and Google group grants, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, Google org sign-in (no invites), allowed login email domain, token expiry, and admin-managed users.
+- **Access controls for internal teams**: public links, signed-in-user pages (any active Peek account), restricted pages (the default) with per-user and Google group grants and a notification email to each new grantee, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, Google org sign-in (no invites), allowed login email domain, token expiry, and admin-managed users.
 - **Operational basics included**: health/readiness checks, structured JSON logging, Prometheus metrics, audit log, quota and retention controls, consistent SQLite backup, file or S3-compatible storage, and S3 endpoint SSRF protection.
 - **Small deployment footprint**: one static Go binary, pure-Go SQLite, no runtime dependencies.
 
@@ -96,7 +97,7 @@ Open `/p/<slug>` and use the floating island at the bottom:
 2. Click Comment, then click any element to pin a comment to it.
 3. Or leave a page-level note not tied to anything.
 
-Comments live in a side panel. Your name is asked once and remembered. Public pages are open to anyone with the link, password pages gate commenting behind the same password session, signed-in pages require an active Peek account, and restricted pages require an account matching a grant. Comments belong to the version they were written on.
+Comments live in a side panel. Your name is asked once and remembered. Public pages are open to anyone with the link, signed-in pages require an active Peek account, and restricted pages require an account matching a grant. Comments belong to the version they were written on.
 
 ## CLI reference
 
@@ -110,15 +111,11 @@ peek upload <file.html> --visibility public [--name <filename>]
 peek upload <file.html> --visibility signed-in [--name <filename>]
 peek upload <file.html> --visibility restricted [--name <filename>]
 peek upload <file.html> --slug <slug>   upload a new version of an existing page
-peek upload <file.html> --visibility password --password <pw> [--name <filename>]
-peek upload <file.html> --visibility password --password-stdin [--name <filename>]
 peek list
 peek delete <slug>
 peek delete-all                        delete all your uploads
 peek visibility <slug> public          make an upload link-accessible
 peek visibility <slug> signed-in      require a Peek account
-peek visibility <slug> password --password <pw>
-peek visibility <slug> password --password-stdin
 peek visibility <slug> restricted      only the owner, admins and grantees
 peek rename <slug> <new name>         rename; old links redirect
 peek grant <slug> <email> [--group]    give a user (or Google group) access
@@ -134,7 +131,7 @@ peek token revoke <id>                 revoke a token by id (admin only)
 peek version                           show version
 ```
 
-Upload visibility is set at creation time with `--visibility public|password|signed-in|restricted`. Password uploads require `--password` or `--password-stdin`; `peek upload <file.html> --password <pw>` is also accepted as shorthand for password visibility. Use `peek visibility <slug> public` to remove the password gate and make the link public again, or `peek visibility <slug> signed-in` to require a Peek account (the old name `private` is still accepted). Restricted pages admit only the owner, admins and signed-in viewers matching a grant (`peek grant`); group grants need the `PEEK_GOOGLE_*` settings below. Re-uploading with `--slug` adds a version: `/p/<slug>` serves the latest and `/p/<slug>/v/<n>` any retained version. Setting a new password signs out viewers who unlocked the page with the old one. `peek rename <slug> <new name>` renames a page; its link follows the name and old links redirect. The dashboard's **Access** row action does all of this from the browser.
+Upload visibility is set at creation time with `--visibility public|signed-in|restricted`, and defaults to `restricted`. Use `peek visibility <slug> public` to make the link public, or `peek visibility <slug> signed-in` to require a Peek account (the old name `private` is still accepted). Restricted pages admit only the owner, admins and signed-in viewers matching a grant (`peek grant`); group grants need the `PEEK_GOOGLE_*` settings below. When an admin has configured SMTP on the **Email** tab of the Admin page, adding a grant, or switching a page to restricted, emails the grantees a link to the page. Page passwords were removed: existing password pages became restricted pages that only the owner and admins can open until they are shared. Re-uploading with `--slug` adds a version: `/p/<slug>` serves the latest and `/p/<slug>/v/<n>` any retained version. `peek rename <slug> <new name>` renames a page; its link follows the name and old links redirect. The dashboard's **Access** row action does all of this from the browser.
 
 Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env override for CI (with a key from Dashboard → API keys), `peek login --token-stdin`, then `peek login --token-file <path>`. The `--token <value>` flag still works where token login is allowed but warns because it leaks into shell history and process lists.
 
@@ -191,12 +188,12 @@ Config saved to `<user-config-dir>/peek/config.json`. Override per-command with 
 | Uploaded HTML harms host | Server never executes HTML, only streams bytes. |
 | Uploaded HTML steals data | Rendered in `<iframe sandbox="allow-scripts allow-popups">` and served with CSP `sandbox allow-scripts allow-popups`, so it has an opaque origin even when the raw URL is opened directly; `/raw` refuses non-iframe loads (`Sec-Fetch-Dest`). |
 | Cross-origin attacks | Parent and iframe communicate only via `postMessage`. |
-| Bypassing password gate | `/raw` requires a short-lived HMAC-signed view token bound to the HttpOnly visitor cookie, and re-checks page access on every load. Changing the password revokes earlier unlocks. |
-| Brute force / spam | Per-IP rate limits on login, password gate, and comment posting, plus per-account sign-in and per-page password failure limits. |
+| Bypassing page access | `/raw` requires a short-lived HMAC-signed view token bound to the HttpOnly visitor cookie, and re-checks page access on every load, so revoking a grant or changing visibility takes effect immediately. |
+| Brute force / spam | Per-IP rate limits on login and comment posting, plus per-account sign-in failure limits. |
 | Malicious content | HTML sniffed, binaries rejected, configurable `MaxBytesReader`; non-upload requests are capped at 64 KiB. |
 | SSRF via S3 | Endpoints must be HTTP(S); private/link-local IPs blocked unless explicitly allowed. |
 | Path traversal / SQLi / link guessing | Slugs are the page name plus a random 6-character suffix (fully random when the name has no letters or digits); all queries parameterized. |
-| Password / IP leakage | Passwords bcrypt-hashed; analytics IPs SHA-256 hashed. |
+| Password / IP leakage | Account passwords bcrypt-hashed; analytics IPs SHA-256 hashed. |
 
 ## Deployment
 
@@ -224,7 +221,7 @@ Operational endpoints:
 
 ## Web dashboard
 
-A browser dashboard at `/login` lets users upload, list, rename and delete pages, change their visibility, password and grants, view stats, and create, regenerate and revoke their own API keys. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from the **Admin** page (the **Admin** button next to **Sign out**) and optionally restrict human login to one exact email domain. OAuth signups are invite-only unless Google org sign-in (the `auth_google_org_signup` setting) is on: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, and S3 settings.
+A browser dashboard at `/login` lists the pages you own and the restricted pages shared with you (by title, with an icon for owner, admin or view-only), and lets users upload (a file, pasted HTML, or an **Empty page** that you name and fill with versions later), and rename and delete pages, change their visibility and grants, view stats, and create, regenerate and revoke their own API keys. First run starts at a one-time `/setup` URL that creates the initial admin. Admins can enable Google, GitHub, or generic OpenID Connect SSO from the **Admin** page (the **Admin** button next to **Sign out**) and optionally restrict human login to one exact email domain. OAuth signups are invite-only unless Google org sign-in (the `auth_google_org_signup` setting) is on: admins create invite links, users accept with an enabled OAuth provider. The same verified email maps to the same account across providers. Admins can disable users, promote/demote admins, and edit runtime limits, retention, auth, S3 and SMTP email settings.
 
 OAuth callback URLs:
 ```

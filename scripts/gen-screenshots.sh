@@ -111,8 +111,7 @@ SLUG="$(printf '%s' "$UP" | json_value slug)"
 
 printf '<!doctype html><h1>Release checklist</h1><p>v2 freeze tasks for reviewers.</p>' | \
   api -F "file=@-;filename=release-checklist.html;type=text/html" \
-  -F "visibility=password" \
-  -F "password=review" \
+  -F "visibility=restricted" \
   "$BASE/api/upload" >/dev/null
 printf '<!doctype html><h1>Design RFC</h1><p>New dashboard navigation proposal.</p>' | \
   api --data-binary @- -H "Content-Type: text/html" \

@@ -57,6 +57,12 @@ Admins can change these from the **Admin** page (the **Admin** button next to **
 | `s3_region` | string | S3 signing region. |
 | `s3_access_key` | string | S3 access key ID. |
 | `s3_secret_key` | secret string | S3 secret access key. |
+| `smtp_host` | host name | SMTP relay host, such as `smtp-relay.gmail.com`, without scheme or port. Email is on only when this and `smtp_from` are set. |
+| `smtp_port` | integer | SMTP port, 1–65535. Blank means 587, or 465 with `smtp_tls` set to `tls`. |
+| `smtp_tls` | `starttls`, `tls` or `none` | `starttls` (default) requires STARTTLS, `tls` is implicit TLS, `none` is for a local relay only. |
+| `smtp_username` | string | Blank means no authentication. PLAIN auth needs TLS unless the host is localhost. |
+| `smtp_password` | secret string | Password or app password for the SMTP username. |
+| `smtp_from` | email address | Sender address of Peek emails. Email is off while it is blank. |
 | `max_upload` | bytes | Maximum individual upload size. |
 | `max_total_size` | bytes | Server-wide storage cap; `0` means unlimited. |
 | `max_uploads_per_token` | count | Per-owner upload count cap; `0` means unlimited. |
@@ -86,9 +92,9 @@ peek login --token <value>
 ## CLI Commands
 
 ```text
-peek upload <file.html> [--visibility public|password|signed-in|restricted] [--password <pw> | --password-stdin] [--name <filename>]
+peek upload <file.html> [--visibility public|signed-in|restricted] [--name <filename>]
 peek upload <file.html> --slug <slug>
-peek visibility <slug> public|signed-in|password|restricted [--password <pw> | --password-stdin]
+peek visibility <slug> public|signed-in|restricted
 peek rename <slug> <new name>
 peek grant <slug> <email> [--group]
 peek revoke <slug> <email> [--group]
@@ -97,7 +103,7 @@ peek versions <slug>
 peek comments <slug> [--version <n>]
 ```
 
-`--slug` uploads a new version of an existing page you own (admins can target any page). It cannot be combined with `--visibility`, `--password`, `--password-stdin` or `--name`. `grant` and `revoke` take a user email by default and a Google group email with `--group`; group grants need the `PEEK_GOOGLE_*` server settings. `grants` lists a page's grants. `versions` lists a page's versions with size, time and URL. `comments` shows the latest version's comments unless `--version` is given. Page names (the `--name` value or the file name) are limited to 200 characters. `--password` prints a warning; prefer `--password-stdin`.
+`--slug` uploads a new version of an existing page you own (admins can target any page). It cannot be combined with `--visibility` or `--name`. A new upload is `restricted` unless `--visibility` says otherwise. `grant` and `revoke` take a user email by default and a Google group email with `--group`; group grants need the `PEEK_GOOGLE_*` server settings. `grants` lists a page's grants. `versions` lists a page's versions with size, time and URL. `comments` shows the latest version's comments unless `--version` is given. Page names (the `--name` value or the file name) are limited to 200 characters. The former `--password` flags were removed together with page passwords.
 
 ## Page And API Routes
 
