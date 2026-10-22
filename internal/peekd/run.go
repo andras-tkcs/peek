@@ -11,9 +11,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"syscall"
 	"time"
 
+	"github.com/andras-tkcs/peek/internal/backends"
 	"github.com/andras-tkcs/peek/internal/groups"
 	"github.com/andras-tkcs/peek/internal/server"
 	"github.com/andras-tkcs/peek/internal/version"
@@ -45,6 +47,10 @@ type serveConfig struct {
 	GoogleSAKeyFile     string
 	GoogleAdminEmail    string
 	GoogleGroupCacheTTL time.Duration
+
+	Backends       string
+	DockerHost     string
+	BackendNetwork string
 }
 
 func Run(args []string) int {
@@ -138,6 +144,9 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	googleSAKeyFile := fs.String("google-sa-key-file", getenv("PEEK_GOOGLE_SA_KEY_FILE", ""), "path to Google service account JSON key for group lookups")
 	googleAdminEmail := fs.String("google-admin-email", getenv("PEEK_GOOGLE_ADMIN_EMAIL", ""), "Google Workspace admin user to impersonate for group lookups")
 	googleGroupCacheTTL := fs.Duration("google-group-cache-ttl", googleTTLDefault, "how long Google group membership answers are cached")
+	backendsFlag := fs.String("backends", getenv("PEEK_BACKENDS", "off"), "page backends: off or docker")
+	dockerHost := fs.String("docker-host", getenv("PEEK_DOCKER_HOST", "unix:///var/run/docker.sock"), "Docker or Podman API address (unix:// or tcp://) used with --backends docker")
+	backendNetwork := fs.String("backend-network", getenv("PEEK_BACKEND_NETWORK", "peek-backends"), "Docker network for backend containers")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return serveConfig{}, false, err
@@ -159,6 +168,9 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		return serveConfig{}, false, fmt.Errorf("trusted-proxy-cidrs must list at least one CIDR when trusted-proxy is set")
 	}
 	if err := validateServeConfig(*baseURL, *maxUpload, *storageFlag, *maxTotalSize, *retentionDays); err != nil {
+		return serveConfig{}, false, err
+	}
+	if err := validateBackendConfig(*backendsFlag, *backendNetwork); err != nil {
 		return serveConfig{}, false, err
 	}
 	if (*googleSAKeyFile == "") != (*googleAdminEmail == "") {
@@ -198,6 +210,10 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		GoogleSAKeyFile:     *googleSAKeyFile,
 		GoogleAdminEmail:    *googleAdminEmail,
 		GoogleGroupCacheTTL: *googleGroupCacheTTL,
+
+		Backends:       *backendsFlag,
+		DockerHost:     *dockerHost,
+		BackendNetwork: *backendNetwork,
 	}, false, nil
 }
 
@@ -224,6 +240,43 @@ func validateServeConfig(baseURL string, maxUpload int64, storage string, maxTot
 	return nil
 }
 
+var backendNetworkPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
+
+func validateBackendConfig(mode, network string) error {
+	if mode != "off" && mode != "docker" {
+		return fmt.Errorf("backends must be off or docker")
+	}
+	if !backendNetworkPattern.MatchString(network) {
+		return fmt.Errorf("backend network must be a valid docker network name")
+	}
+	return nil
+}
+
+// newBackendRuntime builds the container runtime for --backends docker. Tests
+// replace it so they need no Docker daemon.
+var newBackendRuntime = func(host string) (backends.Runtime, error) {
+	return backends.NewDockerRuntime(host)
+}
+
+// connectBackends builds and pings the container runtime when page backends
+// are on. It returns a nil runtime when they are off.
+func connectBackends(cfg serveConfig) (backends.Runtime, error) {
+	if cfg.Backends != "docker" {
+		return nil, nil
+	}
+	rt, err := newBackendRuntime(cfg.DockerHost)
+	if err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err = rt.Ping(ctx)
+		cancel()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("docker is not reachable at %s: %w", cfg.DockerHost, err)
+	}
+	slog.Info("page backends enabled", "docker_host", cfg.DockerHost, "network", cfg.BackendNetwork)
+	return rt, nil
+}
+
 func runServe(cfg serveConfig) int {
 	configureLogging()
 
@@ -241,6 +294,12 @@ func runServe(cfg serveConfig) int {
 		}
 		groupChecker = dir
 		slog.Info("google group lookup enabled", "admin_email", cfg.GoogleAdminEmail, "cache_ttl", cfg.GoogleGroupCacheTTL)
+	}
+
+	backendRuntime, err := connectBackends(cfg)
+	if err != nil {
+		slog.Error("init", "err", err)
+		return 1
 	}
 
 	srv, err := server.New(server.Config{
@@ -266,6 +325,9 @@ func runServe(cfg serveConfig) int {
 		TrustedProxy:      cfg.TrustedProxy,
 		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
 		Groups:            groupChecker,
+
+		BackendRuntime: backendRuntime,
+		BackendNetwork: cfg.BackendNetwork,
 	})
 	if err != nil {
 		slog.Error("init", "err", err)

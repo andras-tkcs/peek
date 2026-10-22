@@ -50,6 +50,15 @@ var settingsMeta = map[string]settingsRow{
 	"smtp_username":               {Label: "SMTP username", Description: "Blank = no authentication"},
 	"smtp_password":               {Label: "SMTP password", Description: "Password or app password for the SMTP username", IsSecret: true},
 	"smtp_from":                   {Label: "From address", Description: "Sender address of Peek emails, such as peek@example.com (blank = email off)"},
+
+	"backend_allowed_images":    {Label: "Allowed backend images", Description: "Comma-separated registry prefixes ending in \"/\" (ghcr.io/acme/) or exact repositories (ghcr.io/acme/contact-form). Empty allows no backends."},
+	"backend_memory_mb":         {Label: "Backend memory (MB)", Description: "Memory limit per backend container"},
+	"backend_cpu_millis":        {Label: "Backend CPU (millicores)", Description: "CPU limit per backend container (1000 = one core)"},
+	"backend_idle_minutes":      {Label: "Backend idle stop (minutes)", Description: "Stop a backend after this many minutes without requests"},
+	"backend_max_running":       {Label: "Max running backends", Description: "Stop the least recently used backend when more would run"},
+	"backend_registry_server":   {Label: "Registry server", Description: "Credentials for pulling private backend images from this registry"},
+	"backend_registry_username": {Label: "Registry username", Description: "Credentials for pulling private backend images from this registry"},
+	"backend_registry_password": {Label: "Registry password", Description: "Credentials for pulling private backend images from this registry", IsSecret: true},
 }
 
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +148,16 @@ func (s *Server) normalizeSettingValue(key, value string) (string, error) {
 			return "", nil
 		}
 		return s.normalizeOIDCIssuerURL(value)
+	case "backend_allowed_images":
+		return normalizeBackendAllowedImages(value)
+	case "backend_memory_mb":
+		return normalizeBackendIntSetting(key, value, 16, 65536)
+	case "backend_cpu_millis":
+		return normalizeBackendIntSetting(key, value, 50, 64000)
+	case "backend_idle_minutes":
+		return normalizeBackendIntSetting(key, value, 1, 1440)
+	case "backend_max_running":
+		return normalizeBackendIntSetting(key, value, 1, 1000)
 	case "smtp_host":
 		if strings.ContainsAny(value, " /:@") {
 			return "", fmt.Errorf("%s must be a host name without scheme or port", key)
