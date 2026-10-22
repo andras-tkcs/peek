@@ -76,7 +76,7 @@ func TestPrivatePageRequiresActiveWebSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -114,7 +114,7 @@ func TestHandleRawStreamsHTMLWithBridgeInjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	secret := strings.Repeat("0", 64)
@@ -265,14 +265,14 @@ func TestDownloadFilename(t *testing.T) {
 
 // pageCovSeed creates a one-version upload owned by the admin token's account
 // and stores html under its version-1 object key.
-func pageCovSeed(t *testing.T, s *Server, token, slug, visibility, passwordHash, html string) *models.Upload {
+func pageCovSeed(t *testing.T, s *Server, token, slug, visibility, html string) *models.Upload {
 	t.Helper()
 	ctx := context.Background()
 	tok, err := s.store.GetToken(ctx, token)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(ctx, slug, tok.AccountID, tok.ID, slug+".html", int64(len(html)), visibility, passwordHash, uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(ctx, slug, tok.AccountID, tok.ID, slug+".html", int64(len(html)), visibility, uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	u, err := s.store.GetUpload(ctx, slug)
@@ -363,8 +363,8 @@ func TestPageCovPageVersionMissingUpload(t *testing.T) {
 
 func TestPageCovStaleSessionCookieIsCleared(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "priv", "signed-in", "", "<html></html>")
-	pageCovSeed(t, s, token, "restr", "restricted", "", "<html></html>")
+	pageCovSeed(t, s, token, "priv", "signed-in", "<html></html>")
+	pageCovSeed(t, s, token, "restr", "restricted", "<html></html>")
 	for _, slug := range []string{"priv", "restr"} {
 		rec := doRequest(t, s, http.MethodGet, "/p/"+slug+"?x=1", nil, func(r *http.Request) {
 			r.AddCookie(&http.Cookie{Name: sessionCookie, Value: "garbage"})
@@ -383,7 +383,7 @@ func TestPageCovStaleSessionCookieIsCleared(t *testing.T) {
 
 func TestPageCovRawVersionBranches(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "page", "public", "", "<html><body>hi</body></html>")
+	pageCovSeed(t, s, token, "page", "public", "<html><body>hi</body></html>")
 
 	if rec := doRequest(t, s, http.MethodGet, "/raw/page/v/abc", nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("bad version status = %d", rec.Code)
@@ -402,7 +402,7 @@ func TestPageCovRawVersionBranches(t *testing.T) {
 
 func TestPageCovRawStorageFailures(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "page", "public", "", "<html><body>hi</body></html>")
+	pageCovSeed(t, s, token, "page", "public", "<html><body>hi</body></html>")
 	html := "<html><body>hi</body></html>"
 	tests := []struct {
 		name  string
@@ -474,7 +474,7 @@ func TestPageCovBridgeInsertOffsetReaders(t *testing.T) {
 
 func TestPagePasswordRoutesRemoved(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "pwgone", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "pwgone", models.UploadVisibilityPublic)
 	form := func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") }
 	for _, path := range []string{"/p/pwgone", "/p/pwgone/v/1"} {
 		rec := doRequest(t, s, http.MethodPost, path, strings.NewReader("password=x"), form)
@@ -493,7 +493,7 @@ func TestStrayPasswordVisibilityFailsClosed(t *testing.T) {
 	if err := e.s.storage.Save(ctx, "stray-pw", body); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.store.CreateUploadChecked(ctx, "stray-pw", e.owner.ID, 0, "stray.html", int64(len(body)), "password", "", uploadquota.Limits{}); err != nil {
+	if err := e.s.store.CreateUploadChecked(ctx, "stray-pw", e.owner.ID, 0, "stray.html", int64(len(body)), "password", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	actors := map[string]func(*http.Request){

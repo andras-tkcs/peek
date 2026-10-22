@@ -94,7 +94,7 @@ func TestUploadWithSlugRejectsVisibility(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
-	want := "visibility and password cannot be set when uploading a new version; use the visibility endpoint"
+	want := "visibility cannot be set when uploading a new version; use the visibility endpoint"
 	if !bytes.Contains(rec.Body.Bytes(), []byte(want)) {
 		t.Fatalf("body = %s, want %q", rec.Body.String(), want)
 	}

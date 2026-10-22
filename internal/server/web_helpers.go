@@ -51,16 +51,15 @@ const (
 	flashUploadFailed             = "upload_failed"
 	flashUploadPersistenceFailure = "upload_persistence_failure"
 
-	flashInviteCreated   = "invite_created"
-	flashInviteRevoked   = "invite_revoked"
-	flashUserUpdated     = "user_updated"
-	flashSettingsSaved   = "settings_saved"
-	flashAPIKeyRevoked   = "api_key_revoked"
-	flashPasswordUpdated = "password_updated"
-	flashVisibilitySet   = "visibility_set"
-	flashGrantAdded      = "grant_added"
-	flashGrantRemoved    = "grant_removed"
-	flashRenamed         = "renamed"
+	flashInviteCreated = "invite_created"
+	flashInviteRevoked = "invite_revoked"
+	flashUserUpdated   = "user_updated"
+	flashSettingsSaved = "settings_saved"
+	flashAPIKeyRevoked = "api_key_revoked"
+	flashVisibilitySet = "visibility_set"
+	flashGrantAdded    = "grant_added"
+	flashGrantRemoved  = "grant_removed"
+	flashRenamed       = "renamed"
 )
 
 // flashMessages is the only source of flash text. {slug}, {visibility} and
@@ -103,11 +102,7 @@ var flashMessages = map[string]string{
 
 	"upload_empty_file":             "empty file",
 	"upload_invalid_html":           "file does not look like HTML",
-	"upload_invalid_visibility":     "visibility must be public, password, signed-in, or restricted",
-	"upload_password_required":      "password visibility requires a password",
-	"upload_password_not_allowed":   "password is only allowed with password visibility",
-	"upload_password_too_long":      "password must be 72 characters or fewer",
-	"upload_password_hash":          "hash failed",
+	"upload_invalid_visibility":     "visibility must be public, signed-in, or restricted",
 	"upload_slug_generation":        "slug generation failed",
 	"upload_storage_write":          "storage failed",
 	"upload_total_quota_exceeded":   "total storage quota exceeded",
@@ -116,16 +111,15 @@ var flashMessages = map[string]string{
 	"upload_name_required":          "name is required",
 	"upload_name_too_long":          "name must be 200 characters or fewer",
 
-	flashInviteCreated:   "invite created",
-	flashInviteRevoked:   "invite revoked",
-	flashUserUpdated:     "user updated",
-	flashSettingsSaved:   "settings saved",
-	flashAPIKeyRevoked:   "API key revoked",
-	flashPasswordUpdated: "Password updated for /p/{slug}",
-	flashVisibilitySet:   "/p/{slug} is now {visibility}",
-	flashGrantAdded:      "Shared /p/{slug} with {email}",
-	flashGrantRemoved:    "Removed access from /p/{slug}",
-	flashRenamed:         "Renamed to /p/{slug}",
+	flashInviteCreated: "invite created",
+	flashInviteRevoked: "invite revoked",
+	flashUserUpdated:   "user updated",
+	flashSettingsSaved: "settings saved",
+	flashAPIKeyRevoked: "API key revoked",
+	flashVisibilitySet: "/p/{slug} is now {visibility}",
+	flashGrantAdded:    "Shared /p/{slug} with {email}",
+	flashGrantRemoved:  "Removed access from /p/{slug}",
+	flashRenamed:       "Renamed to /p/{slug}",
 }
 
 func dashboardError(w http.ResponseWriter, r *http.Request, code string) {

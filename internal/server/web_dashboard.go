@@ -122,7 +122,6 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 
 	mode := r.FormValue("mode")
 	visibility := strings.TrimSpace(r.FormValue("visibility"))
-	password := strings.TrimSpace(r.FormValue("password"))
 	name := strings.TrimSpace(r.FormValue("name"))
 
 	var data []byte
@@ -157,7 +156,6 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 		OwnerAccountID: owner.ID,
 		Name:           name,
 		Visibility:     visibility,
-		Password:       password,
 		Data:           data,
 		Limits:         s.uploadLimits(r.Context()),
 	})
@@ -217,22 +215,18 @@ func (s *Server) handleDashboardVisibility(w http.ResponseWriter, r *http.Reques
 		dashboardError(w, r, flashNotOwner)
 		return
 	}
-	change, err := uploads.PrepareVisibility(r.FormValue("visibility"), r.FormValue("password"))
+	visibility, err := uploads.PrepareVisibility(r.FormValue("visibility"))
 	if err != nil {
 		dashboardError(w, r, uploadFlashCode(err))
 		return
 	}
-	if err := s.store.SetUploadVisibility(r.Context(), u.ID, change.Visibility, change.PasswordHash); err != nil {
+	if err := s.store.SetUploadVisibility(r.Context(), u.ID, visibility); err != nil {
 		slog.Error("dashboard visibility update failed", "slug", slug, "err", err)
 		dashboardError(w, r, flashVisibilityFailed)
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.visibility.set", visibilityAuditDetail(slug, change.Visibility))
-	if change.Visibility == models.UploadVisibilityPassword {
-		dashboardOKSlug(w, r, flashPasswordUpdated, slug)
-		return
-	}
-	if change.Visibility == models.UploadVisibilityRestricted {
+	s.auditRequest(r, owner.Name, "upload.visibility.set", auditDetail("slug", slug, "visibility", visibility))
+	if visibility == models.UploadVisibilityRestricted {
 		dashboardFlashManage(w, r, "ok", flashVisibilitySet, slug)
 		return
 	}

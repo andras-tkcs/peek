@@ -41,7 +41,7 @@ func grant(t *testing.T, s *Server, u *models.Upload, kind, email string) {
 
 func restrictedPage(t *testing.T, s *Server, slug string) *models.Upload {
 	t.Helper()
-	return newTwoVersionPage(t, s, slug, models.UploadVisibilityRestricted, "")
+	return newTwoVersionPage(t, s, slug, models.UploadVisibilityRestricted)
 }
 
 func auditActions(t *testing.T, s *Server) map[string]string {
@@ -179,7 +179,7 @@ func TestRestrictedAccountWithoutEmailDenied(t *testing.T) {
 
 func TestGrantsNotEnforcedOnPrivate(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "p-private", models.UploadVisibilitySignedIn, "")
+	u := newTwoVersionPage(t, s, "p-private", models.UploadVisibilitySignedIn)
 	grant(t, s, u, models.UploadGrantUser, "someone@example.com")
 	eve := newViewer(t, s, "eve@example.com", "Eve", false)
 	if rec := doRequest(t, s, http.MethodGet, "/p/"+u.Slug, nil, asSession(s, eve.ID)); rec.Code != http.StatusOK {

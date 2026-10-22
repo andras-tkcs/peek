@@ -20,7 +20,7 @@ const (
 
 // newTwoVersionPage creates a page with two versions. Version 1 is stored under
 // the slug and version 2 under a versions/ key.
-func newTwoVersionPage(t *testing.T, s *Server, slug, visibility, passwordHash string) *models.Upload {
+func newTwoVersionPage(t *testing.T, s *Server, slug, visibility string) *models.Upload {
 	t.Helper()
 	ctx := context.Background()
 	owner, err := s.store.CreateAccount(ctx, "owner-"+slug+"@example.test", "Owner", false)
@@ -31,7 +31,7 @@ func newTwoVersionPage(t *testing.T, s *Server, slug, visibility, passwordHash s
 	if err := s.storage.Save(ctx, slug, v1); err != nil {
 		t.Fatalf("save v1: %v", err)
 	}
-	if err := s.store.CreateUploadChecked(ctx, slug, owner.ID, 0, "page.html", int64(len(v1)), visibility, passwordHash, uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(ctx, slug, owner.ID, 0, "page.html", int64(len(v1)), visibility, uploadquota.Limits{}); err != nil {
 		t.Fatalf("create upload: %v", err)
 	}
 	u, err := s.store.GetUpload(ctx, slug)
@@ -102,7 +102,7 @@ func fetchRawFromPage(t *testing.T, s *Server, pagePath string) (page, raw strin
 
 func TestPageVersionServesRequestedVersion(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "pgver1", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "pgver1", models.UploadVisibilityPublic)
 	for path, want := range map[string]string{"/p/pgver1/v/1": v1Marker, "/p/pgver1/v/2": v2Marker} {
 		_, raw := fetchRawFromPage(t, s, path)
 		if !strings.Contains(raw, want) {
@@ -113,7 +113,7 @@ func TestPageVersionServesRequestedVersion(t *testing.T) {
 
 func TestPageLatestServesNewestVersion(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "pglatest", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "pglatest", models.UploadVisibilityPublic)
 	_, raw := fetchRawFromPage(t, s, "/p/pglatest")
 	if !strings.Contains(raw, v2Marker) || strings.Contains(raw, v1Marker) {
 		t.Fatalf("latest page should serve v2 only: %s", raw)
@@ -122,7 +122,7 @@ func TestPageLatestServesNewestVersion(t *testing.T) {
 
 func TestPageVersionNotFound(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "pgnf", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "pgnf", models.UploadVisibilityPublic)
 	for _, n := range []string{"0", "abc", "99"} {
 		rec := doRequest(t, s, http.MethodGet, "/p/pgnf/v/"+n, nil)
 		if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "Version not found") {
@@ -133,7 +133,7 @@ func TestPageVersionNotFound(t *testing.T) {
 
 func TestRawVersionRejectsTokenForOtherVersion(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "rawother", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "rawother", models.UploadVisibilityPublic)
 	tok := makeViewToken(s.secret, viewSubject("rawother", 1), "vid1")
 	rec := doRequest(t, s, http.MethodGet, "/raw/rawother/v/2?t="+url.QueryEscape(tok), nil, withVID1)
 	if rec.Code != http.StatusForbidden {
@@ -147,7 +147,7 @@ func TestRawVersionRejectsTokenForOtherVersion(t *testing.T) {
 
 func TestRawVersionChecksTokenBeforeLookup(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "rawlookup", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "rawlookup", models.UploadVisibilityPublic)
 	rec := doRequest(t, s, http.MethodGet, "/raw/rawlookup/v/99?t=bad", nil, withVID1)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("bad token on missing version = %d, want 403", rec.Code)
@@ -156,7 +156,7 @@ func TestRawVersionChecksTokenBeforeLookup(t *testing.T) {
 
 func TestLegacyRawRouteRemoved(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "rawlegacy", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "rawlegacy", models.UploadVisibilityPublic)
 	tok := makeViewToken(s.secret, "rawlegacy", "vid1")
 	rec := doRequest(t, s, http.MethodGet, "/raw/rawlegacy?t="+url.QueryEscape(tok), nil, withVID1)
 	if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), v2Marker) {
@@ -166,7 +166,7 @@ func TestLegacyRawRouteRemoved(t *testing.T) {
 
 func TestRawSetsSandboxCSP(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "rawcsp", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "rawcsp", models.UploadVisibilityPublic)
 	src, cookies := rawSrcFromPage(t, s, "/p/rawcsp")
 	rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies))
 	if rec.Code != http.StatusOK {
@@ -180,7 +180,7 @@ func TestRawSetsSandboxCSP(t *testing.T) {
 
 func TestRawRejectsNonIframeFetchDest(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "rawdest", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "rawdest", models.UploadVisibilityPublic)
 	src, cookies := rawSrcFromPage(t, s, "/p/rawdest")
 	cases := []struct {
 		dest string
@@ -205,7 +205,7 @@ func TestRawRejectsNonIframeFetchDest(t *testing.T) {
 
 func TestRawDownloadFetchDest(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "rawdl", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "rawdl", models.UploadVisibilityPublic)
 	src, cookies := rawSrcFromPage(t, s, "/p/rawdl")
 	dl := src + "&download=1"
 	for _, dest := range []string{"document", "empty", "iframe", ""} {
@@ -244,7 +244,7 @@ func TestRawDownloadFetchDest(t *testing.T) {
 
 func TestRawTokenRequiresVisitorCookie(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "rawvid", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "rawvid", models.UploadVisibilityPublic)
 	src, cookies := rawSrcFromPage(t, s, "/p/rawvid")
 	var vid string
 	for _, c := range cookies {
@@ -272,7 +272,7 @@ func TestRawTokenRequiresVisitorCookie(t *testing.T) {
 
 func TestRawSandboxMatchesIframeAttribute(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "rawattr", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "rawattr", models.UploadVisibilityPublic)
 	rec := doRequest(t, s, http.MethodGet, "/p/rawattr", nil)
 	m := regexp.MustCompile(`sandbox="([^"]+)"`).FindStringSubmatch(rec.Body.String())
 	if m == nil || m[1] != rawSandbox {
@@ -282,12 +282,12 @@ func TestRawSandboxMatchesIframeAttribute(t *testing.T) {
 
 func TestRawRefusedAfterVisibilityChange(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "rawvis", models.UploadVisibilityPublic, "")
+	u := newTwoVersionPage(t, s, "rawvis", models.UploadVisibilityPublic)
 	src, cookies := rawSrcFromPage(t, s, "/p/rawvis")
 	if rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies)); rec.Code != http.StatusOK {
 		t.Fatalf("before change = %d, want 200", rec.Code)
 	}
-	if err := s.store.SetUploadVisibility(context.Background(), u.ID, models.UploadVisibilitySignedIn, ""); err != nil {
+	if err := s.store.SetUploadVisibility(context.Background(), u.ID, models.UploadVisibilitySignedIn); err != nil {
 		t.Fatal(err)
 	}
 	if rec := doRequest(t, s, http.MethodGet, src, nil, withCookieList(cookies)); rec.Code != http.StatusForbidden {
@@ -298,7 +298,7 @@ func TestRawRefusedAfterVisibilityChange(t *testing.T) {
 func TestRawRefusedAfterGrantRemoved(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	ctx := context.Background()
-	u := newTwoVersionPage(t, s, "rawgrant", models.UploadVisibilityRestricted, "")
+	u := newTwoVersionPage(t, s, "rawgrant", models.UploadVisibilityRestricted)
 	v, err := s.store.CreateAccount(ctx, "viewer@example.test", "Viewer", false)
 	if err != nil {
 		t.Fatal(err)
@@ -323,7 +323,7 @@ func TestRawRefusedAfterGrantRemoved(t *testing.T) {
 
 func TestVersionBannerOnlyOnOlderVersions(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "pgbanner", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "pgbanner", models.UploadVisibilityPublic)
 	if body := doRequest(t, s, http.MethodGet, "/p/pgbanner/v/1", nil).Body.String(); !strings.Contains(body, "hn-version-banner") {
 		t.Fatalf("v1 should show the banner: %s", body)
 	}
@@ -336,7 +336,7 @@ func TestVersionBannerOnlyOnOlderVersions(t *testing.T) {
 
 func TestPageVersionRecordsVisitVersion(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "pgvisit", models.UploadVisibilityPublic, "")
+	u := newTwoVersionPage(t, s, "pgvisit", models.UploadVisibilityPublic)
 	if rec := doRequest(t, s, http.MethodGet, "/p/pgvisit/v/1", nil); rec.Code != http.StatusOK {
 		t.Fatalf("GET v/1 = %d", rec.Code)
 	}
@@ -356,7 +356,7 @@ func TestPageVersionRecordsVisitVersion(t *testing.T) {
 
 func TestPageQueryReachesFrameAsFragmentOnly(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "pgquery", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "pgquery", models.UploadVisibilityPublic)
 	rec := doRequest(t, s, http.MethodGet, "/p/pgquery?region=eu&q=a%20b", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET = %d: %s", rec.Code, rec.Body.String())

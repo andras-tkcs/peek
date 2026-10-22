@@ -6,54 +6,44 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/uploadquota"
 )
 
+// strayPasswordVisibility is the removed visibility, still possible in a row written
+// by an older binary; pages with it must fail closed.
+const strayPasswordVisibility = "password"
+
 // matrixEnv is one server with an owner, a grantee, an unrelated signed-in user and
 // an admin, each with a session cookie and a bearer token.
 type matrixEnv struct {
-	s        *Server
-	owner    *models.Account
-	grantee  *models.Account
-	other    *models.Account
-	admin    *models.Account
-	password string
+	s       *Server
+	owner   *models.Account
+	grantee *models.Account
+	other   *models.Account
+	admin   *models.Account
 }
-
-const matrixPagePassword = "matrix-secret"
 
 func newMatrixEnv(t *testing.T) *matrixEnv {
 	t.Helper()
 	s, _ := newHandlerTestServer(t)
 	return &matrixEnv{
-		s:        s,
-		owner:    newAccountWithToken(t, s, "owner@example.test", "owner-token", false),
-		grantee:  newAccountWithToken(t, s, "grantee@example.test", "grantee-token", false),
-		other:    newAccountWithToken(t, s, "other@example.test", "other-token", false),
-		admin:    newAccountWithToken(t, s, "admin@example.test", "admin-token", true),
-		password: matrixPagePassword,
+		s:       s,
+		owner:   newAccountWithToken(t, s, "owner@example.test", "owner-token", false),
+		grantee: newAccountWithToken(t, s, "grantee@example.test", "grantee-token", false),
+		other:   newAccountWithToken(t, s, "other@example.test", "other-token", false),
+		admin:   newAccountWithToken(t, s, "admin@example.test", "admin-token", true),
 	}
 }
 
 func (e *matrixEnv) page(t *testing.T, slug, visibility string) *models.Upload {
 	t.Helper()
 	ctx := context.Background()
-	hash := ""
-	if visibility == models.UploadVisibilityPassword {
-		b, err := bcrypt.GenerateFromPassword([]byte(e.password), bcrypt.MinCost)
-		if err != nil {
-			t.Fatal(err)
-		}
-		hash = string(b)
-	}
 	body := []byte("<html><body>matrix secret body</body></html>")
 	if err := e.s.storage.Save(ctx, slug, body); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.store.CreateUploadChecked(ctx, slug, e.owner.ID, 0, "matrix.html", int64(len(body)), visibility, hash, uploadquota.Limits{}); err != nil {
+	if err := e.s.store.CreateUploadChecked(ctx, slug, e.owner.ID, 0, "matrix.html", int64(len(body)), visibility, uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	u, err := e.s.store.GetUpload(ctx, slug)
@@ -98,7 +88,7 @@ func TestPageAccessMatrix(t *testing.T) {
 			"anonymous": {ok, ok}, "owner": {ok, ok}, "grantee": {ok, ok}, "other": {ok, ok}, "admin": {ok, ok},
 		}},
 		// A stray password row fails closed for everyone, accounts included.
-		{models.UploadVisibilityPassword, map[string]want{
+		{strayPasswordVisibility, map[string]want{
 			"anonymous": {deny, noauth}, "owner": {deny, noauth}, "grantee": {deny, noauth}, "other": {deny, noauth}, "admin": {deny, noauth},
 		}},
 		{models.UploadVisibilitySignedIn, map[string]want{
@@ -119,7 +109,7 @@ func TestPageAccessMatrix(t *testing.T) {
 					t.Fatalf("GET /p = %d, want %d", page.Code, w.page)
 				}
 				hasIframe := strings.Contains(page.Body.String(), "/raw/"+u.Slug)
-				if wantFrame := tc.visibility != models.UploadVisibilityPassword && w.page == ok; hasIframe != wantFrame {
+				if wantFrame := tc.visibility != strayPasswordVisibility && w.page == ok; hasIframe != wantFrame {
 					t.Fatalf("page has raw iframe = %v, want %v", hasIframe, wantFrame)
 				}
 				if strings.Contains(page.Body.String(), "matrix secret body") {
@@ -270,7 +260,7 @@ func TestOwnerOnlyAPIMatrix(t *testing.T) {
 	}
 
 	for _, visibility := range []string{
-		models.UploadVisibilityPublic, models.UploadVisibilityPassword,
+		models.UploadVisibilityPublic, strayPasswordVisibility,
 		models.UploadVisibilitySignedIn, models.UploadVisibilityRestricted,
 	} {
 		u := e.page(t, "own-"+strings.ReplaceAll(visibility, "-", ""), visibility)

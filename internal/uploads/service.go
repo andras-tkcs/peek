@@ -20,7 +20,7 @@ type Service struct {
 
 type Repository interface {
 	UploadSlugExists(ctx context.Context, slug string) (bool, error)
-	CreateUploadChecked(ctx context.Context, slug string, ownerAccountID, ownerTokenID int64, name string, size int64, visibility, passwordHash string, limits uploadquota.Limits) error
+	CreateUploadChecked(ctx context.Context, slug string, ownerAccountID, ownerTokenID int64, name string, size int64, visibility string, limits uploadquota.Limits) error
 	CreateVersionChecked(ctx context.Context, uploadID int64, objectKey string, size int64, actorAccountID int64, limits uploadquota.Limits) (int, error)
 }
 
@@ -29,7 +29,6 @@ type CreateInput struct {
 	OwnerTokenID   int64
 	Name           string
 	Visibility     string
-	Password       string
 	Data           []byte
 	Limits         uploadquota.Limits
 }
@@ -65,10 +64,6 @@ const (
 	KindEmptyFile            ErrorKind = "empty_file"
 	KindInvalidHTML          ErrorKind = "invalid_html"
 	KindInvalidVisibility    ErrorKind = "invalid_visibility"
-	KindPasswordRequired     ErrorKind = "password_required"
-	KindPasswordNotAllowed   ErrorKind = "password_not_allowed"
-	KindPasswordTooLong      ErrorKind = "password_too_long"
-	KindPasswordHash         ErrorKind = "password_hash"
 	KindSlugGeneration       ErrorKind = "slug_generation"
 	KindStorageWrite         ErrorKind = "storage_write"
 	KindTotalQuotaExceeded   ErrorKind = "total_quota_exceeded"
@@ -111,10 +106,9 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 	if utf8.RuneCountInString(in.Name) > maxNameLength {
 		return nil, newError(KindNameTooLong, nameTooLongMessage)
 	}
-	in.Password = strings.TrimSpace(in.Password)
 	in.Visibility = strings.TrimSpace(in.Visibility)
 	if in.Visibility == "" {
-		in.Visibility = models.UploadVisibilityPassword
+		in.Visibility = models.UploadVisibilityRestricted
 	}
 
 	if len(in.Data) == 0 {
@@ -123,7 +117,7 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 	if !looksLikeHTML(in.Data) {
 		return nil, newError(KindInvalidHTML, "file does not look like HTML")
 	}
-	change, err := PrepareVisibility(in.Visibility, in.Password)
+	visibility, err := PrepareVisibility(in.Visibility)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +129,7 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 	if err := svc.Storage.Save(ctx, slug, in.Data); err != nil {
 		return nil, newError(KindStorageWrite, "storage failed")
 	}
-	if err := svc.Repository.CreateUploadChecked(ctx, slug, in.OwnerAccountID, in.OwnerTokenID, in.Name, int64(len(in.Data)), change.Visibility, change.PasswordHash, in.Limits); err != nil {
+	if err := svc.Repository.CreateUploadChecked(ctx, slug, in.OwnerAccountID, in.OwnerTokenID, in.Name, int64(len(in.Data)), visibility, in.Limits); err != nil {
 		uploadErr := storeError(err)
 		if cleanupErr := svc.Storage.Delete(ctx, slug); cleanupErr != nil {
 			return nil, errors.Join(uploadErr, &CleanupError{Slug: slug, Err: cleanupErr})
@@ -148,7 +142,7 @@ func (svc Service) Create(ctx context.Context, in CreateInput) (*CreateResult, e
 		URL:        svc.BaseURL + "/p/" + slug,
 		Name:       in.Name,
 		Size:       len(in.Data),
-		Visibility: change.Visibility,
+		Visibility: visibility,
 		Version:    1,
 	}, nil
 }
