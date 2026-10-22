@@ -1,0 +1,158 @@
+<title>Page Backends Checklist</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow reading column; each manual item is a section with a checklist of numbered steps. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1b2230;
+  --muted: #5b6577;
+  --line: #dde1e8;
+  --accent: #1f6feb;
+  --accent-soft: #e6effd;
+  --done: #1a7f4b;
+  --code-bg: #eef1f5;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --surface: #181d26; --fg: #e4e8ef; --muted: #98a2b3; --line: #2a313d;
+    --accent: #6ea8ff; --accent-soft: #1c2a42; --done: #4cc38a; --code-bg: #222935; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #181d26; --fg: #e4e8ef; --muted: #98a2b3; --line: #2a313d;
+  --accent: #6ea8ff; --accent-soft: #1c2a42; --done: #4cc38a; --code-bg: #222935; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+header { display: flex; flex-direction: column; gap: 8px; }
+h1 { font-size: 1.7rem; font-weight: 600; margin: 0; text-wrap: balance; }
+h2 { font-size: .8rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h3 { font-size: 1.15rem; font-weight: 600; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 65ch; }
+.lede { color: var(--muted); }
+.part { display: flex; flex-direction: column; gap: 14px; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.item-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.meta { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.progress { font-size: .85rem; color: var(--accent); font-weight: 500; font-variant-numeric: tabular-nums; }
+ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: step; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+ol.steps label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; min-width: 0; }
+ol.steps input[type="checkbox"] { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); flex: none; }
+.num { font-family: var(--font-mono); font-size: .8rem; color: var(--muted); min-width: 1.8em; padding-top: 3px; }
+.num::before { content: counter(step) "."; }
+.body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.see { font-size: .88rem; color: var(--muted); }
+li.checked .body > span:first-child { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+pre, code { font-family: var(--font-mono); font-size: .85rem; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre { background: var(--code-bg); padding: 10px 12px; border-radius: 6px; margin: 0; overflow-x: auto; white-space: pre; }
+a { color: var(--accent); }
+a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.callout { background: var(--accent-soft); border-radius: 8px; padding: 12px 14px; font-size: .92rem; }
+.report { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.empty { color: var(--muted); font-size: .95rem; }
+</style>
+
+<main>
+  <header>
+    <h2>Peek · page backends plan</h2>
+    <h1>Page Backends Checklist</h1>
+    <p class="lede">The steps only a person can do for the page backends feature. Nothing is needed before implementation; one end-to-end check runs after the last phase merges into <code>feat/page-backends</code>, before the pull request merges. Ticks are saved in this browser only.</p>
+  </header>
+
+  <section class="part" aria-labelledby="before">
+    <h2 id="before">Before implementation</h2>
+    <p class="empty">Nothing to do. Every phase builds against a fake container runtime, and CI's <code>backend-integration</code> job tests against a real Docker daemon.</p>
+  </section>
+
+  <section class="part" aria-labelledby="after">
+    <h2 id="after">After implementation</h2>
+
+    <article class="item" data-item="ma1">
+      <div class="item-head">
+        <h3>1. Run the contact-form example end to end</h3>
+        <span class="meta">about 40 minutes · <span class="progress" data-progress="ma1"></span></span>
+      </div>
+      <p>This checks what CI cannot: the browser relay through <code>peek.fetch</code>, real email delivery, the idle stop and cold start, cleanup on delete, and the operator setup on a real machine. Mailpit catches the email, so no SMTP account or password is involved.</p>
+      <div class="callout">You need a Linux machine (or a Linux VM) with Docker Engine 24 or newer and the Docker Compose plugin, plus Go via mise to build the CLI. On macOS or Windows, Docker Desktop works too because peekd runs in a container here. Install guide: <a href="https://docs.docker.com/engine/install/" target="_blank" rel="noopener">docs.docker.com/engine/install</a>.</div>
+      <ol class="steps">
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s1"><span class="body"><span>Get the feature branch.</span><pre>git clone https://github.com/andras-tkcs/peek.git
+cd peek
+git checkout feat/page-backends</pre><span class="see">Branch on GitHub: <a href="https://github.com/andras-tkcs/peek/tree/feat/page-backends" target="_blank" rel="noopener">andras-tkcs/peek, feat/page-backends</a>. Its example guide: <a href="https://github.com/andras-tkcs/peek/blob/feat/page-backends/examples/contact-form/README.md" target="_blank" rel="noopener">examples/contact-form/README.md</a>.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s2"><span class="body"><span>Let the peekd container use the Docker socket. On Linux, export the socket's group id; on Docker Desktop, skip this step.</span><pre>export DOCKER_GID=$(stat -c %g /var/run/docker.sock)</pre><span class="see">You should see no output. <code>echo $DOCKER_GID</code> prints a number.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s3"><span class="body"><span>Start Peek with backends on, and Mailpit.</span><pre>docker compose --profile backends up -d --build</pre><span class="see">You should see containers <code>peek-backends</code> and <code>mailpit</code> running (<code>docker compose ps</code>). Peek is at <a href="http://localhost:7722" target="_blank" rel="noopener">localhost:7722</a>, the Mailpit inbox at <a href="http://localhost:8025" target="_blank" rel="noopener">localhost:8025</a>.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s4"><span class="body"><span>Create the first admin. Find the one-time setup URL in the log, open it and create an account.</span><pre>docker compose logs peek-backends | grep -i setup</pre><span class="see">After creating the account you land on the dashboard.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s5"><span class="body"><span>Allow the example image. Open <a href="http://localhost:7722/admin" target="_blank" rel="noopener">localhost:7722/admin</a>, go to <strong>Settings → Backends</strong>, type <code>peek-example-contact</code> into <strong>Allowed backend images</strong>, set <strong>Backend idle stop (minutes)</strong> to <code>1</code>, and click <strong>Save</strong>.</span><span class="see">The tab does not show the "Backends are off" line, and the page reloads with your values kept.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s6"><span class="body"><span>Build the example backend image and the CLI.</span><pre>docker build -t peek-example-contact:dev examples/contact-form
+mise install &amp;&amp; mise run build</pre><span class="see"><code>docker images peek-example-contact</code> lists the <code>dev</code> tag, and <code>./bin/peek version</code> prints a version.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s7"><span class="body"><span>Sign the CLI in and upload the page with its backend.</span><pre>./bin/peek login --host http://localhost:7722
+./bin/peek upload examples/contact-form/index.html --visibility signed-in --backend peek-example-contact:dev</pre><span class="see">The upload prints the page URL and a line <code>backend: peek-example-contact:dev</code>. Note the slug (the last part of the URL); the next steps call it <code>SLUG</code>.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s8"><span class="body"><span>Point the backend at Mailpit. These are not secrets; Mailpit accepts any mail.</span><pre>printf mailpit | ./bin/peek backend env set SLUG SMTP_HOST --value-stdin
+printf 1025 | ./bin/peek backend env set SLUG SMTP_PORT --value-stdin
+printf peek@example.test | ./bin/peek backend env set SLUG MAIL_FROM --value-stdin
+printf team@example.test | ./bin/peek backend env set SLUG MAIL_TO --value-stdin
+./bin/peek backend SLUG</pre><span class="see">The last command lists version 1 with the image and port 8080, and the four variable names (never their values).</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s9"><span class="body"><span>Send the form. Open the page URL in the browser where you are signed in, fill in name, email and message, and submit.</span><span class="see">The page shows that the message was sent. The first submit can take a few seconds while the container starts.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s10"><span class="body"><span>Check the email in <a href="http://localhost:8025" target="_blank" rel="noopener">Mailpit</a>.</span><span class="see">One message to <code>team@example.test</code> from <code>peek@example.test</code> with your text.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s11"><span class="body"><span>Check the container and its logs.</span><pre>./bin/peek backend SLUG
+./bin/peek backend logs SLUG
+docker ps --filter label=peek.managed=true --format '{{.Names}} {{.Status}}'
+docker inspect --format '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}} {{.HostConfig.Memory}}' $(docker ps -q --filter label=peek.managed=true)</pre><span class="see"><code>RUNNING</code> says yes, the logs show the request, one container named <code>peek-…-u…-v1</code> is up, and inspect prints <code>true [ALL] 268435456</code>.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s12"><span class="body"><span>Check access control. Open the page URL in a private window where you are not signed in.</span><span class="see">You are sent to the login page; the backend is never reached.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s13"><span class="body"><span>Check the idle stop and cold start. Wait about two minutes, list containers, then submit the form again.</span><pre>docker ps --filter label=peek.managed=true</pre><span class="see">The list is empty after the wait. The next submit works again after a short start, and a second email arrives in Mailpit.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s14"><span class="body"><span>Check cleanup on delete.</span><pre>./bin/peek delete SLUG
+docker ps -a --filter label=peek.managed=true
+docker volume ls --filter name=peek-</pre><span class="see">No backend container is left and no <code>peek-…-data-u…</code> volume is listed.</span></span></label></li>
+        <li><span class="num"></span><label><input type="checkbox" id="ma1-s15"><span class="body"><span>Clean up.</span><pre>docker compose --profile backends down -v</pre><span class="see">All containers of the profile stop and its volumes are removed.</span></span></label></li>
+      </ol>
+      <div class="report">
+        <p><strong>Report back:</strong> tick the item in the pull request and paste one line into it:</p>
+        <pre>ma1-compose-end-to-end: PASS (email received, idle stop, cold start, delete cleanup)</pre>
+        <p>or, if something failed, <code>ma1-compose-end-to-end: FAIL at step N</code> followed by what you saw and the output of <code>docker compose logs peek-backends | tail -50</code>.</p>
+      </div>
+    </article>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var KEY = "peek-page-backends-checklist";
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  var state = load();
+  var boxes = document.querySelectorAll('ol.steps input[type="checkbox"]');
+  function refresh() {
+    document.querySelectorAll("[data-item]").forEach(function (item) {
+      var all = item.querySelectorAll('input[type="checkbox"]');
+      var done = item.querySelectorAll('input[type="checkbox"]:checked');
+      var out = item.querySelector("[data-progress]");
+      if (out) out.textContent = done.length + " of " + all.length + " done";
+    });
+    boxes.forEach(function (b) { b.closest("li").classList.toggle("checked", b.checked); });
+  }
+  boxes.forEach(function (b) {
+    b.checked = !!state[b.id];
+    b.addEventListener("change", function () {
+      state[b.id] = b.checked;
+      save(state);
+      refresh();
+    });
+  });
+  refresh();
+})();
+</script>
