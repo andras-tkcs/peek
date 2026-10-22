@@ -50,6 +50,9 @@ const (
 	flashAPIKeyRevokeFailed       = "api_key_revoke_failed"
 	flashUploadFailed             = "upload_failed"
 	flashUploadPersistenceFailure = "upload_persistence_failure"
+	flashEmailNotConfigured       = "email_not_configured"
+	flashEmailNoAddress           = "email_no_address"
+	flashEmailTestFailed          = "email_test_failed"
 
 	flashInviteCreated = "invite_created"
 	flashInviteRevoked = "invite_revoked"
@@ -60,6 +63,7 @@ const (
 	flashGrantAdded    = "grant_added"
 	flashGrantRemoved  = "grant_removed"
 	flashRenamed       = "renamed"
+	flashEmailTestSent = "email_test_sent"
 )
 
 // flashMessages is the only source of flash text. {slug}, {visibility} and
@@ -97,6 +101,9 @@ var flashMessages = map[string]string{
 	flashAPIKeyRevokeFailed:       "API key could not be revoked",
 	flashUploadFailed:             "upload failed",
 	flashUploadPersistenceFailure: "db failed",
+	flashEmailNotConfigured:       "email is not configured: set an SMTP host and From address",
+	flashEmailNoAddress:           "your account has no email address",
+	flashEmailTestFailed:          "test email failed; see the server log",
 	flashSessionsRevoked:          "other sessions signed out",
 	flashSessionsRevokeFailed:     "sign out failed",
 
@@ -120,6 +127,7 @@ var flashMessages = map[string]string{
 	flashGrantAdded:    "Shared /p/{slug} with {email}",
 	flashGrantRemoved:  "Removed access from /p/{slug}",
 	flashRenamed:       "Renamed to /p/{slug}",
+	flashEmailTestSent: "test email sent",
 }
 
 func dashboardError(w http.ResponseWriter, r *http.Request, code string) {

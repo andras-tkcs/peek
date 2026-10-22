@@ -151,7 +151,15 @@ type SettingRow struct {
 type DashboardSettings struct {
 	Auth    AuthSettings
 	Storage StorageSettings
+	Email   EmailSettings
 	Limits  []LimitSetting
+}
+
+// EmailSettings are the SMTP rows of the Admin Email tab. TLSValue is the
+// stored TLS mode, starttls when blank.
+type EmailSettings struct {
+	Host, Port, TLS, Username, Password, From SettingRow
+	TLSValue                                  string
 }
 
 type AuthSettings struct {
