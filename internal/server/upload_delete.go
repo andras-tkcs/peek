@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/andras-tkcs/peek/internal/models"
 )
@@ -26,6 +27,12 @@ func (s *Server) deleteUpload(ctx context.Context, u models.Upload) error {
 	}
 	if err := s.store.DeleteUpload(ctx, u.ID); err != nil {
 		return fmt.Errorf("delete upload record %q: %w", u.Slug, err)
+	}
+	// After the row is gone, so no /svc request can start a new container.
+	if s.backends != nil {
+		if err := s.backends.RemoveUploadData(ctx, u.ID); err != nil {
+			slog.Warn("remove backend data", "slug", u.Slug, "err", err)
+		}
 	}
 	return nil
 }

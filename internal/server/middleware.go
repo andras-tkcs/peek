@@ -20,9 +20,12 @@ const apiTokenContextKey contextKey = "api-token"
 // the largest JSON body any handler accepts (defaultJSONBodyLimit).
 const maxRequestBodyBytes = defaultJSONBodyLimit
 
-// bodyLimitExempt reports whether r is an upload, whose handler sets its own
-// MaxBytesReader.
+// bodyLimitExempt reports whether r is an upload or a backend relay request,
+// whose handlers set their own MaxBytesReader.
 func bodyLimitExempt(r *http.Request) bool {
+	if strings.HasPrefix(r.URL.Path, "/svc/") {
+		return true
+	}
 	return r.Method == http.MethodPost && (r.URL.Path == "/api/upload" || r.URL.Path == "/dashboard/upload")
 }
 
