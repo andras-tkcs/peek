@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,13 @@ import (
 	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/uploads"
 	webui "github.com/andras-tkcs/peek/internal/web"
+)
+
+// Roles of a dashboard row, shown as an icon.
+const (
+	dashRoleOwner  = "owner"
+	dashRoleAdmin  = "admin"
+	dashRoleViewer = "viewer"
 )
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -46,24 +54,50 @@ func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request, owner *
 	if listErr != nil {
 		slog.Error("dashboard upload list failed", "account_id", owner.ID, "admin", owner.IsAdmin, "err", listErr)
 	}
-	uploads := make([]dashUpload, 0, len(list))
+	type dashRow struct {
+		upload models.Upload
+		role   string
+	}
+	rows := make([]dashRow, 0, len(list))
 	for _, u := range list {
+		role := dashRoleOwner
+		if u.OwnerAccountID != owner.ID {
+			role = dashRoleAdmin
+		}
+		rows = append(rows, dashRow{u, role})
+	}
+	if !owner.IsAdmin {
+		// A failure is logged by sharedWithAccount; the owned rows still show.
+		if shared, err := s.sharedWithAccount(r.Context(), owner); err == nil {
+			for _, u := range shared {
+				rows = append(rows, dashRow{u, dashRoleViewer})
+			}
+			sort.SliceStable(rows, func(i, j int) bool { return rows[i].upload.CreatedAt.After(rows[j].upload.CreatedAt) })
+		}
+	}
+	uploads := make([]dashUpload, 0, len(rows))
+	ids := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		u := row.upload
 		uploads = append(uploads, dashUpload{
 			Slug: u.Slug, Name: u.Name,
 			SizeHuman: humanSize(u.Size), Visibility: u.Visibility,
 			CreatedHuman: u.CreatedAt.Format("2006-01-02 15:04"),
+			Role:         row.role, OwnerName: u.OwnerName,
 		})
-	}
-	ids := make([]int64, 0, len(list))
-	for _, u := range list {
-		ids = append(ids, u.ID)
+		if row.role != dashRoleViewer {
+			ids = append(ids, u.ID)
+		}
 	}
 	grantsByUpload, err := s.store.ListUploadGrantsForUploads(r.Context(), ids)
 	if err != nil {
 		slog.Error("dashboard grant list failed", "account_id", owner.ID, "err", err)
 	}
-	for i, u := range list {
-		for _, g := range grantsByUpload[u.ID] {
+	for i, row := range rows {
+		if row.role == dashRoleViewer {
+			continue
+		}
+		for _, g := range grantsByUpload[row.upload.ID] {
 			uploads[i].Grants = append(uploads[i].Grants, dashGrant{Kind: g.Kind, Email: g.Email})
 		}
 	}

@@ -109,6 +109,10 @@ type DashboardUpload struct {
 	Visibility   string
 	CreatedHuman string
 	Grants       []DashboardGrant
+	// Role is "owner" (I own the page), "admin" (someone else owns it and I am an
+	// admin) or "viewer" (shared with me, view only). Empty renders as owner.
+	Role      string
+	OwnerName string
 }
 
 type DashboardGrant struct {

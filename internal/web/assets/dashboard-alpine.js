@@ -35,8 +35,7 @@
     Alpine.data("dashboard", () => ({
       ...clipboardState(),
       mode: "file",
-      visibility: "password",
-      password: "",
+      visibility: "restricted",
       fileName: "",
       fileSizeLabel: "",
       html: "",
@@ -60,7 +59,6 @@
       },
 
       canUpload() {
-        if (this.visibility === "password" && this.password.trim() === "") return false;
         if (this.mode === "paste") return this.html.trim().length > 0;
         return this.fileName !== "";
       },
