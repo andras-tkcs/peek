@@ -456,3 +456,49 @@ func TestServeAssetMissingEmbeddedFileIs404(t *testing.T) {
 		t.Fatalf("AssetURL = %q, want unhashed", got)
 	}
 }
+
+func TestBridgePeekFetchContract(t *testing.T) {
+	b, err := assetsFS.ReadFile("assets/bridge.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{
+		`hn: "fetch"`,
+		`"peek.fetch path must start with /"`,
+		`"peek.fetch timed out"`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Fatalf("bridge.js missing %q", want)
+		}
+	}
+	listener := src[strings.Index(src, `addEventListener("message"`):]
+	guard := strings.Index(listener, "if (e.source !== parent) return;")
+	result := strings.Index(listener, `d.hn === "fetch-result"`)
+	if guard < 0 || result < 0 || result < guard {
+		t.Fatal("fetch-result must be handled inside the listener that checks e.source !== parent")
+	}
+}
+
+func TestAppJSRelayFetchGuards(t *testing.T) {
+	b, err := assetsFS.ReadFile("assets/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{
+		`data.hn === "fetch"`,
+		`"X-Peek-Svc": "1"`,
+		`cache: "no-store"`,
+		`redirect: "error"`,
+		`frameLoads`,
+		`"page navigated; reload to use the backend"`,
+		`url.pathname.startsWith(prefix)`,
+		`url.origin === location.origin`,
+		`"too many concurrent peek.fetch requests"`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Fatalf("app.js relayFetch missing %q", want)
+		}
+	}
+}
