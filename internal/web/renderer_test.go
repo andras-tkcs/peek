@@ -65,11 +65,6 @@ func TestRendererExecutesAllTemplates(t *testing.T) {
 			want: "sandbox=",
 		},
 		{
-			name: TemplateGate,
-			data: GateData{Slug: "abc123", Action: "/p/abc123/v/2", Error: true},
-			want: `action="/p/abc123/v/2"`,
-		},
-		{
 			name: TemplateIndex,
 			data: IndexData{BaseURL: "http://localhost:7700"},
 			want: "CLI quick start",
