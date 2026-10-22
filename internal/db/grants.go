@@ -14,30 +14,35 @@ func normalizeGrantEmail(email string) string {
 }
 
 // AddUploadGrant grants kind/email access to an upload. It is idempotent: a
-// duplicate returns the existing row. Emails are stored lowercased and trimmed;
+// duplicate returns the existing row and false; true means this call inserted it. Emails are stored lowercased and trimmed;
 // address validation is the caller's job.
-func (s *Store) AddUploadGrant(ctx context.Context, uploadID int64, kind, email string, createdBy int64) (*models.UploadGrant, error) {
+func (s *Store) AddUploadGrant(ctx context.Context, uploadID int64, kind, email string, createdBy int64) (*models.UploadGrant, bool, error) {
 	email = normalizeGrantEmail(email)
 	var creatorArg any
 	if createdBy > 0 {
 		creatorArg = createdBy
 	}
-	if _, err := s.ExecContext(ctx, `INSERT INTO upload_grants(upload_id,kind,email,created_by_account_id,created_at) VALUES(?,?,?,?,?)
+	res, err := s.ExecContext(ctx, `INSERT INTO upload_grants(upload_id,kind,email,created_by_account_id,created_at) VALUES(?,?,?,?,?)
 		ON CONFLICT(upload_id,kind,email) DO NOTHING`,
-		uploadID, kind, email, creatorArg, time.Now().Unix()); err != nil {
-		return nil, err
+		uploadID, kind, email, creatorArg, time.Now().Unix())
+	if err != nil {
+		return nil, false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, false, err
 	}
 	var g models.UploadGrant
 	var creator sql.NullInt64
 	var created int64
-	err := s.QueryRowContext(ctx, `SELECT id,upload_id,kind,email,created_by_account_id,created_at FROM upload_grants WHERE upload_id=? AND kind=? AND email=?`,
+	err = s.QueryRowContext(ctx, `SELECT id,upload_id,kind,email,created_by_account_id,created_at FROM upload_grants WHERE upload_id=? AND kind=? AND email=?`,
 		uploadID, kind, email).Scan(&g.ID, &g.UploadID, &g.Kind, &g.Email, &creator, &created)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	g.CreatedByAccountID = creator.Int64
 	g.CreatedAt = time.Unix(created, 0)
-	return &g, nil
+	return &g, n == 1, nil
 }
 
 // RemoveUploadGrant deletes one grant and returns sql.ErrNoRows if none matched.

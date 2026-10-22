@@ -1007,3 +1007,23 @@ func TestDashboardHasEmptyPageMode(t *testing.T) {
 		t.Fatalf("status = %d, missing empty mode", rec.Code)
 	}
 }
+
+func TestDashboardSwitchToRestrictedNotifiesAllGrantees(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	fake := &fakeMailer{}
+	s.mailer = fake
+	configureSMTP(t, s)
+	u := newTwoVersionPage(t, s, "page", models.UploadVisibilityPublic)
+	grant(t, s, u, models.UploadGrantUser, "a@example.com")
+	grant(t, s, u, models.UploadGrantUser, "b@example.com")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"restricted"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?manage=page&ok=visibility_set&slug=page")
+	if fake.sends() != 1 || len(fake.msgs[0]) != 2 {
+		t.Fatalf("msgs = %+v", fake.msgs)
+	}
+	// Saving restricted again is not a switch.
+	dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"restricted"}}, true)
+	if fake.sends() != 1 {
+		t.Fatalf("sends = %d, want 1", fake.sends())
+	}
+}

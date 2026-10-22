@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -160,5 +161,60 @@ func TestDashCovGrantGuardsAndFailures(t *testing.T) {
 	rec = dashboardPost(t, s, adminID, "/dashboard/grants/page/remove", url.Values{"kind": {"user"}, "email": {"b@example.test"}}, true)
 	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err="+flashGrantFailed) {
 		t.Fatalf("remove failure Location = %q", loc)
+	}
+}
+
+func notifyFixture(t *testing.T, slug string) (*Server, *fakeMailer, *models.Upload) {
+	t.Helper()
+	s, _ := newHandlerTestServer(t)
+	fake := &fakeMailer{}
+	s.mailer = fake
+	configureSMTP(t, s)
+	return s, fake, restrictedPage(t, s, slug)
+}
+
+func TestDashboardGrantAddNotifies(t *testing.T) {
+	s, fake, u := notifyFixture(t, "page")
+	loc := grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "user", "bob@example.com", true)
+	wantLocation(t, loc, "/dashboard?email=bob%40example.com&manage=page&ok=grant_added&slug=page")
+	if fake.sends() != 1 || len(fake.msgs[0]) != 1 {
+		t.Fatalf("msgs = %+v", fake.msgs)
+	}
+	m := fake.msgs[0][0]
+	if m.To != "bob@example.com" || !strings.Contains(m.Body, s.baseURL+"/p/page") {
+		t.Fatalf("message = %+v", m)
+	}
+}
+
+func TestDashboardGrantAddExistingDoesNotNotify(t *testing.T) {
+	s, fake, u := notifyFixture(t, "page")
+	grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "user", "bob@example.com", true)
+	grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "user", "bob@example.com", true)
+	if fake.sends() != 1 {
+		t.Fatalf("sends = %d, want 1", fake.sends())
+	}
+}
+
+func TestDashboardGrantAddNonRestrictedDoesNotNotify(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	fake := &fakeMailer{}
+	s.mailer = fake
+	configureSMTP(t, s)
+	u := newTwoVersionPage(t, s, "page", models.UploadVisibilityPublic)
+	grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "user", "bob@example.com", true)
+	if fake.sends() != 0 {
+		t.Fatalf("sends = %d, want 0", fake.sends())
+	}
+}
+
+func TestDashboardGrantAddNotifyFailureFlash(t *testing.T) {
+	s, fake, u := notifyFixture(t, "page")
+	fake.err = errors.New("smtp down")
+	loc := grantPost(t, s, u.OwnerAccountID, "/dashboard/grants/page", "user", "bob@example.com", true)
+	if !strings.Contains(loc, "ok=grant_added") || !strings.Contains(loc, "err=share_notify_failed") {
+		t.Fatalf("Location = %q", loc)
+	}
+	if g := grantCount(t, s, u.ID); len(g) != 1 {
+		t.Fatalf("grants = %+v", g)
 	}
 }

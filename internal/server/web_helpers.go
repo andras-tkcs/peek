@@ -53,6 +53,7 @@ const (
 	flashEmailNotConfigured       = "email_not_configured"
 	flashEmailNoAddress           = "email_no_address"
 	flashEmailTestFailed          = "email_test_failed"
+	flashShareNotifyFailed        = "share_notify_failed"
 
 	flashInviteCreated = "invite_created"
 	flashInviteRevoked = "invite_revoked"
@@ -104,6 +105,7 @@ var flashMessages = map[string]string{
 	flashEmailNotConfigured:       "email is not configured: set an SMTP host and From address",
 	flashEmailNoAddress:           "your account has no email address",
 	flashEmailTestFailed:          "test email failed; see the server log",
+	flashShareNotifyFailed:        "saved, but the notification email could not be sent",
 	flashSessionsRevoked:          "other sessions signed out",
 	flashSessionsRevokeFailed:     "sign out failed",
 

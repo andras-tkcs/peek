@@ -72,7 +72,7 @@ func TestStoreMethodsFailOnClosedStore(t *testing.T) {
 		"ExpireCLILogin":              func() error { return s.ExpireCLILogin(ctx, 1) },
 		"AddComment":                  func() error { _, err := s.AddComment(ctx, 1, 1, "s", "t", "k", "a", "c", "b", 0); return err },
 		"ListComments":                func() error { _, err := s.ListComments(ctx, 1, 0); return err },
-		"AddUploadGrant":              func() error { _, err := s.AddUploadGrant(ctx, 1, "user", "a@x.test", 0); return err },
+		"AddUploadGrant":              func() error { _, _, err := s.AddUploadGrant(ctx, 1, "user", "a@x.test", 0); return err },
 		"RemoveUploadGrant":           func() error { return s.RemoveUploadGrant(ctx, 1, "user", "a@x.test") },
 		"ListUploadGrants":            func() error { _, err := s.ListUploadGrants(ctx, 1); return err },
 		"ListUploadGrantsForUploads":  func() error { _, err := s.ListUploadGrantsForUploads(ctx, []int64{1}); return err },
