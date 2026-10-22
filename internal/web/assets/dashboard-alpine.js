@@ -39,6 +39,7 @@
       fileName: "",
       fileSizeLabel: "",
       html: "",
+      name: "",
 
       setSelectedFile(file) {
         if (!file) {
@@ -59,6 +60,7 @@
       },
 
       canUpload() {
+        if (this.mode === "empty") return this.name.trim() !== "";
         if (this.mode === "paste") return this.html.trim().length > 0;
         return this.fileName !== "";
       },

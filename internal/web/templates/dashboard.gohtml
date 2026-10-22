@@ -43,6 +43,9 @@
         <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="mode === 'paste' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
           <input type="radio" name="mode" value="paste" x-model="mode" class="sr-only"> Paste HTML
         </label>
+        <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="mode === 'empty' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
+          <input type="radio" name="mode" value="empty" x-model="mode" class="sr-only"> Empty page
+        </label>
       </div>
       <div x-show="mode === 'file'">
         <label class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border p-6 transition hover:border-primary hover:text-secondary-foreground hover:bg-accent" :class="fileName ? 'border-primary/40 bg-accent text-secondary-foreground' : 'border-input bg-secondary text-muted-foreground'">
@@ -56,7 +59,7 @@
         <textarea name="html" x-model="html" placeholder="<!doctype html>&#10;<html>&#10;  <body>&#10;    <h1>Hello</h1>&#10;  </body>&#10;</html>" rows="8" class="w-full resize-y rounded-lg border border-input bg-secondary px-3.5 py-3 font-mono text-xs text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"></textarea>
       </div>
       <div class="flex gap-3">
-        <input type="text" name="name" placeholder="name (optional)" class="flex-1 h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+        <input type="text" name="name" x-model="name" :required="mode === 'empty'" placeholder="page name" class="flex-1 h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
       </div>
       <div class="inline-flex gap-0.5 self-start rounded-lg bg-muted p-0.5">
         <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="visibility === 'restricted' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
@@ -69,7 +72,7 @@
           <input type="radio" name="visibility" value="public" x-model="visibility" class="sr-only"> Public
         </label>
       </div>
-      <button type="submit" :disabled="!canUpload()" class="self-start h-10 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary">Upload &amp; get link</button>
+      <button type="submit" :disabled="!canUpload()" class="self-start h-10 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary" x-text="mode === 'empty' ? 'Create page' : 'Upload & get link'">Upload &amp; get link</button>
     </form>
   </div>
 

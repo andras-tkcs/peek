@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -130,6 +131,11 @@ func (s *Server) renderDashboard(w http.ResponseWriter, r *http.Request, owner *
 	s.renderHTML(w, status, webui.TemplateDashboard, dashData_)
 }
 
+// emptyPageHTML is the starter document of a page created empty from the dashboard.
+func emptyPageHTML(name string) string {
+	return "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>" + html.EscapeString(name) + "</title>\n</head>\n<body>\n</body>\n</html>\n"
+}
+
 func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 	owner, ok := s.webAuth(r)
 	if !ok {
@@ -159,13 +165,19 @@ func (s *Server) handleDashboardUpload(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 
 	var data []byte
-	if mode == "paste" {
-		html := strings.TrimSpace(r.FormValue("html"))
-		if html == "" {
+	if mode == "empty" {
+		if name == "" {
+			dashboardError(w, r, "upload_name_required")
+			return
+		}
+		data = []byte(emptyPageHTML(name))
+	} else if mode == "paste" {
+		pasted := strings.TrimSpace(r.FormValue("html"))
+		if pasted == "" {
 			dashboardError(w, r, flashNoHTML)
 			return
 		}
-		data = []byte(html)
+		data = []byte(pasted)
 		if name == "" {
 			name = "pasted"
 		}

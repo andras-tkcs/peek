@@ -906,3 +906,104 @@ func TestDashboardNoPasswordOption(t *testing.T) {
 		t.Fatalf("dashboard offers a password option")
 	}
 }
+
+func postDashboardUpload(t *testing.T, s *Server, accountID int64, fields map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fields["csrf"] = "csrf-token"
+	for k, v := range fields {
+		if err := mw.WriteField(k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/upload", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: makeWebSession(s.secret, strconv.FormatInt(accountID, 10), sessionTTL)})
+	req.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
+	rec := httptest.NewRecorder()
+	s.handleDashboardUpload(rec, req)
+	return rec
+}
+
+func TestDashboardCreateEmptyPage(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	account, err := s.store.CreateAccount(context.Background(), "user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := postDashboardUpload(t, s, account.ID, map[string]string{"mode": "empty", "name": "Q3 notes"})
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	list, err := s.store.ListUploadsByOwner(context.Background(), account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Name != "Q3 notes" || list[0].Visibility != models.UploadVisibilityRestricted {
+		t.Fatalf("uploads = %+v", list)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/dashboard?uploaded="+list[0].Slug {
+		t.Fatalf("Location = %q", loc)
+	}
+	versions, err := s.store.ListUploadVersions(context.Background(), list[0].ID)
+	if err != nil || len(versions) != 1 {
+		t.Fatalf("versions = %+v, err = %v", versions, err)
+	}
+	rc, err := s.storage.Open(context.Background(), versions[0].ObjectKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != emptyPageHTML("Q3 notes") {
+		t.Fatalf("object = %q", got)
+	}
+}
+
+func TestDashboardCreateEmptyPageRequiresName(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	account, err := s.store.CreateAccount(context.Background(), "user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := postDashboardUpload(t, s, account.ID, map[string]string{"mode": "empty", "name": "  "})
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=upload_name_required") {
+		t.Fatalf("Location = %q", loc)
+	}
+	list, err := s.store.ListUploadsByOwner(context.Background(), account.ID)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("uploads = %+v, err = %v", list, err)
+	}
+}
+
+func TestEmptyPageHTMLEscapesName(t *testing.T) {
+	if got := emptyPageHTML("<b>&"); !strings.Contains(got, "<title>&lt;b&gt;&amp;</title>") {
+		t.Fatalf("emptyPageHTML = %q", got)
+	}
+}
+
+func TestDashboardHasEmptyPageMode(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	account, err := s.store.CreateAccount(context.Background(), "user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodGet, "/dashboard", nil, asSession(s, account.ID))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `value="empty"`) {
+		t.Fatalf("status = %d, missing empty mode", rec.Code)
+	}
+}
