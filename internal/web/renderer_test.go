@@ -320,7 +320,7 @@ func TestDashboardRendersAccessDialogPerUpload(t *testing.T) {
 	body, err := renderer.Execute(TemplateDashboard, DashboardData{
 		CSRF:    "csrf",
 		User:    "Admin",
-		Uploads: []DashboardUpload{{Slug: "page", Name: "page.html", Visibility: "password"}},
+		Uploads: []DashboardUpload{{Slug: "page", Name: "page.html", Visibility: "restricted"}},
 	})
 	if err != nil {
 		t.Fatalf("execute dashboard: %v", err)
@@ -328,15 +328,16 @@ func TestDashboardRendersAccessDialogPerUpload(t *testing.T) {
 	html := string(body)
 	for _, want := range []string{
 		`action="/dashboard/visibility/page"`,
-		`x-data="{ vis: 'password' }"`,
+		`x-data="{ vis: 'restricted' }"`,
 		`x-ref="visibilityDialog"`,
 		`value="restricted" x-model="vis"`,
-		`autocomplete="new-password"`,
-		`:disabled="vis !== 'password'"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("dashboard access dialog missing %q: %s", want, html)
 		}
+	}
+	if strings.Contains(html, `value="password"`) {
+		t.Fatalf("dashboard offers a password option: %s", html)
 	}
 }
 

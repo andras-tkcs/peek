@@ -806,3 +806,103 @@ func TestDashCovStatsSparklineEdges(t *testing.T) {
 		t.Fatalf("summary = %q", got.Summary)
 	}
 }
+
+func dashboardBody(t *testing.T, s *Server, accountID int64) string {
+	t.Helper()
+	rec := doRequest(t, s, http.MethodGet, "/dashboard", nil, asSession(s, accountID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d: %s", rec.Code, rec.Body.String())
+	}
+	return rec.Body.String()
+}
+
+func TestDashboardRowShowsTitleOnly(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "title-only")
+	body := dashboardBody(t, s, u.OwnerAccountID)
+	if !strings.Contains(body, `href="/p/title-only" target="_blank" title="page.html" class="min-w-0 truncate font-medium text-primary no-underline hover:underline">page.html</a>`) {
+		t.Fatalf("row does not show the name as the link: %s", body)
+	}
+	for _, bad := range []string{"peek-copy-button", ">/p/title-only<"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("dashboard still contains %q", bad)
+		}
+	}
+}
+
+func TestDashboardListsPagesSharedWithMe(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "shared-me")
+	bob := newViewer(t, s, "bob@example.com", "Bob", false)
+	grant(t, s, u, models.UploadGrantUser, "bob@example.com")
+	grant(t, s, u, models.UploadGrantUser, "carol@example.com")
+	body := dashboardBody(t, s, bob.ID)
+	if !strings.Contains(body, "Shared with you by Owner. View only") {
+		t.Fatalf("shared row missing: %s", body)
+	}
+	for _, bad := range []string{"/dashboard/delete/shared-me", "/dashboard/visibility/shared-me", "carol@example.com"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("viewer dashboard contains %q", bad)
+		}
+	}
+}
+
+func TestDashboardSharedViaGroup(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	s.groups = fakeGroups{members: map[string]bool{"team@example.com|bob@example.com": true}}
+	u := restrictedPage(t, s, "shared-group")
+	grant(t, s, u, models.UploadGrantGroup, "team@example.com")
+	bob := newViewer(t, s, "bob@example.com", "Bob", false)
+	eve := newViewer(t, s, "eve@example.com", "Eve", false)
+	if body := dashboardBody(t, s, bob.ID); !strings.Contains(body, "Shared with you by") {
+		t.Fatalf("group member does not see the page: %s", body)
+	}
+	if body := dashboardBody(t, s, eve.ID); strings.Contains(body, "Shared with you by") {
+		t.Fatalf("non-member sees the page: %s", body)
+	}
+}
+
+func TestDashboardSkipsNonRestrictedShares(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	signedIn := newTwoVersionPage(t, s, "shared-signed-in", models.UploadVisibilityRestricted)
+	public := newTwoVersionPage(t, s, "shared-public", models.UploadVisibilityRestricted)
+	bob := newViewer(t, s, "bob@example.com", "Bob", false)
+	grant(t, s, signedIn, models.UploadGrantUser, "bob@example.com")
+	grant(t, s, public, models.UploadGrantUser, "bob@example.com")
+	if err := s.store.SetUploadVisibility(context.Background(), signedIn.ID, models.UploadVisibilitySignedIn); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.SetUploadVisibility(context.Background(), public.ID, models.UploadVisibilityPublic); err != nil {
+		t.Fatal(err)
+	}
+	body := dashboardBody(t, s, bob.ID)
+	for _, bad := range []string{"shared-signed-in", "shared-public", "Shared with you by"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("dashboard contains %q: %s", bad, body)
+		}
+	}
+}
+
+func TestDashboardAdminRoleIcon(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	restrictedPage(t, s, "admin-other")
+	admin := newViewer(t, s, "admin@example.test", "Admin", true)
+	mine := restrictedPage(t, s, "admin-mine")
+	if _, err := s.store.ExecContext(context.Background(), `UPDATE uploads SET owner_account_id=? WHERE id=?`, admin.ID, mine.ID); err != nil {
+		t.Fatal(err)
+	}
+	body := dashboardBody(t, s, admin.ID)
+	for _, want := range []string{"You can edit it as an admin", "You own this page and can edit it"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("admin dashboard missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestDashboardNoPasswordOption(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "no-password")
+	if body := dashboardBody(t, s, u.OwnerAccountID); strings.Contains(body, `value="password"`) {
+		t.Fatalf("dashboard offers a password option")
+	}
+}

@@ -50,3 +50,42 @@ func (s *Server) accountCanViewRestricted(ctx context.Context, a *models.Account
 	}
 	return false
 }
+
+// maxSharedGroupChecks bounds the group lookups one dashboard render makes.
+const maxSharedGroupChecks = 25
+
+// sharedWithAccount returns the restricted uploads owned by someone else that a
+// may view through a user grant or a group grant.
+func (s *Server) sharedWithAccount(ctx context.Context, a *models.Account) ([]models.Upload, error) {
+	email := strings.ToLower(strings.TrimSpace(a.Email))
+	if email == "" {
+		return nil, nil
+	}
+	var memberGroups []string
+	if s.groups != nil {
+		groups, err := s.store.ListRestrictedGroupGrantEmails(ctx, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		if len(groups) > maxSharedGroupChecks {
+			slog.Warn("shared-with-me group check limit reached", "groups", len(groups))
+			groups = groups[:maxSharedGroupChecks]
+		}
+		for _, g := range groups {
+			ok, err := s.groups.IsMember(ctx, g, email)
+			if err != nil {
+				slog.Warn("group membership check failed", "group", g, "err", err)
+				continue
+			}
+			if ok {
+				memberGroups = append(memberGroups, g)
+			}
+		}
+	}
+	list, err := s.store.ListUploadsSharedWith(ctx, email, memberGroups, a.ID)
+	if err != nil {
+		slog.Error("dashboard shared list failed", "account_id", a.ID, "err", err)
+		return nil, err
+	}
+	return list, nil
+}

@@ -109,3 +109,45 @@ func (s *Store) ListUploadGrantsForUploads(ctx context.Context, uploadIDs []int6
 	}
 	return out, nil
 }
+
+// ListRestrictedGroupGrantEmails returns the distinct group emails granted on
+// restricted uploads not owned by excludeOwnerID, sorted.
+func (s *Store) ListRestrictedGroupGrantEmails(ctx context.Context, excludeOwnerID int64) ([]string, error) {
+	rows, err := s.QueryContext(ctx, `SELECT DISTINCT g.email FROM upload_grants g JOIN uploads u ON u.id=g.upload_id
+		WHERE g.kind='group' AND u.visibility='restricted' AND u.owner_account_id<>? ORDER BY g.email`, excludeOwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, err
+		}
+		out = append(out, email)
+	}
+	return out, rows.Err()
+}
+
+// ListUploadsSharedWith returns restricted uploads not owned by excludeOwnerID
+// that have a user grant for userEmail or a group grant for one of groupEmails,
+// newest first. userEmail and groupEmails are compared lowercased.
+func (s *Store) ListUploadsSharedWith(ctx context.Context, userEmail string, groupEmails []string, excludeOwnerID int64) ([]models.Upload, error) {
+	args := []any{excludeOwnerID, normalizeGrantEmail(userEmail)}
+	match := `(g.kind='user' AND g.email=?)`
+	if len(groupEmails) > 0 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(groupEmails)), ",")
+		match += ` OR (g.kind='group' AND g.email IN (` + placeholders + `))`
+		for _, e := range groupEmails {
+			args = append(args, normalizeGrantEmail(e))
+		}
+	}
+	rows, err := s.QueryContext(ctx, uploadSelect+` WHERE u.visibility='restricted' AND u.owner_account_id<>?
+		AND EXISTS (SELECT 1 FROM upload_grants g WHERE g.upload_id=u.id AND (`+match+`))
+		ORDER BY u.created_at DESC, u.id DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	return scanUploads(rows)
+}
