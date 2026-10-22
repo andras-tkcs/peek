@@ -4,7 +4,6 @@ import "time"
 
 const (
 	UploadVisibilityPublic   = "public"
-	UploadVisibilityPassword = "password"
 	UploadVisibilitySignedIn = "signed-in"
 
 	// LegacyVisibilityPrivate is the former name of UploadVisibilitySignedIn. It is
@@ -109,7 +108,6 @@ type Upload struct {
 	Name           string
 	Size           int64
 	Visibility     string
-	PasswordHash   string // "" => no password
 	CreatedAt      time.Time
 	LatestVersion  int
 }

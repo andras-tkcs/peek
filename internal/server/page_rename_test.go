@@ -8,7 +8,7 @@ import (
 
 func TestRenamedPageRedirects(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "old", "public", "")
+	u := newTwoVersionPage(t, s, "old", "public")
 	if err := s.store.RenameUpload(context.Background(), u.ID, "new", "New"); err != nil {
 		t.Fatal(err)
 	}

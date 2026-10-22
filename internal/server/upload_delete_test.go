@@ -9,7 +9,7 @@ import (
 func TestSetCovDeleteUploadFallsBackToSlugKeyWithoutVersions(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	ctx := context.Background()
-	u := newTwoVersionPage(t, s, "setcov-del", "public", "")
+	u := newTwoVersionPage(t, s, "setcov-del", "public")
 	versions, err := s.store.ListUploadVersions(ctx, u.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestSetCovDeleteUploadFallsBackToSlugKeyWithoutVersions(t *testing.T) {
 
 func TestSetCovDeleteUploadVersionListFailure(t *testing.T) {
 	s, store, _, adminID := newFaultServer(t)
-	u := newTwoVersionPage(t, s, "setcov-listfail", "public", "")
+	u := newTwoVersionPage(t, s, "setcov-listfail", "public")
 	_ = adminID
 	dropTable(t, store, "upload_versions")
 	if err := s.deleteUpload(context.Background(), *u); err == nil {
@@ -42,7 +42,7 @@ func TestSetCovDeleteUploadVersionListFailure(t *testing.T) {
 
 func TestSetCovDeleteUploadStorageFailure(t *testing.T) {
 	s, store, storage, _ := newFaultServer(t)
-	u := newTwoVersionPage(t, s, "setcov-storefail", "public", "")
+	u := newTwoVersionPage(t, s, "setcov-storefail", "public")
 	storage.deleteErr = errors.New("storage down")
 	err := s.deleteUpload(context.Background(), *u)
 	if err == nil {

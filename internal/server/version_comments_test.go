@@ -31,7 +31,7 @@ func listVersionComments(t *testing.T, s *Server, path string) []commentOut {
 
 func TestCommentsArePerVersion(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "cmtpage", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "cmtpage", models.UploadVisibilityPublic)
 	base := "/api/uploads/cmtpage/comments"
 
 	if got := postVersionComment(t, s, base+"?v=1", "on-one").StatusCode; got != http.StatusOK {
@@ -57,7 +57,7 @@ func TestCommentsArePerVersion(t *testing.T) {
 
 func TestCommentsUnknownVersion404(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "cmt404", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "cmt404", models.UploadVisibilityPublic)
 	base := "/api/uploads/cmt404/comments"
 	for _, v := range []string{"3", "0", "-1", "abc"} {
 		rec := doRequest(t, s, http.MethodGet, base+"?v="+v, nil)
@@ -72,7 +72,7 @@ func TestCommentsUnknownVersion404(t *testing.T) {
 
 func TestListVersionsAPI(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "verlist", models.UploadVisibilityPublic, "")
+	u := newTwoVersionPage(t, s, "verlist", models.UploadVisibilityPublic)
 	ctx := context.Background()
 	if err := s.store.CreateTokenForAccount(ctx, "ver-owner-token", u.OwnerAccountID, "owner"); err != nil {
 		t.Fatalf("owner token: %v", err)
@@ -106,7 +106,7 @@ func TestListVersionsAPI(t *testing.T) {
 
 func TestExportIncludesVersions(t *testing.T) {
 	s, adminToken := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "verexp", models.UploadVisibilityPublic, "")
+	newTwoVersionPage(t, s, "verexp", models.UploadVisibilityPublic)
 	if got := postVersionComment(t, s, "/api/uploads/verexp/comments?v=1", "old").StatusCode; got != http.StatusOK {
 		t.Fatalf("post = %d", got)
 	}

@@ -47,99 +47,26 @@ func (m *memoryStorage) Delete(_ context.Context, slug string) error {
 	return nil
 }
 
-func TestServiceRejectsInvalidPasswordBeforeStorageWrite(t *testing.T) {
+func TestCreateDefaultsToRestricted(t *testing.T) {
 	store, owner := serviceTestStore(t)
 	defer store.Close()
-	st := newMemoryStorage()
-	svc := Service{Repository: store, Storage: st, BaseURL: "http://localhost:7700"}
-
-	_, err := svc.Create(context.Background(), CreateInput{
-		OwnerAccountID: owner.AccountID,
-		OwnerTokenID:   owner.ID,
-		Name:           "page.html",
-		Password:       makeString('a', 73),
-		Data:           []byte("<!doctype html><html></html>"),
-	})
-	if err == nil {
-		t.Fatal("expected invalid password error")
-	}
-	var uploadErr *Error
-	if !errors.As(err, &uploadErr) {
-		t.Fatalf("error = %T %[1]v, want *uploads.Error", err)
-	}
-	if uploadErr.Kind != KindPasswordTooLong {
-		t.Fatalf("kind = %q, want %q", uploadErr.Kind, KindPasswordTooLong)
-	}
-	if len(st.saved) != 0 {
-		t.Fatalf("invalid password wrote storage object: %+v", st.saved)
-	}
-}
-
-func TestServiceDefaultsToPasswordVisibility(t *testing.T) {
-	store, owner := serviceTestStore(t)
-	defer store.Close()
-	st := newMemoryStorage()
-	svc := Service{Repository: store, Storage: st, BaseURL: "http://localhost:7700"}
-
-	_, err := svc.Create(context.Background(), CreateInput{
-		OwnerAccountID: owner.AccountID,
-		OwnerTokenID:   owner.ID,
-		Name:           "page.html",
-		Data:           []byte("<!doctype html><html></html>"),
-	})
-	if err == nil {
-		t.Fatal("expected missing password error")
-	}
-	var uploadErr *Error
-	if !errors.As(err, &uploadErr) || uploadErr.Kind != KindPasswordRequired {
-		t.Fatalf("error = %T %[1]v, want %q", err, KindPasswordRequired)
-	}
-	if len(st.saved) != 0 {
-		t.Fatalf("missing password wrote storage object: %+v", st.saved)
-	}
-}
-
-func TestServiceStoresPasswordHashOnlyForPasswordVisibility(t *testing.T) {
-	store, owner := serviceTestStore(t)
-	defer store.Close()
-	st := newMemoryStorage()
-	svc := Service{Repository: store, Storage: st, BaseURL: "http://localhost:7700"}
+	svc := Service{Repository: store, Storage: newMemoryStorage(), BaseURL: "http://localhost:7700"}
 
 	up, err := svc.Create(context.Background(), CreateInput{
 		OwnerAccountID: owner.AccountID,
 		OwnerTokenID:   owner.ID,
 		Name:           "page.html",
-		Password:       "secret",
 		Data:           []byte("<!doctype html><html></html>"),
 	})
 	if err != nil {
-		t.Fatalf("create password upload: %v", err)
+		t.Fatalf("create with default visibility: %v", err)
 	}
-	if up.Visibility != "password" {
-		t.Fatalf("result visibility = %q", up.Visibility)
+	if up.Visibility != models.UploadVisibilityRestricted {
+		t.Fatalf("result visibility = %q, want restricted", up.Visibility)
 	}
 	got, err := store.GetUpload(context.Background(), up.Slug)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Visibility != "password" || got.PasswordHash == "" {
-		t.Fatalf("password upload not stored correctly: %+v", got)
-	}
-
-	_, err = svc.Create(context.Background(), CreateInput{
-		OwnerAccountID: owner.AccountID,
-		OwnerTokenID:   owner.ID,
-		Name:           "public.html",
-		Visibility:     "public",
-		Password:       "secret",
-		Data:           []byte("<!doctype html><html></html>"),
-	})
-	if err == nil {
-		t.Fatal("expected public upload with password to fail")
-	}
-	var uploadErr *Error
-	if !errors.As(err, &uploadErr) || uploadErr.Kind != KindPasswordNotAllowed {
-		t.Fatalf("error = %T %[1]v, want %q", err, KindPasswordNotAllowed)
+	if err != nil || got.Visibility != models.UploadVisibilityRestricted {
+		t.Fatalf("stored upload = %+v, err = %v", got, err)
 	}
 }
 
@@ -314,7 +241,7 @@ func TestAddVersionCleansUpObjectOnRepositoryError(t *testing.T) {
 	}
 }
 
-func TestCreateAcceptsRestrictedWithoutPassword(t *testing.T) {
+func TestCreateAcceptsRestricted(t *testing.T) {
 	store, owner := serviceTestStore(t)
 	defer store.Close()
 	svc := Service{Repository: store, Storage: newMemoryStorage(), BaseURL: "http://localhost:7700"}
@@ -332,26 +259,8 @@ func TestCreateAcceptsRestrictedWithoutPassword(t *testing.T) {
 		t.Fatalf("result visibility = %q", up.Visibility)
 	}
 	got, err := store.GetUpload(context.Background(), up.Slug)
-	if err != nil || got.Visibility != "restricted" || got.PasswordHash != "" {
+	if err != nil || got.Visibility != "restricted" {
 		t.Fatalf("stored upload = %+v, err = %v", got, err)
-	}
-}
-
-func TestCreateRejectsRestrictedWithPassword(t *testing.T) {
-	store, owner := serviceTestStore(t)
-	defer store.Close()
-	svc := Service{Repository: store, Storage: newMemoryStorage(), BaseURL: "http://localhost:7700"}
-	_, err := svc.Create(context.Background(), CreateInput{
-		OwnerAccountID: owner.AccountID,
-		OwnerTokenID:   owner.ID,
-		Name:           "page.html",
-		Visibility:     "restricted",
-		Password:       "secret",
-		Data:           []byte("<!doctype html><html></html>"),
-	})
-	var uploadErr *Error
-	if !errors.As(err, &uploadErr) || uploadErr.Kind != KindPasswordNotAllowed {
-		t.Fatalf("error = %T %[1]v, want %q", err, KindPasswordNotAllowed)
 	}
 }
 

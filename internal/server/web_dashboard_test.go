@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/andras-tkcs/peek/internal/db"
 	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/uploadquota"
@@ -119,7 +117,7 @@ func TestDashboardStatsRendersVisitSparkline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	upload, err := store.GetUpload(context.Background(), "page")
@@ -174,7 +172,7 @@ func TestDashboardStatsReportsVisitQueryFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Exec(`DROP TABLE visits`); err != nil {
@@ -310,7 +308,7 @@ func TestDashboardIgnoresFreeTextFlash(t *testing.T) {
 
 func TestDashboardUploadedFlashShowsOwnUploadLink(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "page", models.UploadVisibilityPublic, "")
+	u := newTwoVersionPage(t, s, "page", models.UploadVisibilityPublic)
 
 	rec := doRequest(t, s, http.MethodGet, "/dashboard?uploaded=page", nil, asSession(s, u.OwnerAccountID))
 	if rec.Code != http.StatusOK {
@@ -428,7 +426,7 @@ func newDashboardDeleteTestServer(t *testing.T) (*Server, *db.Store, *dashboardD
 
 func seedDashboardDeleteUpload(t *testing.T, store *db.Store, ownerID int64) {
 	t.Helper()
-	if err := store.CreateUploadChecked(context.Background(), "page", ownerID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", ownerID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -481,20 +479,17 @@ func assertDashboardRedirect(t *testing.T, rec *httptest.ResponseRecorder, want 
 	}
 }
 
-func TestDashboardVisibilitySetsPasswordAndAudits(t *testing.T) {
+func TestDashboardVisibilityAudits(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
-	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}, "password": {"pw"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=password_updated&slug=page")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"signed-in"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?ok=visibility_set&slug=page")
 	got, err := s.store.GetUpload(context.Background(), "page")
 	if err != nil {
 		t.Fatalf("get upload: %v", err)
 	}
-	if got.Visibility != "password" {
-		t.Fatalf("visibility = %q, want password", got.Visibility)
-	}
-	if bcrypt.CompareHashAndPassword([]byte(got.PasswordHash), []byte("pw")) != nil {
-		t.Fatal("stored hash does not verify the password")
+	if got.Visibility != "signed-in" {
+		t.Fatalf("visibility = %q, want signed-in", got.Visibility)
 	}
 	entries, err := s.store.ListAuditLog(context.Background(), 10)
 	if err != nil {
@@ -502,7 +497,7 @@ func TestDashboardVisibilitySetsPasswordAndAudits(t *testing.T) {
 	}
 	found := false
 	for _, e := range entries {
-		if e.Action == "upload.visibility.set" && e.Detail == "slug=page visibility=password password=updated" {
+		if e.Action == "upload.visibility.set" && e.Detail == "slug=page visibility=signed-in" {
 			found = true
 		}
 	}
@@ -520,16 +515,16 @@ func TestDashboardVisibilityMakesPublic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get upload: %v", err)
 	}
-	if got.Visibility != "public" || got.PasswordHash != "" {
-		t.Fatalf("visibility = %q hash = %q, want public and empty", got.Visibility, got.PasswordHash)
+	if got.Visibility != "public" {
+		t.Fatalf("visibility = %q, want public", got.Visibility)
 	}
 }
 
-func TestDashboardVisibilityRejectsPasswordWithoutValue(t *testing.T) {
+func TestDashboardVisibilityRejectsPassword(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
-	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=upload_password_required")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}, "password": {"pw"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err=upload_invalid_visibility")
 	assertVisibilityUnchanged(t, s, "page")
 }
 
@@ -566,7 +561,7 @@ func assertVisibilityUnchanged(t *testing.T, s *Server, slug string) {
 
 func TestDashboardVisibilityRestrictedReopensDialog(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "page", "public", "")
+	u := newTwoVersionPage(t, s, "page", "public")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"restricted"}}, true)
 	assertDashboardRedirect(t, rec, "/dashboard?manage=page&ok=visibility_set&slug=page")
 }
@@ -603,7 +598,7 @@ func TestDashboardListsGrantsInAccessDialog(t *testing.T) {
 // dashCovUpload seeds an upload owned by ownerID on s.
 func dashCovUpload(t *testing.T, s *Server, slug string, ownerID int64) {
 	t.Helper()
-	if err := s.store.CreateUploadChecked(context.Background(), slug, ownerID, 0, slug+".html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), slug, ownerID, 0, slug+".html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 }

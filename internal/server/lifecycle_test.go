@@ -171,7 +171,7 @@ func newRetentionCleanupTestServer(t *testing.T) (*Server, *db.Store, *retention
 
 func seedExpiredRetentionUpload(t *testing.T, store *db.Store, ownerID int64, slug string) {
 	t.Helper()
-	if err := store.CreateUploadChecked(context.Background(), slug, ownerID, 0, slug+".html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), slug, ownerID, 0, slug+".html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	createdAt := time.Now().Add(-48 * time.Hour).Unix()
@@ -186,7 +186,7 @@ func seedExpiredRetentionUpload(t *testing.T, store *db.Store, ownerID int64, sl
 func TestRetentionPrunesOldVersionsButKeepsLatest(t *testing.T) {
 	ctx := context.Background()
 	s, store, storage, ownerID := newRetentionCleanupTestServer(t)
-	if err := store.CreateUploadChecked(ctx, "versioned", ownerID, 0, "versioned", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(ctx, "versioned", ownerID, 0, "versioned", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	u, err := store.GetUpload(ctx, "versioned")
@@ -312,7 +312,7 @@ func TestPageCovCleanupExpiredListFailure(t *testing.T) {
 func pageCovPrunableUpload(t *testing.T, store *db.Store, ownerID int64) (uploadID int64) {
 	t.Helper()
 	ctx := context.Background()
-	if err := store.CreateUploadChecked(ctx, "versioned", ownerID, 0, "versioned", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(ctx, "versioned", ownerID, 0, "versioned", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	u, err := store.GetUpload(ctx, "versioned")

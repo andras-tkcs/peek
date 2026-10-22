@@ -18,7 +18,7 @@ func seedVersionUpload(t *testing.T, s *Store, email, slug string, size int64) (
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateUploadChecked(ctx, slug, acct.ID, 0, slug+".html", size, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(ctx, slug, acct.ID, 0, slug+".html", size, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	u, err := s.GetUpload(ctx, slug)
