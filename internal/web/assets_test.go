@@ -217,7 +217,7 @@ func TestParentAppReadsViewerConfigFromDataset(t *testing.T) {
 		"init()",
 		"document.body.dataset",
 		"this.slug = dataset.slug",
-		`this.visibility = dataset.visibility || "password"`,
+		`this.visibility = dataset.visibility || "restricted"`,
 		"if (!this.slug) return;",
 	} {
 		if !strings.Contains(src, want) {

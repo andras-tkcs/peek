@@ -113,6 +113,7 @@
         <button type="button" class="peek-settings-tab" :class="{ 'peek-settings-tab-active': settingsTab === 'auth' }" x-on:click="settingsTab = 'auth'" role="tab" :aria-selected="settingsTab === 'auth'">Auth</button>
         <button type="button" class="peek-settings-tab" :class="{ 'peek-settings-tab-active': settingsTab === 'storage' }" x-on:click="settingsTab = 'storage'" role="tab" :aria-selected="settingsTab === 'storage'">Storage</button>
         <button type="button" class="peek-settings-tab" :class="{ 'peek-settings-tab-active': settingsTab === 'limits' }" x-on:click="settingsTab = 'limits'" role="tab" :aria-selected="settingsTab === 'limits'">Limits</button>
+        <button type="button" class="peek-settings-tab" :class="{ 'peek-settings-tab-active': settingsTab === 'email' }" x-on:click="settingsTab = 'email'" role="tab" :aria-selected="settingsTab === 'email'">Email</button>
       </div>
 
       <div x-show="settingsTab === 'auth'" class="flex flex-col gap-4">
@@ -212,7 +213,53 @@
         {{end}}
       </div>
 
+      <div x-show="settingsTab === 'email'" x-cloak class="flex flex-col gap-4">
+        <div class="grid gap-3 md:grid-cols-2">
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.Host.Label}}</span>
+            <input type="text" name="{{.SettingsPanel.Email.Host.Key}}" value="{{.SettingsPanel.Email.Host.Value}}" placeholder="{{.SettingsPanel.Email.Host.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.Host.Description}}</span>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.Port.Label}}</span>
+            <input type="text" name="{{.SettingsPanel.Email.Port.Key}}" value="{{.SettingsPanel.Email.Port.Value}}" placeholder="{{.SettingsPanel.Email.Port.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.Port.Description}}</span>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.TLS.Label}}</span>
+            <select name="{{.SettingsPanel.Email.TLS.Key}}" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+              <option value="starttls"{{if eq .SettingsPanel.Email.TLSValue "starttls"}} selected{{end}}>starttls</option>
+              <option value="tls"{{if eq .SettingsPanel.Email.TLSValue "tls"}} selected{{end}}>tls</option>
+              <option value="none"{{if eq .SettingsPanel.Email.TLSValue "none"}} selected{{end}}>none</option>
+            </select>
+            <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.TLS.Description}}</span>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.Username.Label}}</span>
+            <input type="text" name="{{.SettingsPanel.Email.Username.Key}}" value="{{.SettingsPanel.Email.Username.Value}}" placeholder="{{.SettingsPanel.Email.Username.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.Username.Description}}</span>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.Password.Label}}</span>
+            <input type="password" name="{{.SettingsPanel.Email.Password.Key}}" value="{{.SettingsPanel.Email.Password.Value}}" placeholder="{{.SettingsPanel.Email.Password.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.Password.Description}}</span>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.From.Label}}</span>
+            <input type="text" name="{{.SettingsPanel.Email.From.Key}}" value="{{.SettingsPanel.Email.From.Value}}" placeholder="{{.SettingsPanel.Email.From.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.From.Description}}</span>
+          </label>
+        </div>
+        <div class="flex flex-col gap-2">
+          <button type="submit" form="hn-email-test" class="peek-row-button self-start">Send test email</button>
+          <span class="text-xs text-muted-foreground">Sends a test email to your own address using the saved settings. Save first.</span>
+        </div>
+      </div>
+
       <button type="submit" class="self-start h-10 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Save settings</button>
+    </form>
+    <form id="hn-email-test" method="POST" action="/dashboard/email/test" class="m-0">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
     </form>
   </div>
 </main>

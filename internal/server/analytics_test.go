@@ -26,7 +26,7 @@ func TestRecordVisitPersistsPrivacySafeAnalytics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	upload, err := store.GetUpload(context.Background(), "page")
@@ -107,7 +107,7 @@ func pageCovAnalyticsServer(t *testing.T) (*Server, *db.Store, int64) {
 	t.Helper()
 	s, store, _, adminID := newFaultServer(t)
 	s.visitQueue = make(chan visitEvent, 8)
-	if err := store.CreateUploadChecked(context.Background(), "page", adminID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", adminID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	return s, store, adminID

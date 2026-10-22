@@ -97,23 +97,6 @@ func verifyViewToken(secret, tok, slug, vid string) bool {
 	return hmac.Equal([]byte(sig), []byte(want))
 }
 
-// pageAuthSubject binds a password-gate session to the upload's current password
-// hash, so setting a new password (or leaving password visibility and coming back)
-// revokes every earlier unlock. bcrypt salts each hash, so even re-entering the same
-// password yields a new subject. The fingerprint is keyed with the server secret so
-// the cookie reveals nothing derived from the hash.
-func pageAuthSubject(secret, slug, passwordHash string) string {
-	return slug + ":" + hmacSHA256(secret, "page-auth:"+passwordHash)[:16]
-}
-
-func makePageAuthCookieValue(secret, slug, passwordHash string, ttl time.Duration) string {
-	return signToken(secret, pageAuthSubject(secret, slug, passwordHash), time.Now().Add(ttl).Unix())
-}
-
-func verifyPageAuthCookie(secret, val, slug, passwordHash string) bool {
-	return verifyToken(secret, val, pageAuthSubject(secret, slug, passwordHash))
-}
-
 // makeWebSession signs subject.exp for an authenticated dashboard session.
 // Dashboard sessions use account ids, so disabling the account revokes web
 // access without storing a bearer token in the cookie.
@@ -210,4 +193,5 @@ var secretSettingKeys = map[string]bool{
 	"oauth_google_client_secret": true,
 	"oauth_github_client_secret": true,
 	"oauth_oidc_client_secret":   true,
+	"smtp_password":              true,
 }

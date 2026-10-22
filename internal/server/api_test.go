@@ -91,7 +91,7 @@ func TestDisabledTokenCannotReadOwnedComments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get user token: %v", err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "owned-page", owner.AccountID, owner.ID, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "owned-page", owner.AccountID, owner.ID, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatalf("seed upload: %v", err)
 	}
 	upload, err := store.GetUpload(context.Background(), "owned-page")
@@ -323,10 +323,9 @@ func TestSetVisibilityAPIValidation(t *testing.T) {
 		status int
 		want   string
 	}{
-		{"password without value", `{"visibility":"password"}`, http.StatusBadRequest, "password visibility requires a password"},
-		{"password with public", `{"visibility":"public","password":"x"}`, http.StatusBadRequest, "password is only allowed with password visibility"},
-		{"unknown visibility", `{"visibility":"nope"}`, http.StatusBadRequest, "visibility must be public, password, signed-in, or restricted"},
-		{"password too long", `{"visibility":"password","password":"` + strings.Repeat("a", 73) + `"}`, http.StatusBadRequest, "password must be 72 characters or fewer"},
+		{"password visibility", `{"visibility":"password"}`, http.StatusBadRequest, "visibility must be public, signed-in, or restricted"},
+		{"password field with public", `{"visibility":"public","password":"x"}`, http.StatusBadRequest, "password-protected pages were removed; use restricted visibility and grants"},
+		{"unknown visibility", `{"visibility":"nope"}`, http.StatusBadRequest, "visibility must be public, signed-in, or restricted"},
 		{"restricted", `{"visibility":"restricted"}`, http.StatusOK, `"visibility":"restricted"`},
 		{"signed-in", `{"visibility":"signed-in"}`, http.StatusOK, `"visibility":"signed-in"`},
 		{"legacy private alias", `{"visibility":"private"}`, http.StatusOK, `"visibility":"signed-in"`},

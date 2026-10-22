@@ -15,7 +15,6 @@ const (
 	TemplateAdmin         = "admin"
 	TemplateStats         = "stats"
 	TemplatePage          = "page"
-	TemplateGate          = "gate"
 	TemplateIndex         = "index"
 	TemplateError         = "error"
 	TemplateCLILogin      = "cli-login"
@@ -110,6 +109,10 @@ type DashboardUpload struct {
 	Visibility   string
 	CreatedHuman string
 	Grants       []DashboardGrant
+	// Role is "owner" (I own the page), "admin" (someone else owns it and I am an
+	// admin) or "viewer" (shared with me, view only). Empty renders as owner.
+	Role      string
+	OwnerName string
 }
 
 type DashboardGrant struct {
@@ -148,7 +151,15 @@ type SettingRow struct {
 type DashboardSettings struct {
 	Auth    AuthSettings
 	Storage StorageSettings
+	Email   EmailSettings
 	Limits  []LimitSetting
+}
+
+// EmailSettings are the SMTP rows of the Admin Email tab. TLSValue is the
+// stored TLS mode, starttls when blank.
+type EmailSettings struct {
+	Host, Port, TLS, Username, Password, From SettingRow
+	TLSValue                                  string
 }
 
 type AuthSettings struct {
@@ -266,12 +277,6 @@ type PageData struct {
 	Visibility    string
 	Version       int
 	LatestVersion int
-}
-
-type GateData struct {
-	Slug   string
-	Action string
-	Error  bool
 }
 
 type IndexData struct {

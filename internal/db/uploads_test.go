@@ -26,15 +26,15 @@ func TestUploadQueriesAndMutations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// An empty visibility defaults to password; a token id is recorded.
-	if err := s.CreateUploadChecked(ctx, "one", owner.ID, tok.ID, "one.html", 100, "", "hash", uploadquota.Limits{}); err != nil {
+	// An empty visibility defaults to restricted; a token id is recorded.
+	if err := s.CreateUploadChecked(ctx, "one", owner.ID, tok.ID, "one.html", 100, "", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateUploadChecked(ctx, "two", owner.ID, 0, "two.html", 50, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(ctx, "two", owner.ID, 0, "two.html", 50, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	one, err := s.GetUpload(ctx, "one")
-	if err != nil || one.Visibility != models.UploadVisibilityPassword || one.OwnerTokenID != tok.ID || one.LatestVersion != 1 {
+	if err != nil || one.Visibility != models.UploadVisibilityRestricted || one.OwnerTokenID != tok.ID || one.LatestVersion != 1 {
 		t.Fatalf("upload one = %+v, %v", one, err)
 	}
 	byID, err := s.GetUploadByID(ctx, one.ID)
@@ -72,13 +72,13 @@ func TestUploadQueriesAndMutations(t *testing.T) {
 		t.Fatalf("UploadSlugExists missing = %v, %v", exists, err)
 	}
 
-	if err := s.SetUploadVisibility(ctx, one.ID, "public", ""); err != nil {
+	if err := s.SetUploadVisibility(ctx, one.ID, "public"); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.GetUploadByID(ctx, one.ID); got.Visibility != "public" || got.PasswordHash != "" {
+	if got, _ := s.GetUploadByID(ctx, one.ID); got.Visibility != "public" {
 		t.Fatalf("after visibility = %+v", got)
 	}
-	if err := s.SetUploadVisibility(ctx, one.ID+100, "public", ""); !errors.Is(err, sql.ErrNoRows) {
+	if err := s.SetUploadVisibility(ctx, one.ID+100, "public"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("visibility unknown err = %v", err)
 	}
 	if err := s.DeleteUpload(ctx, one.ID); err != nil {
@@ -95,7 +95,7 @@ func TestCreateUploadCheckedQuotas(t *testing.T) {
 	t.Cleanup(func() { s.Close() })
 	owner, _ := s.CreateAccount(ctx, "o@example.test", "o", false)
 	create := func(slug string, size int64, lim uploadquota.Limits) error {
-		return s.CreateUploadChecked(ctx, slug, owner.ID, 0, slug+".html", size, "public", "", lim)
+		return s.CreateUploadChecked(ctx, slug, owner.ID, 0, slug+".html", size, "public", lim)
 	}
 	if err := create("a", 60, uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
@@ -125,7 +125,7 @@ func TestCreateUploadCheckedFailsMidTransaction(t *testing.T) {
 			t.Cleanup(func() { s.Close() })
 			owner, _ := s.CreateAccount(ctx, "o@example.test", "o", false)
 			failOn(t, s, table, "INSERT")
-			wantErr(t, "CreateUploadChecked", s.CreateUploadChecked(ctx, "x", owner.ID, 0, "x.html", 1, "public", "", uploadquota.Limits{}))
+			wantErr(t, "CreateUploadChecked", s.CreateUploadChecked(ctx, "x", owner.ID, 0, "x.html", 1, "public", uploadquota.Limits{}))
 			if n, _ := s.CountUploads(ctx); n != 0 {
 				t.Fatalf("upload row survived the failed transaction: %d", n)
 			}
@@ -138,7 +138,7 @@ func TestUploadScanErrors(t *testing.T) {
 	s := openTestStore(t)
 	t.Cleanup(func() { s.Close() })
 	owner, _ := s.CreateAccount(ctx, "o@example.test", "o", false)
-	if err := s.CreateUploadChecked(ctx, "x", owner.ID, 0, "x.html", 1, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(ctx, "x", owner.ID, 0, "x.html", 1, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	corruptInt(t, s, "uploads", "created_at")

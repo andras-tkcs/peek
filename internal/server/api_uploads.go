@@ -28,6 +28,8 @@ const (
 	uploadBodyRawHTML
 )
 
+const passwordRemovedMessage = "password-protected pages were removed; use restricted visibility and grants"
+
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	owner, ok := requireAPIToken(w, r)
 	if !ok {
@@ -47,7 +49,6 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		data       []byte
 		name       string
 		visibility string
-		password   string
 		slug       string
 	)
 
@@ -56,8 +57,11 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusBadRequest, "file too large or invalid form")
 			return
 		}
+		if strings.TrimSpace(r.FormValue("password")) != "" {
+			jsonError(w, http.StatusBadRequest, passwordRemovedMessage)
+			return
+		}
 		visibility = strings.TrimSpace(r.FormValue("visibility"))
-		password = strings.TrimSpace(r.FormValue("password"))
 		slug = strings.TrimSpace(r.FormValue("slug"))
 		file, header, err := r.FormFile("file")
 		if err != nil {
@@ -73,10 +77,6 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		name = header.Filename
 	} else {
 		visibility = strings.TrimSpace(r.URL.Query().Get("visibility"))
-		if visibility == models.UploadVisibilityPassword {
-			jsonError(w, http.StatusBadRequest, "password visibility requires multipart upload")
-			return
-		}
 		slug = strings.TrimSpace(r.URL.Query().Get("slug"))
 		name = r.URL.Query().Get("filename")
 		if name == "" {
@@ -91,7 +91,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if slug != "" {
-		s.handleUploadVersion(w, r, owner, slug, visibility, password, data)
+		s.handleUploadVersion(w, r, owner, slug, visibility, data)
 		return
 	}
 
@@ -100,7 +100,6 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		OwnerTokenID:   owner.ID,
 		Name:           name,
 		Visibility:     visibility,
-		Password:       password,
 		Data:           data,
 		Limits:         s.uploadLimits(r.Context()),
 	})
@@ -115,9 +114,9 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, uploadResp{Slug: up.Slug, URL: up.URL, Visibility: up.Visibility, Version: up.Version, VersionURL: up.URL + "/v/" + strconv.Itoa(up.Version)})
 }
 
-func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, owner *models.Token, slug, visibility, password string, data []byte) {
-	if visibility != "" || password != "" {
-		jsonError(w, http.StatusBadRequest, "visibility and password cannot be set when uploading a new version; use the visibility endpoint")
+func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, owner *models.Token, slug, visibility string, data []byte) {
+	if visibility != "" {
+		jsonError(w, http.StatusBadRequest, "visibility cannot be set when uploading a new version; use the visibility endpoint")
 		return
 	}
 	u, err := s.store.GetUpload(r.Context(), slug)
@@ -252,25 +251,31 @@ func (s *Server) handleSetVisibility(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	change, err := uploads.PrepareVisibility(body.Visibility, body.Password)
+	if strings.TrimSpace(body.Password) != "" {
+		jsonError(w, http.StatusBadRequest, passwordRemovedMessage)
+		return
+	}
+	v, err := uploads.PrepareVisibility(body.Visibility)
 	if err != nil {
 		status, msg := uploadHTTPError(err)
 		jsonError(w, status, msg)
 		return
 	}
-	if err := s.store.SetUploadVisibility(r.Context(), u.ID, change.Visibility, change.PasswordHash); err != nil {
+	oldVisibility := u.Visibility
+	if err := s.store.SetUploadVisibility(r.Context(), u.ID, v); err != nil {
 		jsonError(w, http.StatusInternalServerError, "db failed")
 		return
 	}
-	s.auditRequest(r, owner.Name, "upload.visibility.set", visibilityAuditDetail(slug, change.Visibility))
-	jsonOK(w, map[string]any{"visibility": change.Visibility})
-}
-
-func visibilityAuditDetail(slug, visibility string) string {
-	if visibility == models.UploadVisibilityPassword {
-		return auditDetail("slug", slug, "visibility", visibility, "password", "updated")
+	s.auditRequest(r, owner.Name, "upload.visibility.set", auditDetail("slug", slug, "visibility", v))
+	sent := false
+	if oldVisibility != models.UploadVisibilityRestricted && v == models.UploadVisibilityRestricted {
+		if grants, err := s.store.ListUploadGrants(r.Context(), u.ID); err != nil {
+			slog.Error("share notification grant list failed", "slug", slug, "err", err)
+		} else {
+			sent, _ = s.notifyShare(r, owner.Name, owner.Email, u, grants)
+		}
 	}
-	return auditDetail("slug", slug, "visibility", visibility)
+	jsonOK(w, map[string]any{"visibility": v, "notified": sent})
 }
 
 func (s *Server) handleDeleteAllByOwner(w http.ResponseWriter, r *http.Request) {

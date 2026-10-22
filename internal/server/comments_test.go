@@ -22,7 +22,7 @@ func TestAddCommentLogsVisitorUpsertFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.store.Exec(`DROP TABLE visitors`); err != nil {
@@ -60,7 +60,7 @@ func TestAddCommentPersistsExplicitAnchorKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -84,7 +84,7 @@ func TestAddCommentRejectsInvalidAnchorKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,7 +109,7 @@ func TestPrivateUploadCommentsRequireActiveAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "private", owner.ID, 0, "private.html", 42, "signed-in", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -143,7 +143,7 @@ func accountCommentFixture(t *testing.T) (*Server, *models.Account, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	return s, account, accountToken(t, s, account, "owner-token")
@@ -326,7 +326,7 @@ func commentPageFixture(t *testing.T) (*Server, string) {
 	t.Helper()
 	s, _ := newHandlerTestServer(t)
 	owner := newViewer(t, s, "page-owner@example.test", "Page Owner", false)
-	if err := s.store.CreateUploadChecked(context.Background(), "page", owner.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), "page", owner.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	return s, "/api/uploads/page/comments"
@@ -415,7 +415,7 @@ func pageCovCommentPost(t *testing.T, s *Server, path, body string, opts ...func
 func TestPageCovListCommentsBranches(t *testing.T) {
 	s, token := newHandlerTestServer(t)
 	newAccountWithToken(t, s, "other@example.test", "other-token", false)
-	pageCovSeed(t, s, token, "page", "public", "", "<html></html>")
+	pageCovSeed(t, s, token, "page", "public", "<html></html>")
 
 	if rec := doRequest(t, s, http.MethodGet, "/api/uploads/missing/comments", nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("missing upload status = %d", rec.Code)
@@ -434,7 +434,7 @@ func TestPageCovListCommentsBranches(t *testing.T) {
 
 func TestPageCovAddCommentBranches(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "page", "public", "", "<html></html>")
+	pageCovSeed(t, s, token, "page", "public", "<html></html>")
 	path := "/api/uploads/page/comments"
 
 	if rec := pageCovCommentPost(t, s, "/api/uploads/missing/comments", `{"body":"x"}`); rec.Code != http.StatusNotFound {
@@ -464,7 +464,7 @@ func TestPageCovAddCommentBranches(t *testing.T) {
 
 func TestPageCovAddCommentStoreFailures(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "page", "public", "", "<html></html>")
+	pageCovSeed(t, s, token, "page", "public", "<html></html>")
 	path := "/api/uploads/page/comments"
 
 	// The row is inserted but reading it back fails: a text value in an integer column.
@@ -485,7 +485,7 @@ func TestPageCovAddCommentStoreFailures(t *testing.T) {
 
 func TestPageCovAccountCommentBranches(t *testing.T) {
 	s, token := newHandlerTestServer(t)
-	pageCovSeed(t, s, token, "page", "public", "", "<html></html>")
+	pageCovSeed(t, s, token, "page", "public", "<html></html>")
 	path := "/api/uploads/page/account-comments"
 
 	if rec := pageCovCommentPost(t, s, path, `{`, asBearer(token)); rec.Code != http.StatusBadRequest {

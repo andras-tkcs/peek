@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/andras-tkcs/peek/internal/db"
 	"github.com/andras-tkcs/peek/internal/models"
 	"github.com/andras-tkcs/peek/internal/uploadquota"
@@ -119,7 +117,7 @@ func TestDashboardStatsRendersVisitSparkline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	upload, err := store.GetUpload(context.Background(), "page")
@@ -174,7 +172,7 @@ func TestDashboardStatsReportsVisitQueryFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", account.ID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Exec(`DROP TABLE visits`); err != nil {
@@ -310,7 +308,7 @@ func TestDashboardIgnoresFreeTextFlash(t *testing.T) {
 
 func TestDashboardUploadedFlashShowsOwnUploadLink(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "page", models.UploadVisibilityPublic, "")
+	u := newTwoVersionPage(t, s, "page", models.UploadVisibilityPublic)
 
 	rec := doRequest(t, s, http.MethodGet, "/dashboard?uploaded=page", nil, asSession(s, u.OwnerAccountID))
 	if rec.Code != http.StatusOK {
@@ -428,7 +426,7 @@ func newDashboardDeleteTestServer(t *testing.T) (*Server, *db.Store, *dashboardD
 
 func seedDashboardDeleteUpload(t *testing.T, store *db.Store, ownerID int64) {
 	t.Helper()
-	if err := store.CreateUploadChecked(context.Background(), "page", ownerID, 0, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "page", ownerID, 0, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -481,20 +479,17 @@ func assertDashboardRedirect(t *testing.T, rec *httptest.ResponseRecorder, want 
 	}
 }
 
-func TestDashboardVisibilitySetsPasswordAndAudits(t *testing.T) {
+func TestDashboardVisibilityAudits(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
-	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}, "password": {"pw"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?ok=password_updated&slug=page")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"signed-in"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?ok=visibility_set&slug=page")
 	got, err := s.store.GetUpload(context.Background(), "page")
 	if err != nil {
 		t.Fatalf("get upload: %v", err)
 	}
-	if got.Visibility != "password" {
-		t.Fatalf("visibility = %q, want password", got.Visibility)
-	}
-	if bcrypt.CompareHashAndPassword([]byte(got.PasswordHash), []byte("pw")) != nil {
-		t.Fatal("stored hash does not verify the password")
+	if got.Visibility != "signed-in" {
+		t.Fatalf("visibility = %q, want signed-in", got.Visibility)
 	}
 	entries, err := s.store.ListAuditLog(context.Background(), 10)
 	if err != nil {
@@ -502,7 +497,7 @@ func TestDashboardVisibilitySetsPasswordAndAudits(t *testing.T) {
 	}
 	found := false
 	for _, e := range entries {
-		if e.Action == "upload.visibility.set" && e.Detail == "slug=page visibility=password password=updated" {
+		if e.Action == "upload.visibility.set" && e.Detail == "slug=page visibility=signed-in" {
 			found = true
 		}
 	}
@@ -520,16 +515,16 @@ func TestDashboardVisibilityMakesPublic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get upload: %v", err)
 	}
-	if got.Visibility != "public" || got.PasswordHash != "" {
-		t.Fatalf("visibility = %q hash = %q, want public and empty", got.Visibility, got.PasswordHash)
+	if got.Visibility != "public" {
+		t.Fatalf("visibility = %q, want public", got.Visibility)
 	}
 }
 
-func TestDashboardVisibilityRejectsPasswordWithoutValue(t *testing.T) {
+func TestDashboardVisibilityRejectsPassword(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
 	u := restrictedPage(t, s, "page")
-	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}}, true)
-	assertDashboardRedirect(t, rec, "/dashboard?err=upload_password_required")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"password"}, "password": {"pw"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?err=upload_invalid_visibility")
 	assertVisibilityUnchanged(t, s, "page")
 }
 
@@ -566,7 +561,7 @@ func assertVisibilityUnchanged(t *testing.T, s *Server, slug string) {
 
 func TestDashboardVisibilityRestrictedReopensDialog(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "page", "public", "")
+	u := newTwoVersionPage(t, s, "page", "public")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"restricted"}}, true)
 	assertDashboardRedirect(t, rec, "/dashboard?manage=page&ok=visibility_set&slug=page")
 }
@@ -603,7 +598,7 @@ func TestDashboardListsGrantsInAccessDialog(t *testing.T) {
 // dashCovUpload seeds an upload owned by ownerID on s.
 func dashCovUpload(t *testing.T, s *Server, slug string, ownerID int64) {
 	t.Helper()
-	if err := s.store.CreateUploadChecked(context.Background(), slug, ownerID, 0, slug+".html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.store.CreateUploadChecked(context.Background(), slug, ownerID, 0, slug+".html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -809,5 +804,226 @@ func TestDashCovStatsSparklineEdges(t *testing.T) {
 	got := statsSparkline([]bucket{{Count: 1}})
 	if got.Summary != "1 visit last 7 days" {
 		t.Fatalf("summary = %q", got.Summary)
+	}
+}
+
+func dashboardBody(t *testing.T, s *Server, accountID int64) string {
+	t.Helper()
+	rec := doRequest(t, s, http.MethodGet, "/dashboard", nil, asSession(s, accountID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d: %s", rec.Code, rec.Body.String())
+	}
+	return rec.Body.String()
+}
+
+func TestDashboardRowShowsTitleOnly(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "title-only")
+	body := dashboardBody(t, s, u.OwnerAccountID)
+	if !strings.Contains(body, `href="/p/title-only" target="_blank" title="page.html" class="min-w-0 truncate font-medium text-primary no-underline hover:underline">page.html</a>`) {
+		t.Fatalf("row does not show the name as the link: %s", body)
+	}
+	for _, bad := range []string{"peek-copy-button", ">/p/title-only<"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("dashboard still contains %q", bad)
+		}
+	}
+}
+
+func TestDashboardListsPagesSharedWithMe(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "shared-me")
+	bob := newViewer(t, s, "bob@example.com", "Bob", false)
+	grant(t, s, u, models.UploadGrantUser, "bob@example.com")
+	grant(t, s, u, models.UploadGrantUser, "carol@example.com")
+	body := dashboardBody(t, s, bob.ID)
+	if !strings.Contains(body, "Shared with you by Owner. View only") {
+		t.Fatalf("shared row missing: %s", body)
+	}
+	for _, bad := range []string{"/dashboard/delete/shared-me", "/dashboard/visibility/shared-me", "carol@example.com"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("viewer dashboard contains %q", bad)
+		}
+	}
+}
+
+func TestDashboardSharedViaGroup(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	s.groups = fakeGroups{members: map[string]bool{"team@example.com|bob@example.com": true}}
+	u := restrictedPage(t, s, "shared-group")
+	grant(t, s, u, models.UploadGrantGroup, "team@example.com")
+	bob := newViewer(t, s, "bob@example.com", "Bob", false)
+	eve := newViewer(t, s, "eve@example.com", "Eve", false)
+	if body := dashboardBody(t, s, bob.ID); !strings.Contains(body, "Shared with you by") {
+		t.Fatalf("group member does not see the page: %s", body)
+	}
+	if body := dashboardBody(t, s, eve.ID); strings.Contains(body, "Shared with you by") {
+		t.Fatalf("non-member sees the page: %s", body)
+	}
+}
+
+func TestDashboardSkipsNonRestrictedShares(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	signedIn := newTwoVersionPage(t, s, "shared-signed-in", models.UploadVisibilityRestricted)
+	public := newTwoVersionPage(t, s, "shared-public", models.UploadVisibilityRestricted)
+	bob := newViewer(t, s, "bob@example.com", "Bob", false)
+	grant(t, s, signedIn, models.UploadGrantUser, "bob@example.com")
+	grant(t, s, public, models.UploadGrantUser, "bob@example.com")
+	if err := s.store.SetUploadVisibility(context.Background(), signedIn.ID, models.UploadVisibilitySignedIn); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.SetUploadVisibility(context.Background(), public.ID, models.UploadVisibilityPublic); err != nil {
+		t.Fatal(err)
+	}
+	body := dashboardBody(t, s, bob.ID)
+	for _, bad := range []string{"shared-signed-in", "shared-public", "Shared with you by"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("dashboard contains %q: %s", bad, body)
+		}
+	}
+}
+
+func TestDashboardAdminRoleIcon(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	restrictedPage(t, s, "admin-other")
+	admin := newViewer(t, s, "admin@example.test", "Admin", true)
+	mine := restrictedPage(t, s, "admin-mine")
+	if _, err := s.store.ExecContext(context.Background(), `UPDATE uploads SET owner_account_id=? WHERE id=?`, admin.ID, mine.ID); err != nil {
+		t.Fatal(err)
+	}
+	body := dashboardBody(t, s, admin.ID)
+	for _, want := range []string{"You can edit it as an admin", "You own this page and can edit it"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("admin dashboard missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestDashboardNoPasswordOption(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	u := restrictedPage(t, s, "no-password")
+	if body := dashboardBody(t, s, u.OwnerAccountID); strings.Contains(body, `value="password"`) {
+		t.Fatalf("dashboard offers a password option")
+	}
+}
+
+func postDashboardUpload(t *testing.T, s *Server, accountID int64, fields map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fields["csrf"] = "csrf-token"
+	for k, v := range fields {
+		if err := mw.WriteField(k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/upload", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: makeWebSession(s.secret, strconv.FormatInt(accountID, 10), sessionTTL)})
+	req.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
+	rec := httptest.NewRecorder()
+	s.handleDashboardUpload(rec, req)
+	return rec
+}
+
+func TestDashboardCreateEmptyPage(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	account, err := s.store.CreateAccount(context.Background(), "user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := postDashboardUpload(t, s, account.ID, map[string]string{"mode": "empty", "name": "Q3 notes"})
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	list, err := s.store.ListUploadsByOwner(context.Background(), account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Name != "Q3 notes" || list[0].Visibility != models.UploadVisibilityRestricted {
+		t.Fatalf("uploads = %+v", list)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/dashboard?uploaded="+list[0].Slug {
+		t.Fatalf("Location = %q", loc)
+	}
+	versions, err := s.store.ListUploadVersions(context.Background(), list[0].ID)
+	if err != nil || len(versions) != 1 {
+		t.Fatalf("versions = %+v, err = %v", versions, err)
+	}
+	rc, err := s.storage.Open(context.Background(), versions[0].ObjectKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != emptyPageHTML("Q3 notes") {
+		t.Fatalf("object = %q", got)
+	}
+}
+
+func TestDashboardCreateEmptyPageRequiresName(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	account, err := s.store.CreateAccount(context.Background(), "user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := postDashboardUpload(t, s, account.ID, map[string]string{"mode": "empty", "name": "  "})
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=upload_name_required") {
+		t.Fatalf("Location = %q", loc)
+	}
+	list, err := s.store.ListUploadsByOwner(context.Background(), account.ID)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("uploads = %+v, err = %v", list, err)
+	}
+}
+
+func TestEmptyPageHTMLEscapesName(t *testing.T) {
+	if got := emptyPageHTML("<b>&"); !strings.Contains(got, "<title>&lt;b&gt;&amp;</title>") {
+		t.Fatalf("emptyPageHTML = %q", got)
+	}
+}
+
+func TestDashboardHasEmptyPageMode(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	account, err := s.store.CreateAccount(context.Background(), "user@example.test", "User", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodGet, "/dashboard", nil, asSession(s, account.ID))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `value="empty"`) {
+		t.Fatalf("status = %d, missing empty mode", rec.Code)
+	}
+}
+
+func TestDashboardSwitchToRestrictedNotifiesAllGrantees(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	fake := &fakeMailer{}
+	s.mailer = fake
+	configureSMTP(t, s)
+	u := newTwoVersionPage(t, s, "page", models.UploadVisibilityPublic)
+	grant(t, s, u, models.UploadGrantUser, "a@example.com")
+	grant(t, s, u, models.UploadGrantUser, "b@example.com")
+	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"restricted"}}, true)
+	assertDashboardRedirect(t, rec, "/dashboard?manage=page&ok=visibility_set&slug=page")
+	if fake.sends() != 1 || len(fake.msgs[0]) != 2 {
+		t.Fatalf("msgs = %+v", fake.msgs)
+	}
+	// Saving restricted again is not a switch.
+	dashboardPost(t, s, u.OwnerAccountID, "/dashboard/visibility/page", url.Values{"visibility": {"restricted"}}, true)
+	if fake.sends() != 1 {
+		t.Fatalf("sends = %d, want 1", fake.sends())
 	}
 }

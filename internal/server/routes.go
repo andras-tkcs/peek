@@ -36,9 +36,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Pages & assets.
 	mux.HandleFunc("GET /p/{slug}", s.handlePage)
-	mux.HandleFunc("POST /p/{slug}", s.rateLimit(s.passwordLimiter, s.handlePagePassword))
 	mux.HandleFunc("GET /p/{slug}/v/{n}", s.handlePageVersion)
-	mux.HandleFunc("POST /p/{slug}/v/{n}", s.rateLimit(s.passwordLimiter, s.handlePagePassword))
 	mux.HandleFunc("GET /raw/{slug}/v/{n}", s.handleRawVersion)
 	mux.HandleFunc("GET /bridge.js", s.handleBridge)
 	mux.HandleFunc("GET /app.js", s.handleApp)
@@ -86,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /dashboard/api-keys/{id}/revoke", s.handleDashboardAPIKeyRevoke)
 	mux.HandleFunc("POST /dashboard/sessions/revoke", s.handleDashboardSessionsRevoke)
 	mux.HandleFunc("POST /dashboard/settings", s.handleDashboardSettings)
+	mux.HandleFunc("POST /dashboard/email/test", s.handleDashboardEmailTest)
 	mux.HandleFunc("POST /dashboard/invites", s.handleDashboardCreateInvite)
 	mux.HandleFunc("POST /dashboard/invites/revoke/{id}", s.handleDashboardRevokeInvite)
 	mux.HandleFunc("POST /dashboard/users/{id}/admin", s.handleDashboardUserAdmin)

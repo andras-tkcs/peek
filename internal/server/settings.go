@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	netmail "net/mail"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/andras-tkcs/peek/internal/mail"
 	"github.com/andras-tkcs/peek/internal/objectstore"
 	webui "github.com/andras-tkcs/peek/internal/web"
 )
@@ -20,7 +22,7 @@ const maxDashboardMegabytes = int64(1<<63-1) / dashboardMegabyte
 var settingsMeta = map[string]settingsRow{
 	"auth_token_login_enabled":    {Label: "Access token login", Description: "Allow signing in to the web dashboard with an access token", IsBool: true},
 	authAllowedEmailDomainSetting: {Label: "Allowed email domain", Description: "Restrict human sign-in, CLI approval, and invites to this email domain (blank = any domain)"},
-	authGoogleOrgSignupSetting:    {Label: "Google org sign-in", Description: "Only Google sign-in for everyone in the allowed email domain. The first sign-in creates the account; no invite needed. Requires Google login and an allowed email domain.", IsBool: true},
+	authGoogleOrgSignupSetting:    {Label: "Google org sign-in", Description: "Only Google sign-in for everyone in the allowed email domain. The first sign-in creates the account. Requires Google login and an allowed email domain.", IsBool: true},
 	"max_upload":                  {Label: "Max upload size (bytes)", Description: "Maximum size per individual HTML file upload"},
 	"max_total_size":              {Label: "Max total storage (bytes)", Description: "Cumulative size limit across all uploads (0 = unlimited)"},
 	"retention_days":              {Label: "Retention (days)", Description: "Auto-delete uploads older than this many days (0 = off)"},
@@ -42,6 +44,12 @@ var settingsMeta = map[string]settingsRow{
 	"oauth_oidc_issuer_url":       {Label: "SSO issuer URL", Description: "OpenID Connect issuer URL, such as https://dev-123456.okta.com/oauth2/default"},
 	"oauth_oidc_client_id":        {Label: "SSO client ID", Description: "OpenID Connect client ID"},
 	"oauth_oidc_client_secret":    {Label: "SSO client secret", Description: "OpenID Connect client secret", IsSecret: true},
+	"smtp_host":                   {Label: "SMTP host", Description: "Mail relay host name, such as smtp-relay.gmail.com (blank = email off)"},
+	"smtp_port":                   {Label: "SMTP port", Description: "Blank = 587, or 465 for implicit TLS"},
+	"smtp_tls":                    {Label: "SMTP TLS", Description: "starttls (default), tls (implicit, port 465) or none (local relay only)"},
+	"smtp_username":               {Label: "SMTP username", Description: "Blank = no authentication"},
+	"smtp_password":               {Label: "SMTP password", Description: "Password or app password for the SMTP username", IsSecret: true},
+	"smtp_from":                   {Label: "From address", Description: "Sender address of Peek emails, such as peek@example.com (blank = email off)"},
 }
 
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
@@ -131,6 +139,33 @@ func (s *Server) normalizeSettingValue(key, value string) (string, error) {
 			return "", nil
 		}
 		return s.normalizeOIDCIssuerURL(value)
+	case "smtp_host":
+		if strings.ContainsAny(value, " /:@") {
+			return "", fmt.Errorf("%s must be a host name without scheme or port", key)
+		}
+	case "smtp_port":
+		if value == "" {
+			return "", nil
+		}
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > 65535 {
+			return "", fmt.Errorf("%s must be between 1 and 65535", key)
+		}
+		return strconv.Itoa(n), nil
+	case "smtp_tls":
+		switch v := strings.ToLower(value); v {
+		case "", mail.TLSStartTLS, mail.TLSImplicit, mail.TLSNone:
+			return v, nil
+		default:
+			return "", fmt.Errorf("%s must be starttls, tls or none", key)
+		}
+	case "smtp_from":
+		if value != "" {
+			parsed, err := netmail.ParseAddress(value)
+			if err != nil || parsed.Address != value {
+				return "", fmt.Errorf("%s must be an email address", key)
+			}
+		}
 	case "storage":
 		switch strings.ToLower(value) {
 		case "file", "s3":
@@ -335,10 +370,14 @@ func dashboardSettingsPanel(raw map[string]string) webui.DashboardSettings {
 	google := dashboardOAuthProviderSettings(raw, "google", "Google")
 	github := dashboardOAuthProviderSettings(raw, "github", "GitHub")
 	oidc := dashboardOAuthProviderSettings(raw, "oidc", "SSO")
+	domain := dashboardSettingRow(raw, authAllowedEmailDomainSetting)
+	if settingValueBool(raw[authGoogleOrgSignupSetting]) {
+		domain.Description = "Restrict human sign-in and CLI approval to this email domain (blank = any domain)"
+	}
 	return webui.DashboardSettings{
 		Auth: webui.AuthSettings{
 			Token:     dashboardSettingRow(raw, "auth_token_login_enabled"),
-			Domain:    dashboardSettingRow(raw, authAllowedEmailDomainSetting),
+			Domain:    domain,
 			GoogleOrg: dashboardSettingRow(raw, authGoogleOrgSignupSetting),
 			Google:    google,
 			GitHub:    github,
@@ -346,6 +385,7 @@ func dashboardSettingsPanel(raw map[string]string) webui.DashboardSettings {
 			Providers: []webui.OAuthProviderSettings{google, github, oidc},
 		},
 		Storage: dashboardStorageSettings(raw),
+		Email:   dashboardEmailSettings(raw),
 		Limits: []webui.LimitSetting{
 			dashboardMegabyteLimit(raw, "max_upload", "maxUpload", "Max upload size", "Maximum size per HTML file upload", 1, maxInt64(1024, dashboardSettingMegabytes(raw, "max_upload")), 1),
 			dashboardMegabyteLimit(raw, "max_total_size", "maxTotalSize", "Total storage limit", "Cumulative storage across all uploads (0 = unlimited)", 0, maxInt64(102400, dashboardSettingMegabytes(raw, "max_total_size")), 1),
@@ -395,6 +435,22 @@ func dashboardStorageSettings(raw map[string]string) webui.StorageSettings {
 			dashboardSettingRow(raw, "s3_access_key"),
 			dashboardSettingRow(raw, "s3_secret_key"),
 		},
+	}
+}
+
+func dashboardEmailSettings(raw map[string]string) webui.EmailSettings {
+	tlsValue := strings.ToLower(strings.TrimSpace(raw["smtp_tls"]))
+	if tlsValue == "" {
+		tlsValue = mail.TLSStartTLS
+	}
+	return webui.EmailSettings{
+		Host:     dashboardSettingRow(raw, "smtp_host"),
+		Port:     dashboardSettingRow(raw, "smtp_port"),
+		TLS:      dashboardSettingRow(raw, "smtp_tls"),
+		Username: dashboardSettingRow(raw, "smtp_username"),
+		Password: dashboardSettingRow(raw, "smtp_password"),
+		From:     dashboardSettingRow(raw, "smtp_from"),
+		TLSValue: tlsValue,
 	}
 }
 

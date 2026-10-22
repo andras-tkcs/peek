@@ -43,6 +43,9 @@
         <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="mode === 'paste' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
           <input type="radio" name="mode" value="paste" x-model="mode" class="sr-only"> Paste HTML
         </label>
+        <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="mode === 'empty' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
+          <input type="radio" name="mode" value="empty" x-model="mode" class="sr-only"> Empty page
+        </label>
       </div>
       <div x-show="mode === 'file'">
         <label class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border p-6 transition hover:border-primary hover:text-secondary-foreground hover:bg-accent" :class="fileName ? 'border-primary/40 bg-accent text-secondary-foreground' : 'border-input bg-secondary text-muted-foreground'">
@@ -56,51 +59,45 @@
         <textarea name="html" x-model="html" placeholder="<!doctype html>&#10;<html>&#10;  <body>&#10;    <h1>Hello</h1>&#10;  </body>&#10;</html>" rows="8" class="w-full resize-y rounded-lg border border-input bg-secondary px-3.5 py-3 font-mono text-xs text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"></textarea>
       </div>
       <div class="flex gap-3">
-        <input type="text" name="name" placeholder="name (optional)" class="flex-1 h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+        <input type="text" name="name" x-model="name" :required="mode === 'empty'" placeholder="page name" class="flex-1 h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
       </div>
       <div class="inline-flex gap-0.5 self-start rounded-lg bg-muted p-0.5">
-        <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="visibility === 'signed-in' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
-          <input type="radio" name="visibility" value="signed-in" x-model="visibility" class="sr-only"> Signed-in users
-        </label>
         <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="visibility === 'restricted' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
           <input type="radio" name="visibility" value="restricted" x-model="visibility" class="sr-only"> Restricted
         </label>
-        <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="visibility === 'password' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
-          <input type="radio" name="visibility" value="password" x-model="visibility" class="sr-only"> Password
+        <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="visibility === 'signed-in' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
+          <input type="radio" name="visibility" value="signed-in" x-model="visibility" class="sr-only"> Signed-in users
         </label>
         <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="visibility === 'public' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
           <input type="radio" name="visibility" value="public" x-model="visibility" class="sr-only"> Public
         </label>
       </div>
-      <input x-show="visibility === 'password'" :disabled="visibility !== 'password'" x-model="password" type="password" name="password" placeholder="password" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
-      <button type="submit" :disabled="!canUpload()" class="self-start h-10 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary">Upload &amp; get link</button>
+      <button type="submit" :disabled="!canUpload()" class="self-start h-10 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary" x-text="mode === 'empty' ? 'Create page' : 'Upload & get link'">Upload &amp; get link</button>
     </form>
   </div>
 
   <div class="rounded-xl border border-border bg-card p-5 shadow-sm">
-    <h2 class="mb-4 text-base font-semibold tracking-tight text-card-foreground">Your uploads <span class="text-xs font-normal text-muted-foreground/70">{{len .Uploads}}</span></h2>
+    <h2 class="mb-4 text-base font-semibold tracking-tight text-card-foreground">Pages <span class="text-xs font-normal text-muted-foreground/70">{{len .Uploads}}</span></h2>
     {{if .Uploads}}
     <div class="overflow-x-auto">
     <table class="w-full border-collapse text-sm">
-      <thead><tr class="border-b border-border text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><th class="px-3 py-2">Link</th><th class="px-3 py-2">Size</th><th class="px-3 py-2">Visibility</th><th class="px-3 py-2">Created</th><th class="px-3 py-2"></th></tr></thead>
+      <thead><tr class="border-b border-border text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><th class="px-3 py-2">Page</th><th class="px-3 py-2">Size</th><th class="px-3 py-2">Visibility</th><th class="px-3 py-2">Created</th><th class="px-3 py-2"></th></tr></thead>
       <tbody>
       {{range .Uploads}}
         <tr class="border-b border-border/50 last:border-0 hover:bg-foreground/[0.025]">
           <td class="h-10 w-full max-w-0 px-3">
             <div class="flex min-w-0 items-center gap-2 whitespace-nowrap">
-              <a href="/p/{{.Slug}}" target="_blank" title="/p/{{.Slug}}" class="min-w-0 truncate font-medium text-primary no-underline hover:underline">/p/{{.Slug}}</a>
-              <button type="button" x-data="{ url: '/p/{{.Slug}}' }" data-url="/p/{{.Slug}}" x-on:click="copy(url)" class="peek-copy-button shrink-0" :class="{ 'peek-copy-button-copied': copied === url }" :aria-label="copied === url ? 'Copied' : 'Copy link'" title="Copy link">
-                <svg x-show="copied !== url" class="peek-copy-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" /></svg>
-                <svg x-show="copied === url" x-cloak class="peek-copy-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m7.5 15.75 3 3 6-7.5M8.25 8.25H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m1.5-15.75c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0 1 18 18.75h-2.25m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375" /></svg>
-              </button>
-              <span title="{{.Name}}" class="hidden min-w-0 max-w-[16rem] truncate text-xs text-muted-foreground sm:inline">{{.Name}}</span>
+              {{if eq .Role "viewer"}}<span role="img" title="Shared with you by {{.OwnerName}}. View only" aria-label="Shared with you, view only"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg></span>
+              {{else if eq .Role "admin"}}<span role="img" title="Owned by {{.OwnerName}}. You can edit it as an admin" aria-label="Owned by {{.OwnerName}}, editable as admin"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg></span>
+              {{else}}<span role="img" title="You own this page and can edit it" aria-label="Owned by you"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"/></svg></span>
+              {{end}}<a href="/p/{{.Slug}}" target="_blank" title="{{.Name}}" class="min-w-0 truncate font-medium text-primary no-underline hover:underline">{{.Name}}</a>
             </div>
           </td>
           <td class="whitespace-nowrap px-3 text-muted-foreground">{{.SizeHuman}}</td>
           <td class="px-3"><span class="rounded-md bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">{{.Visibility}}</span></td>
           <td class="whitespace-nowrap px-3 text-muted-foreground">{{.CreatedHuman}}</td>
           <td class="px-3">
-            <div class="peek-row-actions">
+            {{if ne .Role "viewer"}}<div class="peek-row-actions">
               <div x-data="{ vis: '{{.Visibility}}' }" x-init="{{if eq $.ManageSlug .Slug}}$nextTick(() => $refs.visibilityDialog.showModal()){{end}}" class="m-0">
                 <button type="button" class="peek-row-button" x-on:click="$refs.visibilityDialog.showModal()">Access</button>
                 <dialog x-ref="visibilityDialog" class="peek-visibility-dialog" aria-labelledby="hn-visibility-title-{{.Slug}}">
@@ -115,23 +112,18 @@
                   </form>
                   <form method="POST" action="/dashboard/visibility/{{.Slug}}" class="flex flex-col gap-3.5">
                     <input type="hidden" name="csrf" value="{{$.CSRF}}">
-                    <h3 id="hn-visibility-title-{{.Slug}}" class="text-sm font-semibold text-card-foreground">Access for /p/{{.Slug}}</h3>
+                    <h3 id="hn-visibility-title-{{.Slug}}" class="text-sm font-semibold text-card-foreground">Access for {{.Name}}</h3>
                     <div class="inline-flex gap-0.5 self-start rounded-lg bg-muted p-0.5">
-                      <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="vis === 'signed-in' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
-                        <input type="radio" name="visibility" value="signed-in" x-model="vis" class="sr-only"> Signed-in users
-                      </label>
                       <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="vis === 'restricted' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
                         <input type="radio" name="visibility" value="restricted" x-model="vis" class="sr-only"> Restricted
                       </label>
-                      <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="vis === 'password' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
-                        <input type="radio" name="visibility" value="password" x-model="vis" class="sr-only"> Password
+                      <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="vis === 'signed-in' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
+                        <input type="radio" name="visibility" value="signed-in" x-model="vis" class="sr-only"> Signed-in users
                       </label>
                       <label class="cursor-pointer rounded-md px-3 py-1.5 text-sm transition" :class="vis === 'public' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
                         <input type="radio" name="visibility" value="public" x-model="vis" class="sr-only"> Public
                       </label>
                     </div>
-                    <input x-show="vis === 'password'" :disabled="vis !== 'password'" :required="vis === 'password'" type="password" name="password" autocomplete="new-password" placeholder="new password" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
-                    <p x-show="vis === 'password'" class="text-xs text-muted-foreground">Saving a password signs out everyone who unlocked this page before.</p>
                     <div class="flex justify-end gap-2">
                       <button type="button" class="peek-row-button" x-on:click="$refs.visibilityDialog.close()">Close</button>
                       <button type="submit" class="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Save</button>
@@ -179,7 +171,7 @@
                 <input type="hidden" name="csrf" value="{{$.CSRF}}">
                 <button type="submit" class="peek-row-button peek-row-button-danger">Delete</button>
               </form>
-            </div>
+            </div>{{end}}
           </td>
         </tr>
       {{end}}
@@ -188,8 +180,8 @@
     </div>
     {{else}}
     <div class="py-10 text-center">
-      <p class="text-sm text-foreground">No uploads yet.</p>
-      <p class="mt-1.5 text-xs text-muted-foreground">Upload an HTML file or paste HTML above to get a shareable link.</p>
+      <p class="text-sm text-foreground">No pages yet.</p>
+      <p class="mt-1.5 text-xs text-muted-foreground">Upload an HTML file or paste HTML above. Pages people share with you show up here too.</p>
     </div>
     {{end}}
   </div>

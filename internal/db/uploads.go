@@ -14,9 +14,9 @@ const (
 	sumVersionSizesByOwnerSQL = `SELECT COALESCE(SUM(v.size), 0) FROM upload_versions v JOIN uploads u ON u.id=v.upload_id WHERE u.owner_account_id=?`
 )
 
-func (s *Store) CreateUploadChecked(ctx context.Context, slug string, ownerAccountID, ownerTokenID int64, name string, size int64, visibility, passwordHash string, limits uploadquota.Limits) error {
+func (s *Store) CreateUploadChecked(ctx context.Context, slug string, ownerAccountID, ownerTokenID int64, name string, size int64, visibility string, limits uploadquota.Limits) error {
 	if visibility == "" {
-		visibility = models.UploadVisibilityPassword
+		visibility = models.UploadVisibilityRestricted
 	}
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
@@ -57,8 +57,8 @@ func (s *Store) CreateUploadChecked(ctx context.Context, slug string, ownerAccou
 		tokenArg = ownerTokenID
 	}
 	now := time.Now().Unix()
-	res, err := tx.ExecContext(ctx, `INSERT INTO uploads(slug,owner_account_id,owner_token_id,filename,size,visibility,password_hash,created_at) VALUES(?,?,?,?,?,?,?,?)`,
-		slug, ownerAccountID, tokenArg, name, size, visibility, passwordHash, now)
+	res, err := tx.ExecContext(ctx, `INSERT INTO uploads(slug,owner_account_id,owner_token_id,filename,size,visibility,created_at) VALUES(?,?,?,?,?,?,?)`,
+		slug, ownerAccountID, tokenArg, name, size, visibility, now)
 	if err != nil {
 		return err
 	}
@@ -103,8 +103,8 @@ func (s *Store) ListAllUploads(ctx context.Context) ([]models.Upload, error) {
 	return scanUploads(rows)
 }
 
-func (s *Store) SetUploadVisibility(ctx context.Context, id int64, visibility, hash string) error {
-	res, err := s.ExecContext(ctx, `UPDATE uploads SET visibility=?, password_hash=? WHERE id=?`, visibility, hash, id)
+func (s *Store) SetUploadVisibility(ctx context.Context, id int64, visibility string) error {
+	res, err := s.ExecContext(ctx, `UPDATE uploads SET visibility=?, password_hash='' WHERE id=?`, visibility, id)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func (s *Store) DeleteUpload(ctx context.Context, id int64) error {
 	return requireRowsAffected(res)
 }
 
-const uploadSelect = `SELECT u.id,u.slug,u.owner_account_id,u.owner_token_id,a.name,u.filename,u.size,u.visibility,u.password_hash,u.created_at,
+const uploadSelect = `SELECT u.id,u.slug,u.owner_account_id,u.owner_token_id,a.name,u.filename,u.size,u.visibility,u.created_at,
 	COALESCE((SELECT MAX(v.version) FROM upload_versions v WHERE v.upload_id=u.id),1)
 	FROM uploads u JOIN accounts a ON a.id=u.owner_account_id`
 
@@ -127,7 +127,7 @@ func scanUpload(row interface{ Scan(...any) error }) (*models.Upload, error) {
 	var u models.Upload
 	var ts int64
 	var tokenID sql.NullInt64
-	if err := row.Scan(&u.ID, &u.Slug, &u.OwnerAccountID, &tokenID, &u.OwnerName, &u.Name, &u.Size, &u.Visibility, &u.PasswordHash, &ts, &u.LatestVersion); err != nil {
+	if err := row.Scan(&u.ID, &u.Slug, &u.OwnerAccountID, &tokenID, &u.OwnerName, &u.Name, &u.Size, &u.Visibility, &ts, &u.LatestVersion); err != nil {
 		return nil, err
 	}
 	u.OwnerTokenID = tokenID.Int64

@@ -85,7 +85,7 @@ func TestCreateGetUpload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get token: %v", err)
 	}
-	if err := s.CreateUploadChecked(context.Background(), "slug1", tok.AccountID, tok.ID, "page.html", 42, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(context.Background(), "slug1", tok.AccountID, tok.ID, "page.html", 42, "public", uploadquota.Limits{}); err != nil {
 		t.Fatalf("create upload: %v", err)
 	}
 	got, err := s.GetUpload(context.Background(), "slug1")
@@ -121,7 +121,7 @@ func TestUploadRepositoryHonorsCanceledContext(t *testing.T) {
 	if _, err := s.UploadSlugExists(ctx, "page"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("upload slug lookup should honor canceled context, got %v", err)
 	}
-	if err := s.CreateUploadChecked(ctx, "page", 1, 0, "page.html", 42, "public", "", uploadquota.Limits{}); !errors.Is(err, context.Canceled) {
+	if err := s.CreateUploadChecked(ctx, "page", 1, 0, "page.html", 42, "public", uploadquota.Limits{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("upload creation should honor canceled context, got %v", err)
 	}
 }
@@ -130,7 +130,7 @@ func TestUploadMutationsReportMissingRows(t *testing.T) {
 	s := openTestStore(t)
 	defer s.Close()
 
-	if err := s.SetUploadVisibility(context.Background(), 999, "password", "hash"); !errors.Is(err, sql.ErrNoRows) {
+	if err := s.SetUploadVisibility(context.Background(), 999, "restricted"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("set visibility on missing upload should fail with sql.ErrNoRows, got %v", err)
 	}
 	if err := s.DeleteUpload(context.Background(), 999); !errors.Is(err, sql.ErrNoRows) {
@@ -169,7 +169,7 @@ func TestAddListComments(t *testing.T) {
 		t.Fatalf("create token: %v", err)
 	}
 	tok, _ := s.GetToken(context.Background(), "owner")
-	if err := s.CreateUploadChecked(context.Background(), "slug2", tok.AccountID, tok.ID, "page.html", 0, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(context.Background(), "slug2", tok.AccountID, tok.ID, "page.html", 0, "public", uploadquota.Limits{}); err != nil {
 		t.Fatalf("create upload: %v", err)
 	}
 	up, _ := s.GetUpload(context.Background(), "slug2")
@@ -202,7 +202,7 @@ func TestAddCommentReturnsStoredComment(t *testing.T) {
 		t.Fatalf("create token: %v", err)
 	}
 	tok, _ := s.GetToken(ctx, "owner")
-	if err := s.CreateUploadChecked(ctx, "slug3", tok.AccountID, tok.ID, "page.html", 0, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(ctx, "slug3", tok.AccountID, tok.ID, "page.html", 0, "public", uploadquota.Limits{}); err != nil {
 		t.Fatalf("create upload: %v", err)
 	}
 	up, _ := s.GetUpload(ctx, "slug3")
@@ -406,7 +406,7 @@ INSERT INTO comments(upload_id,element_selector,element_text,author_name,author_
 	if len(comments) != 1 || comments[0].ElementText != "Important" || comments[0].AnchorKind != "" {
 		t.Fatalf("unexpected migrated comments: %+v", comments)
 	}
-	if err := store.CreateUploadChecked(context.Background(), "oauth", tok.AccountID, 0, "oauth.html", 5, "public", "", uploadquota.Limits{}); err != nil {
+	if err := store.CreateUploadChecked(context.Background(), "oauth", tok.AccountID, 0, "oauth.html", 5, "public", uploadquota.Limits{}); err != nil {
 		t.Fatalf("account-owned upload without token should be allowed: %v", err)
 	}
 	n, err := store.CountUploadsByOwner(context.Background(), tok.AccountID)
@@ -554,10 +554,10 @@ func TestCreateUploadCheckedEnforcesQuotas(t *testing.T) {
 		t.Fatal(err)
 	}
 	limits := uploadquota.Limits{MaxTotalSize: 15, MaxUploadsPerOwner: 1, MaxStoragePerOwner: 12}
-	if err := s.CreateUploadChecked(context.Background(), "one", tok.AccountID, tok.ID, "one.html", 10, "public", "", limits); err != nil {
+	if err := s.CreateUploadChecked(context.Background(), "one", tok.AccountID, tok.ID, "one.html", 10, "public", limits); err != nil {
 		t.Fatalf("first upload: %v", err)
 	}
-	if err := s.CreateUploadChecked(context.Background(), "two", tok.AccountID, tok.ID, "two.html", 1, "public", "", limits); !errors.Is(err, uploadquota.ErrOwnerCountExceeded) {
+	if err := s.CreateUploadChecked(context.Background(), "two", tok.AccountID, tok.ID, "two.html", 1, "public", limits); !errors.Is(err, uploadquota.ErrOwnerCountExceeded) {
 		t.Fatalf("expected owner count quota, got %v", err)
 	}
 
@@ -568,7 +568,7 @@ func TestCreateUploadCheckedEnforcesQuotas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateUploadChecked(context.Background(), "three", tok2.AccountID, tok2.ID, "three.html", 10, "public", "", limits); !errors.Is(err, uploadquota.ErrTotalExceeded) {
+	if err := s.CreateUploadChecked(context.Background(), "three", tok2.AccountID, tok2.ID, "three.html", 10, "public", limits); !errors.Is(err, uploadquota.ErrTotalExceeded) {
 		t.Fatalf("expected total quota, got %v", err)
 	}
 }
@@ -590,7 +590,7 @@ func TestUploadSlugExists(t *testing.T) {
 	if exists {
 		t.Fatal("slug should not exist before upload")
 	}
-	if err := s.CreateUploadChecked(context.Background(), "page", tok.AccountID, tok.ID, "page.html", 10, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(context.Background(), "page", tok.AccountID, tok.ID, "page.html", 10, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	exists, err = s.UploadSlugExists(context.Background(), "page")
@@ -659,7 +659,7 @@ func seedVersionTestUpload(t *testing.T, s *Store, slug string) *models.Upload {
 	if err != nil {
 		t.Fatalf("get token: %v", err)
 	}
-	if err := s.CreateUploadChecked(ctx, slug, tok.AccountID, tok.ID, "page.html", 1, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(ctx, slug, tok.AccountID, tok.ID, "page.html", 1, "public", uploadquota.Limits{}); err != nil {
 		t.Fatalf("create upload: %v", err)
 	}
 	up, err := s.GetUpload(ctx, slug)
@@ -777,7 +777,7 @@ func TestCommentAccountIDRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	tok, _ := s.GetToken(ctx, "owner")
-	if err := s.CreateUploadChecked(ctx, "slug-acct", tok.AccountID, tok.ID, "page.html", 0, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(ctx, "slug-acct", tok.AccountID, tok.ID, "page.html", 0, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	up, _ := s.GetUpload(ctx, "slug-acct")
@@ -816,7 +816,7 @@ func TestMigrationAddsCommentAccountID(t *testing.T) {
 		t.Fatal(err)
 	}
 	tok, _ := s.GetToken(ctx, "owner")
-	if err := s.CreateUploadChecked(ctx, "slug-mig", tok.AccountID, tok.ID, "page.html", 0, "public", "", uploadquota.Limits{}); err != nil {
+	if err := s.CreateUploadChecked(ctx, "slug-mig", tok.AccountID, tok.ID, "page.html", 0, "public", uploadquota.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	up, _ := s.GetUpload(ctx, "slug-mig")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/andras-tkcs/peek/internal/models"
@@ -14,11 +15,11 @@ func TestAddUploadGrantIsIdempotentAndLowercases(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 	owner, id := seedVersionUpload(t, s, "o@example.test", "grant-a", 1)
-	g1, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, "Alice@Example.com", owner)
+	g1, _, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, "Alice@Example.com", owner)
 	if err != nil {
 		t.Fatal(err)
 	}
-	g2, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, " alice@example.com ", owner)
+	g2, _, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, " alice@example.com ", owner)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,7 @@ func TestRemoveUploadGrantMissingReturnsErrNoRows(t *testing.T) {
 	if err := s.RemoveUploadGrant(ctx, id, models.UploadGrantUser, "nobody@example.com"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected ErrNoRows, got %v", err)
 	}
-	if _, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, "a@example.com", owner); err != nil {
+	if _, _, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, "a@example.com", owner); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RemoveUploadGrant(ctx, id, models.UploadGrantUser, "A@example.com"); err != nil {
@@ -57,7 +58,7 @@ func TestListUploadGrantsOrdersByKindThenEmail(t *testing.T) {
 		{models.UploadGrantGroup, "team@example.com"},
 		{models.UploadGrantUser, "b@example.com"},
 	} {
-		if _, err := s.AddUploadGrant(ctx, id, g.kind, g.email, owner); err != nil {
+		if _, _, err := s.AddUploadGrant(ctx, id, g.kind, g.email, owner); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -81,7 +82,7 @@ func TestGrantsCascadeOnUploadDelete(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 	owner, id := seedVersionUpload(t, s, "o@example.test", "grant-d", 1)
-	if _, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, "a@example.com", owner); err != nil {
+	if _, _, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, "a@example.com", owner); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteUpload(ctx, id); err != nil {
@@ -97,7 +98,7 @@ func TestGrantKindCheckConstraint(t *testing.T) {
 	s := openTestStore(t)
 	defer s.Close()
 	owner, id := seedVersionUpload(t, s, "o@example.test", "grant-e", 1)
-	if _, err := s.AddUploadGrant(context.Background(), id, "team", "a@example.com", owner); err == nil {
+	if _, _, err := s.AddUploadGrant(context.Background(), id, "team", "a@example.com", owner); err == nil {
 		t.Fatal("expected error for kind team")
 	}
 }
@@ -116,7 +117,7 @@ func TestListUploadGrantsForUploads(t *testing.T) {
 		{id1, models.UploadGrantUser, "amy@example.com"},
 		{id2, models.UploadGrantUser, "bob@example.com"},
 	} {
-		if _, err := s.AddUploadGrant(ctx, g.id, g.kind, g.email, 0); err != nil {
+		if _, _, err := s.AddUploadGrant(ctx, g.id, g.kind, g.email, 0); err != nil {
 			t.Fatalf("add grant: %v", err)
 		}
 	}
@@ -150,15 +151,15 @@ func TestGrantWritesAndScanErrors(t *testing.T) {
 	s := openTestStore(t)
 	t.Cleanup(func() { s.Close() })
 	accountID, uploadID := seedVersionUpload(t, s, "o@example.test", "g", 1)
-	if g, err := s.AddUploadGrant(ctx, uploadID, "user", "a@example.test", accountID); err != nil || g.CreatedByAccountID != accountID {
+	if g, _, err := s.AddUploadGrant(ctx, uploadID, "user", "a@example.test", accountID); err != nil || g.CreatedByAccountID != accountID {
 		t.Fatalf("grant = %+v, %v", g, err)
 	}
-	if g, err := s.AddUploadGrant(ctx, uploadID, "group", "g@example.test", 0); err != nil || g.CreatedByAccountID != 0 {
+	if g, _, err := s.AddUploadGrant(ctx, uploadID, "group", "g@example.test", 0); err != nil || g.CreatedByAccountID != 0 {
 		t.Fatalf("grant without creator = %+v, %v", g, err)
 	}
 	corruptInt(t, s, "upload_grants", "created_at")
 	// The duplicate insert is a no-op, so the follow-up SELECT hits the bad row.
-	_, err := s.AddUploadGrant(ctx, uploadID, "user", "a@example.test", accountID)
+	_, _, err := s.AddUploadGrant(ctx, uploadID, "user", "a@example.test", accountID)
 	wantErr(t, "AddUploadGrant select", err)
 	_, err = s.ListUploadGrants(ctx, uploadID)
 	wantErr(t, "ListUploadGrants", err)
@@ -166,8 +167,119 @@ func TestGrantWritesAndScanErrors(t *testing.T) {
 	wantErr(t, "ListUploadGrantsForUploads", err)
 
 	failOn(t, s, "upload_grants", "INSERT")
-	_, err = s.AddUploadGrant(ctx, uploadID, "user", "new@example.test", 0)
+	_, _, err = s.AddUploadGrant(ctx, uploadID, "user", "new@example.test", 0)
 	wantErr(t, "AddUploadGrant insert", err)
 	failOn(t, s, "upload_grants", "DELETE")
 	wantErr(t, "RemoveUploadGrant", s.RemoveUploadGrant(ctx, uploadID, "user", "a@example.test"))
+}
+
+func TestListUploadsSharedWith(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	owner, restricted := seedVersionUpload(t, s, "o@example.test", "shared-r", 1)
+	_, signedIn := seedVersionUpload(t, s, "o2@example.test", "shared-s", 1)
+	if err := s.SetUploadVisibility(ctx, restricted, models.UploadVisibilityRestricted); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetUploadVisibility(ctx, signedIn, "signed-in"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{restricted, signedIn} {
+		if _, _, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, "Bob@Example.com", owner); err != nil {
+			t.Fatal(err)
+		}
+	}
+	slugs := func(list []models.Upload) []string {
+		var out []string
+		for _, u := range list {
+			out = append(out, u.Slug)
+		}
+		return out
+	}
+	got, err := s.ListUploadsSharedWith(ctx, "BOB@example.com", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g := slugs(got); len(g) != 1 || g[0] != "shared-r" {
+		t.Fatalf("user grant: got %v, want [shared-r]", g)
+	}
+	got, err = s.ListUploadsSharedWith(ctx, "bob@example.com", nil, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("owner's own page listed: %v", slugs(got))
+	}
+	if _, _, err := s.AddUploadGrant(ctx, restricted, models.UploadGrantGroup, "team@example.com", owner); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.ListUploadsSharedWith(ctx, "carol@example.com", nil, 0)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("group grant without group: %v %v", slugs(got), err)
+	}
+	got, err = s.ListUploadsSharedWith(ctx, "carol@example.com", []string{"Team@example.com"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g := slugs(got); len(g) != 1 || g[0] != "shared-r" {
+		t.Fatalf("group grant: got %v, want [shared-r]", g)
+	}
+}
+
+func TestListRestrictedGroupGrantEmails(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	ownerA, a := seedVersionUpload(t, s, "a@example.test", "grp-a", 1)
+	ownerB, b := seedVersionUpload(t, s, "b@example.test", "grp-b", 1)
+	ownerC, c := seedVersionUpload(t, s, "c@example.test", "grp-c", 1)
+	for _, id := range []int64{a, b} {
+		if err := s.SetUploadVisibility(ctx, id, models.UploadVisibilityRestricted); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, g := range []struct {
+		id    int64
+		owner int64
+		kind  string
+		email string
+	}{
+		{a, ownerA, models.UploadGrantGroup, "z-team@example.com"},
+		{a, ownerA, models.UploadGrantGroup, "a-team@example.com"},
+		{b, ownerB, models.UploadGrantGroup, "a-team@example.com"},
+		{a, ownerA, models.UploadGrantUser, "user@example.com"},
+		{c, ownerC, models.UploadGrantGroup, "public-team@example.com"},
+	} {
+		if _, _, err := s.AddUploadGrant(ctx, g.id, g.kind, g.email, g.owner); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.ListRestrictedGroupGrantEmails(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a-team@example.com", "z-team@example.com"}; strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	got, err = s.ListRestrictedGroupGrantEmails(ctx, ownerA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a-team@example.com"}; strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("excluding owner: got %v, want %v", got, want)
+	}
+}
+
+func TestAddUploadGrantReportsCreated(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	owner, id := seedVersionUpload(t, s, "o@example.test", "grant-created", 1)
+	if _, created, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, "a@example.com", owner); err != nil || !created {
+		t.Fatalf("first call created=%v err=%v", created, err)
+	}
+	if _, created, err := s.AddUploadGrant(ctx, id, models.UploadGrantUser, "A@example.com", owner); err != nil || created {
+		t.Fatalf("second call created=%v err=%v", created, err)
+	}
 }

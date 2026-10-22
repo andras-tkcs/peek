@@ -10,7 +10,7 @@ import (
 
 func TestDashboardRenameChangesLinkAndAudits(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "page", "public", "")
+	u := newTwoVersionPage(t, s, "page", "public")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/rename/page", url.Values{"name": {"Quarterly Report"}}, true)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d", rec.Code)
@@ -37,14 +37,14 @@ func TestDashboardRenameChangesLinkAndAudits(t *testing.T) {
 
 func TestDashboardRenameRejectsEmptyName(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "page", "public", "")
+	u := newTwoVersionPage(t, s, "page", "public")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/rename/page", url.Values{"name": {""}}, true)
 	wantLocation(t, rec.Header().Get("Location"), "/dashboard?err=upload_name_required&manage=page&slug=page")
 }
 
 func TestDashboardRenameRejectsNonOwner(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	newTwoVersionPage(t, s, "page", "public", "")
+	newTwoVersionPage(t, s, "page", "public")
 	other, err := s.store.CreateAccount(context.Background(), "user@example.test", "User", false)
 	if err != nil {
 		t.Fatal(err)
@@ -55,14 +55,14 @@ func TestDashboardRenameRejectsNonOwner(t *testing.T) {
 
 func TestDashboardRenameRejectsMissingCSRF(t *testing.T) {
 	s, _ := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "page", "public", "")
+	u := newTwoVersionPage(t, s, "page", "public")
 	rec := dashboardPost(t, s, u.OwnerAccountID, "/dashboard/rename/page", url.Values{"name": {"X"}}, false)
 	wantLocation(t, rec.Header().Get("Location"), "/dashboard?err=invalid_session")
 }
 
 func TestUploadVersionToRenamedSlugExplains(t *testing.T) {
 	s, admin := newHandlerTestServer(t)
-	u := newTwoVersionPage(t, s, "page", "public", "")
+	u := newTwoVersionPage(t, s, "page", "public")
 	if err := s.store.RenameUpload(context.Background(), u.ID, "renamed", "Renamed"); err != nil {
 		t.Fatal(err)
 	}
