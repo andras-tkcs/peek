@@ -181,6 +181,7 @@ func TestLoginWithPasswordRunsOneBcryptCompareOnEveryFailure(t *testing.T) {
 		check func(t *testing.T, err error)
 		calls int64
 	}{
+		{name: "oversized email", email: strings.Repeat("a", 300) + "@example.test", pw: "x", calls: 1},
 		{name: "unknown email", email: "nobody@example.test", pw: "right", calls: 1},
 		{name: "account without password", email: "user@example.test", pw: "right", calls: 1,
 			setup: func(t *testing.T, s *Server) {
@@ -412,5 +413,18 @@ func TestDashCovLogoutPaths(t *testing.T) {
 	}
 	if !cleared {
 		t.Fatalf("logout did not clear session cookie: %+v", rec.Result().Cookies())
+	}
+}
+
+func TestPasswordLoginRejectsOversizedEmailWithoutLimiterKey(t *testing.T) {
+	s, try := newLoginLimiterServer(t)
+	err := try(strings.Repeat("a", 300)+"@example.test", "x")
+	if err == nil || errors.Is(err, errLoginThrottled) {
+		t.Fatalf("err = %v, want plain failure", err)
+	}
+	s.accountLoginLimiter.mu.Lock()
+	defer s.accountLoginLimiter.mu.Unlock()
+	if n := len(s.accountLoginLimiter.hits); n != 0 {
+		t.Fatalf("limiter holds %d keys, want 0", n)
 	}
 }
