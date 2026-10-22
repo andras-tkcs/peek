@@ -42,6 +42,23 @@ func TestInternalPackageDependencyDirection(t *testing.T) {
 		forbiddenImport []string
 	}{
 		{
+			pkg: "github.com/andras-tkcs/peek/internal/backends",
+			forbiddenImport: []string{
+				"github.com/andras-tkcs/peek/internal/cli",
+				"github.com/andras-tkcs/peek/internal/db",
+				"github.com/andras-tkcs/peek/internal/groups",
+				"github.com/andras-tkcs/peek/internal/mail",
+				"github.com/andras-tkcs/peek/internal/models",
+				"github.com/andras-tkcs/peek/internal/objectstore",
+				"github.com/andras-tkcs/peek/internal/peekd",
+				"github.com/andras-tkcs/peek/internal/server",
+				"github.com/andras-tkcs/peek/internal/uploads",
+				"github.com/andras-tkcs/peek/internal/uploadquota",
+				"github.com/andras-tkcs/peek/internal/version",
+				"github.com/andras-tkcs/peek/internal/web",
+			},
+		},
+		{
 			pkg: "github.com/andras-tkcs/peek/internal/cli",
 			forbiddenImport: []string{
 				"github.com/andras-tkcs/peek/internal/db",
