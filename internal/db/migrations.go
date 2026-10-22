@@ -51,6 +51,24 @@ CREATE INDEX IF NOT EXISTS idx_upload_slug_aliases_upload ON upload_slug_aliases
 	{13, "comment_account_id", `-- ALTER TABLE handled idempotently below`},
 	{14, "visibility_signed_in", `UPDATE uploads SET visibility='signed-in' WHERE visibility='private'`},
 	{15, "drop_password_visibility", `UPDATE uploads SET visibility='restricted', password_hash='' WHERE visibility='password'`},
+	{16, "upload_backends", `
+CREATE TABLE IF NOT EXISTS upload_backends (
+	upload_id INTEGER NOT NULL,
+	version INTEGER NOT NULL,
+	image TEXT NOT NULL,
+	port INTEGER NOT NULL DEFAULT 8080,
+	created_by_account_id INTEGER REFERENCES accounts(id),
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (upload_id, version),
+	FOREIGN KEY (upload_id, version) REFERENCES upload_versions(upload_id, version) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS upload_backend_env (
+	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	value TEXT NOT NULL,
+	updated_at INTEGER NOT NULL,
+	PRIMARY KEY (upload_id, name)
+);`},
 }
 
 func (s *Store) runMigrations() error {
