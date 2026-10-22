@@ -688,3 +688,75 @@ func TestSetCovDashboardSubmittedSettingValue(t *testing.T) {
 		t.Fatalf("empty values: %q %v", v, ok)
 	}
 }
+
+func TestSMTPSettingNormalization(t *testing.T) {
+	s := &Server{}
+	tests := []struct {
+		key, in, want string
+		wantErr       string
+	}{
+		{"smtp_host", "  smtp.example.com ", "smtp.example.com", ""},
+		{"smtp_host", "", "", ""},
+		{"smtp_host", "smtp://host", "", "smtp_host must be a host name without scheme or port"},
+		{"smtp_host", "host:587", "", "smtp_host must be a host name without scheme or port"},
+		{"smtp_host", "a b", "", "smtp_host must be a host name without scheme or port"},
+		{"smtp_host", "u@host", "", "smtp_host must be a host name without scheme or port"},
+		{"smtp_port", "", "", ""},
+		{"smtp_port", "587", "587", ""},
+		{"smtp_port", "65535", "65535", ""},
+		{"smtp_port", "0", "", "smtp_port must be between 1 and 65535"},
+		{"smtp_port", "65536", "", "smtp_port must be between 1 and 65535"},
+		{"smtp_port", "abc", "", "smtp_port must be between 1 and 65535"},
+		{"smtp_tls", "", "", ""},
+		{"smtp_tls", "STARTTLS", "starttls", ""},
+		{"smtp_tls", "tls", "tls", ""},
+		{"smtp_tls", "none", "none", ""},
+		{"smtp_tls", "ssl", "", "smtp_tls must be starttls, tls or none"},
+		{"smtp_username", "  user ", "user", ""},
+		{"smtp_password", "  pw ", "pw", ""},
+		{"smtp_from", "", "", ""},
+		{"smtp_from", "peek@example.com", "peek@example.com", ""},
+		{"smtp_from", "Peek <peek@example.com>", "", "smtp_from must be an email address"},
+		{"smtp_from", "not-an-address", "", "smtp_from must be an email address"},
+	}
+	for _, tt := range tests {
+		got, err := s.normalizeSettingValue(tt.key, tt.in)
+		if tt.wantErr != "" {
+			if err == nil || err.Error() != tt.wantErr {
+				t.Errorf("%s(%q) err = %v, want %q", tt.key, tt.in, err, tt.wantErr)
+			}
+			continue
+		}
+		if err != nil || got != tt.want {
+			t.Errorf("%s(%q) = %q, %v; want %q", tt.key, tt.in, got, err, tt.want)
+		}
+	}
+}
+
+func TestSMTPPasswordStoredEncrypted(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	ctx := context.Background()
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+
+	form := url.Values{"csrf": {"csrf-token"}, "smtp_password": {"relay-secret"}}
+	rec := doRequest(t, s, http.MethodPost, "/dashboard/settings", strings.NewReader(form.Encode()),
+		asSession(s, admin.ID),
+		func(r *http.Request) {
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			r.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
+		})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	raw, err := s.store.GetSetting(ctx, "smtp_password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw == "" || raw == "relay-secret" {
+		t.Fatalf("stored value = %q, want ciphertext", raw)
+	}
+	got, err := s.encryptedGetSetting(ctx, "smtp_password")
+	if err != nil || got != "relay-secret" {
+		t.Fatalf("decrypted = %q, %v", got, err)
+	}
+}

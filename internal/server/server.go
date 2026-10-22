@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/andras-tkcs/peek/internal/mail"
 	"github.com/andras-tkcs/peek/internal/objectstore"
 	webui "github.com/andras-tkcs/peek/internal/web"
 )
@@ -85,6 +86,7 @@ type Server struct {
 	visitQueue               chan visitEvent
 	groups                   GroupChecker
 	metricsToken             string
+	mailer                   mail.Sender
 }
 
 func New(cfg Config) (*Server, error) {
@@ -211,6 +213,7 @@ func New(cfg Config) (*Server, error) {
 		cliLoginLimiter:        newLimiter(120, time.Minute),
 		apiKeyLimiter:          newLimiter(10, time.Minute),
 		accountLoginLimiter:    newLimiter(accountLoginFailureMax, accountLoginFailureWindow),
+		mailer:                 mail.SMTPSender{},
 		metricsToken:           cfg.MetricsToken,
 		trustedProxy:           cfg.TrustedProxy,
 		trustedProxyCIDRs:      cidrs,
@@ -239,4 +242,12 @@ func New(cfg Config) (*Server, error) {
 
 	closeStoreOnError = false
 	return srv, nil
+}
+
+// mailSender returns the configured mail sender, or the SMTP one when none is set.
+func (s *Server) mailSender() mail.Sender {
+	if s.mailer == nil {
+		return mail.SMTPSender{}
+	}
+	return s.mailer
 }

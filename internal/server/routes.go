@@ -84,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /dashboard/api-keys/{id}/revoke", s.handleDashboardAPIKeyRevoke)
 	mux.HandleFunc("POST /dashboard/sessions/revoke", s.handleDashboardSessionsRevoke)
 	mux.HandleFunc("POST /dashboard/settings", s.handleDashboardSettings)
+	mux.HandleFunc("POST /dashboard/email/test", s.handleDashboardEmailTest)
 	mux.HandleFunc("POST /dashboard/invites", s.handleDashboardCreateInvite)
 	mux.HandleFunc("POST /dashboard/invites/revoke/{id}", s.handleDashboardRevokeInvite)
 	mux.HandleFunc("POST /dashboard/users/{id}/admin", s.handleDashboardUserAdmin)
