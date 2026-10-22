@@ -70,7 +70,7 @@ const (
 // flashMessages is the only source of flash text. {slug}, {visibility} and
 // {email} are filled from the viewer's own uploads by flashText.
 var flashMessages = map[string]string{
-	flashInvalidSession:           flashInvalidSession,
+	flashInvalidSession:           "invalid session",
 	flashFormInvalid:              "file too large or invalid form",
 	flashNoHTML:                   "no html pasted",
 	flashNoFile:                   "no file selected",
