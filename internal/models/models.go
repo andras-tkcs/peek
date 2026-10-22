@@ -122,6 +122,25 @@ type UploadVersion struct {
 	CreatedAt          time.Time
 }
 
+// UploadBackend is the container image a page version runs as its backend.
+type UploadBackend struct {
+	UploadID           int64
+	Version            int
+	Image              string
+	Port               int
+	CreatedByAccountID int64 // 0 when unknown
+	CreatedAt          time.Time
+}
+
+// BackendEnvVar is one environment variable of a page's backend. It applies to
+// every version of the page.
+type BackendEnvVar struct {
+	UploadID  int64
+	Name      string
+	Value     string // ciphertext as stored; the server decrypts
+	UpdatedAt time.Time
+}
+
 type Comment struct {
 	ID              int64
 	UploadID        int64
