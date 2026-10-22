@@ -8,8 +8,11 @@
 //  - forward the Shift+H toolbar shortcut to the parent
 //  - expose window.peek.params / setParams so a page can keep its filters in
 //    the viewer's address bar (the parent URL's query string)
+//  - expose window.peek.fetch so a page can call its backend; the request is
+//    relayed by the parent page
 // It does NOT call the server directly (the iframe is opaque-origin); all
-// comments traffic goes through the trusted parent page via postMessage.
+// comments traffic and peek.fetch calls go through the trusted parent page
+// via postMessage.
 (function () {
   "use strict";
 
@@ -379,7 +382,88 @@
     parent.postMessage({ hn: "params", query: qs }, "*");
     return true;
   }
+
+  // --- peek.fetch (relayed by the parent page to /svc/<slug>/v/<n>/...) ---
+  var FETCH_TIMEOUT_MS = 35000;
+  var FETCH_METHODS = { GET: 1, POST: 1, PUT: 1, PATCH: 1, DELETE: 1 };
+  var fetchPending = {};
+  var fetchCounter = 0;
+
+  function settleFetch(d) {
+    var p = fetchPending[d.id];
+    if (!p) return;
+    delete fetchPending[d.id];
+    clearTimeout(p.timer);
+    if (d.ok === true) {
+      var s = Number(d.status) || 0;
+      var nullBody = s === 204 || s === 205 || s === 304;
+      try {
+        p.resolve(new Response(nullBody ? null : d.body, {
+          status: s,
+          headers: d.contentType ? { "content-type": String(d.contentType) } : {}
+        }));
+      } catch (err) {
+        p.reject(new Error("peek.fetch bad response"));
+      }
+    } else {
+      p.reject(new Error(typeof d.error === "string" && d.error ? d.error : "backend request failed"));
+    }
+  }
+
+  function fetchHeaders(init) {
+    var out = {};
+    var h = init && init.headers;
+    if (!h) return out;
+    function keep(k, v) {
+      k = String(k).toLowerCase();
+      if (k === "content-type" || k === "accept") out[k] = String(v);
+    }
+    if (typeof Headers !== "undefined" && h instanceof Headers) h.forEach(function (v, k) { keep(k, v); });
+    else Object.keys(h).forEach(function (k) { keep(k, h[k]); });
+    return out;
+  }
+
+  // Resolves to {body, type}; rejects with TypeError for unsupported bodies.
+  function fetchBody(body) {
+    if (body === undefined || body === null) return Promise.resolve({ body: undefined, type: "" });
+    if (typeof body === "string") return Promise.resolve({ body: body, type: "" });
+    if (body instanceof ArrayBuffer) return Promise.resolve({ body: body, type: "" });
+    if (ArrayBuffer.isView(body)) {
+      return Promise.resolve({ body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength), type: "" });
+    }
+    if (typeof Blob !== "undefined" && body instanceof Blob) {
+      return body.arrayBuffer().then(function (buf) { return { body: buf, type: body.type || "" }; });
+    }
+    if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) {
+      return Promise.resolve({ body: body.toString(), type: "application/x-www-form-urlencoded;charset=UTF-8" });
+    }
+    return Promise.reject(new TypeError("peek.fetch body type not supported"));
+  }
+
+  function peekFetch(path, init) {
+    init = init || {};
+    if (typeof path !== "string" || path.charAt(0) !== "/") {
+      return Promise.reject(new TypeError("peek.fetch path must start with /"));
+    }
+    var method = String(init.method || "GET").toUpperCase();
+    if (!FETCH_METHODS[method]) return Promise.reject(new TypeError("peek.fetch method not allowed"));
+    var headers = fetchHeaders(init);
+    return fetchBody(init.body).then(function (b) {
+      if (b.type && !headers["content-type"]) headers["content-type"] = b.type;
+      return new Promise(function (resolve, reject) {
+        var id = "f" + (++fetchCounter);
+        var timer = setTimeout(function () {
+          delete fetchPending[id];
+          reject(new Error("peek.fetch timed out"));
+        }, FETCH_TIMEOUT_MS);
+        fetchPending[id] = { resolve: resolve, reject: reject, timer: timer };
+        parent.postMessage({ hn: "fetch", id: id, path: path, method: method, headers: headers, body: b.body }, "*");
+      });
+    });
+  }
+
   window.peek = {
+    fetch: peekFetch,
     get params() { return currentParams(); },
     // setParams({region: "eu", q: null}) merges into the current params;
     // null/undefined/"" removes a key. A string replaces them wholesale.
@@ -427,6 +511,7 @@
     if (d.hn === "mode") setMode(d.on);
     else if (d.hn === "comments") renderPins(d.items);
     else if (d.hn === "locate") locate(d.selector, d.quote);
+    else if (d.hn === "fetch-result") settleFetch(d);
   });
 
   injectStyles();
