@@ -89,13 +89,16 @@ uid `65532`.
 | `--google-sa-key-file` | `PEEK_GOOGLE_SA_KEY_FILE` | *(empty)* | Service account JSON key (domain-wide delegation) for Google group grants. Needs `--google-admin-email`. Not in the SQLite backup. |
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | *(empty)* | Workspace admin user to impersonate |
 | `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | Group membership cache lifetime (1s to 1h) |
+| `--backends` | `PEEK_BACKENDS` | `off` | Page backends: `off` or `docker` |
+| `--docker-host` | `PEEK_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker or Podman API address (`unix://` or `tcp://`) |
+| `--backend-network` | `PEEK_BACKEND_NETWORK` | `peek-backends` | Docker network for backend containers |
 
 `PEEK_LOG_LEVEL` controls structured JSON log verbosity (`debug`, `info`,
 `warn`). `peekd --version` prints the server version.
 
 Admins can update these runtime settings from the dashboard: max upload size,
 total storage limit, max uploads per token, max storage per token, retention
-days, and S3 credentials. Changing the storage backend itself requires a
+days, S3 credentials, and the page backend limits. Changing the storage backend itself requires a
 restart.
 
 ## Administer with the CLI
@@ -158,6 +161,16 @@ Pages are restricted by default: only the owner, admins and grantees can open th
 ### Share emails (SMTP)
 
 Admins configure email on the **Email** tab of the Admin page: `smtp_host`, `smtp_port`, `smtp_tls` (`starttls` default, `tls`, or `none` for a local relay), `smtp_username`, `smtp_password` and `smtp_from`. Email is on when the host and From address are set; **Send test email** checks the saved settings. With email on, adding a grant to a restricted page, or switching a page to restricted, emails the grantees a link (only recipients in the allowed email domain, when one is set). A failed send is logged and audited as `upload.share.notify` and never blocks the share.
+
+### Page backends
+
+Page owners can attach a Docker image to a page version (`peek upload --backend`), which Peek runs as a container and the page calls with `peek.fetch`. To enable it:
+
+1. Start `peekd --backends docker` (optionally `--docker-host`, `--backend-network`). peekd refuses to start when the engine is not reachable.
+2. Give the peekd user access to the socket (the image runs as uid 65532; in Compose use `group_add` with `export DOCKER_GID=$(stat -c %g /var/run/docker.sock)`), and attach a containerised peekd to the backend network so it can reach the containers. Docker Desktop on macOS/Windows needs peekd in a container.
+3. On the Admin page's **Backends** tab set the allowed images (`ghcr.io/acme/` prefixes or exact repositories; empty allows none), and optionally memory, CPU, idle stop, max running backends and registry credentials.
+
+The Docker socket is root on the host: prefer rootless Docker/Podman or a dedicated VM, and keep the allowed list short. Containers get fixed limits, a read-only root filesystem, no capabilities and no published ports. Backend volumes (`peek-<instance>-data-u<id>`) are not in `peekd backup` and are deleted with the page. Backends do not use the Email tab's SMTP settings. Migration 16 (`upload_backends`) adds the backend tables. Details: `docs/operations.md`.
 
 ### Data export and deletion
 
