@@ -11,7 +11,7 @@ specific element, anchored to selected text, or on the whole page. This skill
 covers the **consumer** side: installing the `peek` CLI, uploading pages, and
 reading the comments back.
 
-> Running or administering the server (tokens, passwords, deployment) is covered
+> Running or administering the server (tokens, email, deployment) is covered
 > by the **peek-server** skill.
 
 ## When to use this skill
@@ -67,20 +67,15 @@ If the user doesn't have a server, token, or invite yet, point them to the
 ### Upload an HTML file and get a share link
 
 ```sh
-peek upload path/to/page.html --visibility public
+peek upload path/to/page.html                       # restricted: you, admins and grantees
+peek upload path/to/page.html --visibility public   # anyone with the link
 ```
 
-Output includes the shareable URL and the slug:
+New pages are restricted by default. Output includes the shareable URL and the slug:
 
 ```
 uploaded: https://peek.example.com/p/page-html-k7m2xq
 slug:     page-html-k7m2xq
-```
-
-### Upload with password protection
-
-```sh
-peek upload page.html --visibility password --password s3cret
 ```
 
 ### Upload raw HTML without a file
@@ -115,7 +110,10 @@ peek revoke <slug> alice@example.com         # remove (add --group for groups)
 ```
 
 Restricted pages admit only the owner, admins, and signed-in viewers matching a
-grant. Group grants need Google group lookup configured on the server. You can
+grant. Group grants need Google group lookup configured on the server. When the
+server has SMTP email configured, each new grantee gets an email with the link,
+and switching a page to restricted emails everyone who already has a grant.
+Grantees see the page in the dashboard's shared-with-me rows (view only). You can
 also switch an existing page with `peek visibility <slug> restricted`.
 Owners can manage grants in the dashboard's **Access** dialog, and rename a page with `peek rename <slug> <new name>` (old links redirect).
 
@@ -127,8 +125,7 @@ peek versions <slug>
 ```
 
 The link stays the same and serves the latest version; `/p/<slug>/v/<n>` serves
-version `n`. `--slug` cannot be combined with `--visibility`, `--password` or
-`--name`.
+version `n`. `--slug` cannot be combined with `--visibility` or `--name`.
 
 ### Read the comments on a page
 

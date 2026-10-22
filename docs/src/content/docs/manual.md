@@ -21,9 +21,9 @@ Upload from the CLI:
 peek upload report.html --visibility public
 ```
 
-Or use the dashboard when you want to paste HTML, copy existing links, or inspect past uploads.
+Or use the dashboard when you want to paste HTML, start an empty page, see the pages shared with you, or inspect past uploads.
 
-Choose `public` for link-accessible internal pages, `password` for link sharing with a shared secret, `signed-in` for pages that require any Peek account, and `restricted` for pages only named people or Google groups can open (`peek grant <slug> <email> [--group]`).
+New pages are `restricted` by default. Choose `public` for link-accessible internal pages, `signed-in` for pages that require any Peek account, and `restricted` (the default) for pages only named people or Google groups can open (`peek grant <slug> <email> [--group]`).
 
 To update a page, run `peek upload report.html --slug <slug>`. The link keeps showing the latest version, and `/p/<slug>/v/<n>` opens an older one.
 
@@ -51,7 +51,7 @@ peek versions <slug>
 peek grant|revoke <slug> <email> [--group]
 peek grants <slug>
 peek export <slug>
-peek visibility <slug> public|password|signed-in|restricted
+peek visibility <slug> public|signed-in|restricted
 peek rename <slug> <new name>
 peek delete <slug>
 ```

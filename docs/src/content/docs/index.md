@@ -12,10 +12,10 @@ The product has two surfaces:
 
 | Surface | Use it for |
 | --- | --- |
-| Web dashboard | Upload HTML, manage links, and inspect stats. Admins also get an **Admin** page (the **Admin** button next to **Sign out**) to invite users, configure auth, tune limits, and change storage settings. |
+| Web dashboard | Upload HTML or create an empty page, see pages shared with you, manage access, and inspect stats. Admins also get an **Admin** page (the **Admin** button next to **Sign out**) to invite users, configure auth and SMTP email, tune limits, and change storage settings. |
 | CLI | Upload from local scripts, CI, or agents; list uploads; read comments; export an upload; create automation tokens. |
 
-Pages can be public, password-gated, open to signed-in users, or restricted to named users and Google groups with `peek grant`. Uploading again with `--slug` adds a version served at `/p/<slug>/v/<n>`, with comments kept per version.
+Pages are restricted to named users and Google groups with `peek grant` by default, and can instead be public or open to signed-in users. Grantees get an email with the link when SMTP is configured, and see the page under shared with them on their dashboard. Uploading again with `--slug` adds a version served at `/p/<slug>/v/<n>`, with comments kept per version.
 
 Uploaded pages render in a sandboxed iframe. Reviewers can leave page comments, text-selection comments, or element-pinned comments without giving the uploaded HTML access to Peek sessions.
 
