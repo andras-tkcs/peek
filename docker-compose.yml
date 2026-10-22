@@ -68,6 +68,47 @@ services:
     profiles:
       - s3
 
+  peek-backends:
+    build: .
+    image: peek:local
+    container_name: peek-backends
+    ports:
+      - "7722:7700"
+    volumes:
+      - peek-backends-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-0}"
+    environment:
+      PEEK_ADDR: ":7700"
+      PEEK_BASE_URL: http://localhost:7722
+      PEEK_MAX_UPLOAD: "2097152"
+      PEEK_MAX_TOTAL_SIZE: "0"
+      PEEK_RETENTION_DAYS: "0"
+      PEEK_BACKENDS: docker
+      PEEK_DOCKER_HOST: unix:///var/run/docker.sock
+      PEEK_BACKEND_NETWORK: peek-backends
+    networks:
+      - peek-backends
+    profiles:
+      - backends
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: peek-mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - peek-backends
+    profiles:
+      - backends
+
 volumes:
   peek-data:
   minio-data:
+  peek-backends-data:
+
+networks:
+  peek-backends:
+    name: peek-backends

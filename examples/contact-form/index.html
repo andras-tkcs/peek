@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact us</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+  label { display: block; margin-top: 1rem; font-weight: 600; }
+  input, textarea { width: 100%; box-sizing: border-box; padding: .5rem; font: inherit; }
+  button { margin-top: 1rem; padding: .5rem 1rem; font: inherit; }
+  #result { margin-top: 1rem; }
+  .error { color: #b00020; }
+</style>
+</head>
+<body>
+<h1>Contact us</h1>
+<form id="form">
+  <label for="name">Name</label>
+  <input id="name" name="name" required>
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" required>
+  <label for="message">Message</label>
+  <textarea id="message" name="message" rows="6" maxlength="5000" required></textarea>
+  <button type="submit">Send</button>
+</form>
+<p id="result" role="status"></p>
+<script>
+  var form = document.getElementById("form");
+  var result = document.getElementById("result");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    result.className = "";
+    result.textContent = "Sending…";
+    var data = {
+      name: form.name.value,
+      email: form.email.value,
+      message: form.message.value
+    };
+    peek.fetch("/api/contact", {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify(data)
+    }).then(function (res) {
+      return res.json().then(function (body) { return {ok: res.ok, body: body}; });
+    }).then(function (r) {
+      if (r.ok) {
+        result.textContent = "Thanks, your message was sent.";
+        form.reset();
+      } else {
+        result.className = "error";
+        result.textContent = r.body.error || "Something went wrong.";
+      }
+    }).catch(function (err) {
+      result.className = "error";
+      result.textContent = err.message;
+    });
+  });
+</script>
+</body>
+</html>
