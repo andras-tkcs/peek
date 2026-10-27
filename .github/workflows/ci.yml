@@ -37,7 +37,7 @@ jobs:
         run: go build ./...
       - name: Test (with race detector)
         run: go test -race -count=1 ./...
-      - name: Coverage (gate >= 90.0%)
+      - name: Coverage (gate >= 95.0% total, >= 93.0% per core package)
         run: sh scripts/coverage-gate.sh coverage.out
       - name: Vulnerability scan
         run: |
