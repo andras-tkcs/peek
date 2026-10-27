@@ -1,6 +1,6 @@
 # Security and test coverage audit — 2026-10-11
 
-Status: the Critical, Medium and Low findings below are addressed by the `fix/security-hardening-coverage` change, which also raises total coverage to at least 90% with a CI gate. Info items remain open.
+Status: Critical, Medium and Low findings addressed in PR #16 (first released in v0.10.0). Info items remain open except the two page-password items, which no longer apply since page passwords were removed (migration 15).
 
 Scope: the whole repository at `6380c6b` (server `peekd`, CLI `peek`, storage, DB, templates, CI, Docker, install script). Method: manual review of every package, cross-checked by tracing each finding to a concrete code path; one finding (S1) was confirmed with a throwaway end-to-end test. Tooling run: `go vet`, `go test -race`, coverage, `staticcheck`. `govulncheck` could not reach vuln.go.dev from the audit sandbox; CI runs it on every push.
 
@@ -103,8 +103,8 @@ Fix: `0700` dirs / `0600` files, or set `umask(077)` at startup; write backups `
 - `loadOrCreateSecret` silently regenerates a secret shorter than 32 bytes, making encrypted settings unreadable, and the write isn't atomic.
 - `peekd backup` covers only the SQLite DB, not file-storage uploads or `secret.key`.
 - Audit log has no retention.
-- Password gate page is served without `DashboardCSP` (`pages.go:83`).
-- No minimum length for page passwords (`internal/uploads/visibility.go`).
+- Password gate page is served without `DashboardCSP` (`pages.go:83`). (no longer applies: page passwords were removed in migration 15)
+- No minimum length for page passwords (`internal/uploads/visibility.go`). (no longer applies: page passwords were removed in migration 15)
 
 ## Test coverage
 
