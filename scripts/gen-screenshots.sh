@@ -3,7 +3,7 @@
 #
 # Builds the binaries, boots a throwaway Peek server, seeds a demo report,
 # comments, visits, and dashboard data, then drives headless Chromium to write
-# exact 1270x760 PNG screenshots to assets/screenshots/.
+# exact 1270x760 PNG screenshots to docs/public/assets/screenshots/.
 #
 # Requires: go, node (>=20), pnpm install, sqlite3, and Google Chrome /
 # Chromium. Override Chrome with:
@@ -13,9 +13,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-OUT="$ROOT/assets/screenshots"
+OUT="$ROOT/docs/public/assets/screenshots"
 ASSET_OUT="$ROOT/assets"
-DOCS_OUT="$ROOT/docs/public/assets/screenshots"
 DOCS_ASSET_OUT="$ROOT/docs/public/assets"
 PORT="${PEEK_SCREENSHOT_PORT:-7798}"
 BASE="http://localhost:$PORT"
@@ -87,7 +86,13 @@ curl -fsS -b "$COOKIE" -c "$COOKIE" \
 START="$(curl -fsS -X POST "$BASE/api/cli/login/start")"
 DEVICE_CODE="$(printf '%s' "$START" | json_value device_code)"
 USER_CODE="$(printf '%s' "$START" | json_value user_code)"
-APPROVE_HTML="$(curl -fsS -b "$COOKIE" -c "$COOKIE" "$BASE/cli-login/$USER_CODE")"
+ENTRY_HTML="$(curl -fsS -b "$COOKIE" -c "$COOKIE" "$BASE/cli-login")"
+ENTRY_CSRF="$(printf '%s' "$ENTRY_HTML" | csrf_from_html)"
+APPROVE_HTML="$(curl -fsS -b "$COOKIE" -c "$COOKIE" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "csrf=$ENTRY_CSRF" \
+  --data-urlencode "code=$USER_CODE" \
+  "$BASE/cli-login")"
 APPROVE_CSRF="$(printf '%s' "$APPROVE_HTML" | csrf_from_html)"
 curl -fsS -b "$COOKIE" -c "$COOKIE" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -190,15 +195,9 @@ echo "-> capturing screenshots"
 BASE="$BASE" SLUG="$SLUG" OUT="$OUT" ASSET_OUT="$ASSET_OUT" COOKIE_FILE="$COOKIE" CHROME="$CHROME" \
   node scripts/gen-screenshots.mjs
 
-if [ -d "$ROOT/docs/public/assets" ]; then
-  mkdir -p "$DOCS_OUT"
-  rm -f "$DOCS_OUT"/*.png
-  cp "$OUT"/*.png "$DOCS_OUT"/
-  echo "mirrored screenshots to docs/public/assets/screenshots/"
-fi
-if [ -d "$DOCS_ASSET_OUT" ]; then
+if [ -d "$DOCS_ASSET_OUT" ] && [ -f "$ASSET_OUT/hero.png" ]; then
   cp "$ASSET_OUT/hero.png" "$DOCS_ASSET_OUT/hero.png"
   echo "mirrored hero to docs/public/assets/hero.png"
 fi
 
-echo "wrote screenshots to assets/screenshots/"
+echo "wrote screenshots to docs/public/assets/screenshots/"

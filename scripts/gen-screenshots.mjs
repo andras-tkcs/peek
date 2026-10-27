@@ -324,7 +324,7 @@ async function showDashboard(page) {
     .locator("h2", { hasText: "Upload HTML" })
     .waitFor({ state: "visible" });
   await page
-    .locator("h2", { hasText: "Your uploads" })
+    .locator("h2", { hasText: "Pages" })
     .waitFor({ state: "visible" });
 }
 
