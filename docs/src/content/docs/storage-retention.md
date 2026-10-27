@@ -1,7 +1,7 @@
 ---
 title: Storage, Limits, And Retention
 description: Choose file or S3-compatible storage, set upload limits, and plan backups.
-kicker: Settings / Storage
+kicker: Admin / Storage
 ---
 
 ## Storage Model
@@ -27,7 +27,7 @@ peekd --data /var/lib/peek --storage file
 S3 storage writes upload bytes to `uploads/<object-name>` inside the configured bucket. It works with S3-compatible services that support signed `PUT`, `GET`, and `DELETE` object requests.
 
 <figure>
-  <img src="/peek/assets/screenshots/09-admin-storage-s3.png" alt="Peek Settings Storage tab with S3 selected and endpoint, bucket, region, access key, and secret fields visible">
+  <img src="/peek/assets/screenshots/09-admin-storage-s3.png" alt="Peek Admin page, Storage tab with S3 selected and endpoint, bucket, region, access key, and secret fields visible">
   <figcaption>The Admin page can update S3 connection settings, but backend selection takes effect after restart.</figcaption>
 </figure>
 
@@ -51,7 +51,7 @@ After changing S3 credentials or endpoint settings, run a smoke upload and open 
 Limits protect the server from accidental growth and runaway automation.
 
 <figure>
-  <img src="/peek/assets/screenshots/10-admin-limits-retention.png" alt="Peek Settings Limits tab showing upload size, total storage, per-owner quotas, and retention controls">
+  <img src="/peek/assets/screenshots/10-admin-limits-retention.png" alt="Peek Admin page, Limits tab showing upload size, total storage, per-owner quotas, and retention controls">
   <figcaption>Limits are runtime settings: save them from the Admin page and they apply to future uploads and cleanup.</figcaption>
 </figure>
 
@@ -85,3 +85,30 @@ PEEK_DATA=/var/lib/peek peekd backup /backups/peek-$(date +%F).db
 With file storage, also back up the upload directory and `secret.key`. With S3 storage, the SQLite backup does not contain object bytes; back up or lifecycle-manage the bucket according to the same recovery policy.
 
 Before upgrading storage, auth, retention, or database-sensitive releases, take a backup and test the new binary against a copy of the data directory.
+
+## Restore
+
+To restore from a backup:
+
+1. Stop peekd.
+2. Copy the backup over `<data>/peek.db` and delete `<data>/peek.db-wal` and `<data>/peek.db-shm` if present.
+3. Restore `<data>/secret.key` and `<data>/uploads/` (or the S3 bucket) from the same point in time.
+4. Start peekd.
+5. Run the operator smoke test (`/healthz`, `/readyz`, `peek list`, open one page).
+
+peekd refuses to start when `secret.key` exists but is shorter than 32 bytes, instead of replacing it: restore the file from the same backup as `peek.db`, or delete it only if losing every session, API token signature and encrypted setting (S3 keys, OAuth secret) is acceptable.
+
+## Upgrades And Rollbacks
+
+Before upgrading, take a SQLite backup with `peekd backup` and confirm you know where uploaded object bytes live. Try the new binary on a staging copy of the data directory when a release touches storage, auth, retention, or the database.
+
+Rollback is simplest when the database has not been migrated by a newer binary. If a release includes migrations, roll back by restoring the pre-upgrade backup plus the object storage state (see Restore above). Migration notes per version:
+
+- Unreleased: migration 17 adds the provisioning key tables; older binaries ignore them, so provisioning keys stop working after a rollback.
+- v0.14.0: migration 16 adds the page backend tables; backends stop being served after a rollback and leftover containers labelled `peek.managed=true` need removing.
+- v0.13.0: migrations 14 and 15 rewrite visibilities and convert password pages to restricted; roll back by restoring the backup.
+- v0.10.0: migrations 11 to 13; sessions created by the new binary are not accepted by older ones, and the unversioned `/raw/<slug>` route is gone.
+- v0.9.0: migration 10 adds token hint and last-used columns.
+- v0.8.0: migrations 7 to 9; do not roll back once a page has been renamed, restore the backup instead.
+
+The full notes are in the [operator guide](https://github.com/andras-tkcs/peek/blob/main/docs/operations.md#upgrades-and-rollbacks).
