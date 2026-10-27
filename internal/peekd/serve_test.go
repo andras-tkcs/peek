@@ -32,23 +32,16 @@ func restoreSlogDefault(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 }
 
-func freeAddr(t *testing.T) string {
+func serveTestConfig(t *testing.T) serveConfig {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := ln.Addr().String()
-	if err := ln.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return addr
-}
-
-func serveTestConfig(t *testing.T) serveConfig {
-	t.Helper()
+	t.Cleanup(func() { _ = ln.Close() })
 	return serveConfig{
-		Addr:                freeAddr(t),
+		Listener:            ln,
+		Addr:                ln.Addr().String(),
 		DataDir:             t.TempDir(),
 		BaseURL:             "http://localhost:7700",
 		MaxUpload:           2 << 20,
@@ -224,6 +217,7 @@ func TestRunServeFailsWhenAddressInUse(t *testing.T) {
 	defer ln.Close()
 	cfg := serveTestConfig(t)
 	cfg.Addr = ln.Addr().String()
+	cfg.Listener = nil
 	if code := runServe(cfg); code != 1 {
 		t.Fatalf("runServe on %s = %d, want 1", cfg.Addr, code)
 	}
