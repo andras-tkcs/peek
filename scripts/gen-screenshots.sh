@@ -15,7 +15,6 @@ cd "$ROOT"
 
 OUT="$ROOT/docs/public/assets/screenshots"
 ASSET_OUT="$ROOT/assets"
-DOCS_ASSET_OUT="$ROOT/docs/public/assets"
 PORT="${PEEK_SCREENSHOT_PORT:-7798}"
 BASE="http://localhost:$PORT"
 DATA="$(mktemp -d)"
@@ -54,7 +53,7 @@ go build -o bin/peekd ./cmd/peekd
 go build -o bin/peek ./cmd/peek
 
 echo "-> starting peekd on :$PORT"
-./bin/peekd --addr ":$PORT" --data "$DATA" --base-url "$BASE" >/dev/null 2>&1 &
+./bin/peekd --addr "127.0.0.1:$PORT" --data "$DATA" --base-url "$BASE" >/dev/null 2>&1 &
 SRV_PID=$!
 for _ in $(seq 1 50); do
   curl -fsS "$BASE/" >/dev/null 2>&1 && break
@@ -195,9 +194,5 @@ echo "-> capturing screenshots"
 BASE="$BASE" SLUG="$SLUG" OUT="$OUT" ASSET_OUT="$ASSET_OUT" COOKIE_FILE="$COOKIE" CHROME="$CHROME" \
   node scripts/gen-screenshots.mjs
 
-if [ -d "$DOCS_ASSET_OUT" ] && [ -f "$ASSET_OUT/hero.png" ]; then
-  cp "$ASSET_OUT/hero.png" "$DOCS_ASSET_OUT/hero.png"
-  echo "mirrored hero to docs/public/assets/hero.png"
-fi
 
 echo "wrote screenshots to docs/public/assets/screenshots/"

@@ -48,7 +48,7 @@ go build -o bin/peekd ./cmd/peekd
 go build -o bin/peek ./cmd/peek
 
 echo "-> starting peekd on :$PORT"
-./bin/peekd --addr ":$PORT" --data "$DATA" --base-url "$BASE" >/dev/null 2>&1 &
+./bin/peekd --addr "127.0.0.1:$PORT" --data "$DATA" --base-url "$BASE" >/dev/null 2>&1 &
 SRV_PID=$!
 for _ in $(seq 1 50); do
   curl -fsS "$BASE/" >/dev/null 2>&1 && break

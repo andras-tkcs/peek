@@ -1,6 +1,6 @@
 # Security and test coverage audit — 2026-10-11
 
-Status: Critical, Medium and Low findings addressed in PR #16 (first released in v0.10.0). Info items remain open except the two page-password items, which no longer apply since page passwords were removed (migration 15).
+Status: Critical, Medium and Low findings addressed in PR #16 (first released in v0.10.0). Info items remain open except the two page-password items, which no longer apply since page passwords were removed (migration 15), and the `loadOrCreateSecret` item, which is fixed (see below).
 
 Scope: the whole repository at `6380c6b` (server `peekd`, CLI `peek`, storage, DB, templates, CI, Docker, install script). Method: manual review of every package, cross-checked by tracing each finding to a concrete code path; one finding (S1) was confirmed with a throwaway end-to-end test. Tooling run: `go vet`, `go test -race`, coverage, `staticcheck`. `govulncheck` could not reach vuln.go.dev from the audit sandbox; CI runs it on every push.
 
@@ -100,7 +100,7 @@ Fix: `0700` dirs / `0600` files, or set `umask(077)` at startup; write backups `
 - The same HMAC key and `subject.exp.sig` format is used for session, OAuth-flow, page-password and view tokens (`security.go`). No confusion is exploitable today; add a purpose prefix per token type.
 - Setup code compared with `!=` (`bootstrap.go:118`) — negligible with 192 bits + rate limit, but it is printed to stdout, so container logs hold an admin-takeover credential until setup completes.
 - Admins can always use password/token login even when SSO is enforced; there is no MFA.
-- `loadOrCreateSecret` silently regenerates a secret shorter than 32 bytes, making encrypted settings unreadable, and the write isn't atomic.
+- `loadOrCreateSecret` silently regenerates a secret shorter than 32 bytes, making encrypted settings unreadable, and the write isn't atomic. (Fixed: peekd now refuses a short `secret.key` and writes new keys atomically.)
 - `peekd backup` covers only the SQLite DB, not file-storage uploads or `secret.key`.
 - Audit log has no retention.
 - Password gate page is served without `DashboardCSP` (`pages.go:83`). (no longer applies: page passwords were removed in migration 15)

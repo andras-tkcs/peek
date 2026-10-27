@@ -26,7 +26,15 @@ PEEK_DATA=/var/lib/peek peekd backup /backups/peek-$(date +%F).db
 
 `peekd backup` refuses to overwrite an existing destination file.
 
-peekd refuses to start when secret.key exists but is shorter than 32 bytes, instead of replacing it: restore the file from the same backup as peek.db, or delete it only if losing every session, API token signature and encrypted setting (S3 keys, OAuth secret) is acceptable.
+peekd refuses to start when secret.key exists but is shorter than 32 bytes, instead of replacing it: restore the file from the same backup as peek.db, or delete it only if losing every session, page view link, pending invite and encrypted value (S3 keys, OAuth and SMTP secrets, backend environment variables) is acceptable.
+
+To restore from a backup:
+
+1. Stop peekd.
+2. Copy the backup over `<data>/peek.db` and delete `<data>/peek.db-wal` and `<data>/peek.db-shm` if present.
+3. Restore `<data>/secret.key` and `<data>/uploads/` (or the S3 bucket) from the same point in time.
+4. Start peekd.
+5. Run the operator smoke test (`/healthz`, `/readyz`, `peek list`, open one page).
 
 If you use S3 storage, also back up or lifecycle-manage the bucket according to your internal retention policy. The SQLite backup contains object metadata, comments, auth state, settings, and analytics, not the remote object bytes themselves.
 
@@ -176,7 +184,7 @@ Migration 10 (`token_hint_last_used`) adds `hint` and `last_used_at` to `tokens`
 
 ### v0.8.0
 
-Migrations 7 (`upload_versions`, which also adds a `version` column to comments and visits and backfills one version per existing page) and 8 (`upload_grants`). Existing objects are not moved and existing `private` pages keep their meaning.
+v0.8.0 adds migrations 7 (`upload_versions`, which also adds a `version` column to comments and visits and backfills one version per existing page) and 8 (`upload_grants`). Existing objects are not moved and existing `private` pages keep their meaning.
 
 Migration 9 (`upload_slug_aliases`) keeps the old links of renamed pages reserved. Do not roll back to an older binary once a page has been renamed: older binaries do not reserve old links, so a new upload could overwrite a renamed page's first version. Restore the pre-upgrade backup and object storage instead.
 

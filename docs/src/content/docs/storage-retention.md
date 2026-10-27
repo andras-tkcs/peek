@@ -96,7 +96,7 @@ To restore from a backup:
 4. Start peekd.
 5. Run the operator smoke test (`/healthz`, `/readyz`, `peek list`, open one page).
 
-peekd refuses to start when `secret.key` exists but is shorter than 32 bytes, instead of replacing it: restore the file from the same backup as `peek.db`, or delete it only if losing every session, API token signature and encrypted setting (S3 keys, OAuth secret) is acceptable.
+peekd refuses to start when `secret.key` exists but is shorter than 32 bytes, instead of replacing it: restore the file from the same backup as `peek.db`, or delete it only if losing every session, page view link, pending invite and encrypted value (S3 keys, OAuth and SMTP secrets, backend environment variables) is acceptable.
 
 ## Upgrades And Rollbacks
 

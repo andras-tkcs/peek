@@ -194,8 +194,11 @@ func TestLoadOrCreateSecretLeavesNoTempFiles(t *testing.T) {
 		t.Fatalf("dir entries = %v, want only secret.key", entries)
 	}
 	info, err := os.Stat(filepath.Join(dir, "secret.key"))
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("mode = %v (%v), want 0600", info.Mode().Perm(), err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %v, want 0600", info.Mode().Perm())
 	}
 }
 
