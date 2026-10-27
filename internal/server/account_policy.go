@@ -13,6 +13,8 @@ import (
 var (
 	errAccountDisabled = errors.New("account disabled")
 	errOAuthRequired   = errors.New("oauth login required")
+
+	errProvisionedAdmin = errors.New("provisioned token of an admin account")
 )
 
 // accountActive reports whether account a may use Peek now. Dashboard sessions
@@ -48,6 +50,11 @@ func tokenAccount(t *models.Token) *models.Account {
 // token. Accounts without an email are automation accounts created by
 // `peek token create` / POST /api/tokens: they cannot match an allowed email
 // domain or link an OAuth identity, so only the disabled check applies to them.
+//
+// The token a provisioning key minted skips only "must sign in with OAuth": the
+// disabled and allowed-domain checks still apply, and it never works once its
+// account is an admin. IsProvisionedToken runs only for admin tokens and for
+// tokens that failed the OAuth rule.
 func (s *Server) tokenAccountActive(ctx context.Context, t *models.Token) error {
 	if strings.TrimSpace(t.Email) == "" {
 		if t.Disabled {
@@ -55,7 +62,25 @@ func (s *Server) tokenAccountActive(ctx context.Context, t *models.Token) error 
 		}
 		return nil
 	}
-	return s.accountActive(ctx, tokenAccount(t))
+	err := s.accountActive(ctx, tokenAccount(t))
+	if err != nil && !errors.Is(err, errOAuthRequired) {
+		return err
+	}
+	if err == nil && !t.IsAdmin {
+		return nil
+	}
+	provisioned, lerr := s.store.IsProvisionedToken(ctx, t.ID)
+	if lerr != nil {
+		return lerr
+	}
+	switch {
+	case provisioned && t.IsAdmin:
+		return errProvisionedAdmin
+	case provisioned:
+		return nil // only the provisioner's own token skips the OAuth rule
+	default:
+		return err // nil for an ordinary admin token, errOAuthRequired otherwise
+	}
 }
 
 // writeTokenPolicyError answers a bearer request whose account failed the policy.
@@ -65,6 +90,8 @@ func writeTokenPolicyError(w http.ResponseWriter, err error) {
 		jsonError(w, http.StatusForbidden, "account disabled")
 	case errors.Is(err, errAccountNotEligible):
 		jsonError(w, http.StatusForbidden, "account email domain is not allowed")
+	case errors.Is(err, errProvisionedAdmin):
+		jsonError(w, http.StatusForbidden, errProvisionAdminText)
 	case errors.Is(err, errOAuthRequired):
 		jsonError(w, http.StatusForbidden, "account must sign in with OAuth")
 	default:

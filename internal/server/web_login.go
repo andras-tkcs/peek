@@ -152,6 +152,13 @@ func (s *Server) loginWithToken(r *http.Request) (*models.Account, error) {
 	if err != nil {
 		return nil, err
 	}
+	provisioned, err := s.store.IsProvisionedToken(r.Context(), owner.ID)
+	if err != nil {
+		return nil, err
+	}
+	if provisioned {
+		return nil, fmt.Errorf("token login disabled")
+	}
 	if owner.Disabled {
 		return nil, fmt.Errorf("account disabled")
 	}

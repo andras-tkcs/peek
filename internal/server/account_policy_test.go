@@ -175,3 +175,92 @@ func TestListCommentsBearerHonoursAccountPolicy(t *testing.T) {
 		t.Fatalf("off-domain owner = %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestTokenAccountActiveExemptsProvisionedToken(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	f := newProvisionedFixture(t, s, "PF", "u@x.test", "e1")
+	enableGitHubOAuthForTest(t, s)
+	if rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer(f.Token)); rec.Code != http.StatusOK {
+		t.Fatalf("got %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestTokenAccountActiveDoesNotExemptOtherTokensOfProvisionedAccount(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	f := newProvisionedFixture(t, s, "PF", "u@x.test", "e1")
+	if err := s.store.CreateTokenForAccount(context.Background(), "peek_own-token-1234", f.AccountID, "mine"); err != nil {
+		t.Fatal(err)
+	}
+	enableGitHubOAuthForTest(t, s)
+	rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer("peek_own-token-1234"))
+	if rec.Code != http.StatusForbidden || policyErrorBody(t, rec.Body.Bytes()) != "account must sign in with OAuth" {
+		t.Fatalf("got %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestTokenAccountActiveProvisionedTokenStillChecksDisabled(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	f := newProvisionedFixture(t, s, "PF", "u@x.test", "e1")
+	enableGitHubOAuthForTest(t, s)
+	if _, err := s.store.Exec(`UPDATE accounts SET disabled=1 WHERE id=?`, f.AccountID); err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer(f.Token))
+	if rec.Code != http.StatusForbidden || policyErrorBody(t, rec.Body.Bytes()) != "account disabled" {
+		t.Fatalf("got %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestTokenAccountActiveProvisionedTokenStillChecksDomain(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	f := newProvisionedFixture(t, s, "PF", "u@x.test", "e1")
+	enableGitHubOAuthForTest(t, s)
+	setAllowedDomainForTest(t, s, "other.test")
+	rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer(f.Token))
+	if rec.Code != http.StatusForbidden || policyErrorBody(t, rec.Body.Bytes()) != "account email domain is not allowed" {
+		t.Fatalf("got %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestTokenAccountActiveRefusesProvisionedTokenOfPromotedAccount(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	f := newProvisionedFixture(t, s, "PF", "u@x.test", "e1")
+	if err := s.store.SetAccountAdminChecked(context.Background(), f.AccountID, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, oauth := range []bool{false, true} {
+		if oauth {
+			enableGitHubOAuthForTest(t, s)
+		}
+		for _, path := range []string{"/api/uploads", "/api/tokens"} {
+			rec := doRequest(t, s, http.MethodGet, path, nil, asBearer(f.Token))
+			if rec.Code != http.StatusForbidden || policyErrorBody(t, rec.Body.Bytes()) != "account is a Peek admin; connect it by hand" {
+				t.Fatalf("oauth=%v %s: got %d %s", oauth, path, rec.Code, rec.Body)
+			}
+		}
+	}
+}
+
+func TestTokenAccountActiveOrdinaryAdminTokenUnchanged(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	newAccountWithToken(t, s, "root@x.test", "peek_admin-token-1234", true)
+	enableGitHubOAuthForTest(t, s)
+	for _, path := range []string{"/api/uploads", "/api/tokens"} {
+		if rec := doRequest(t, s, http.MethodGet, path, nil, asBearer("peek_admin-token-1234")); rec.Code != http.StatusOK {
+			t.Fatalf("%s: got %d %s", path, rec.Code, rec.Body)
+		}
+	}
+}
+
+func TestTokenAccountActiveReportsProvisionedLookupFailure(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	f := newProvisionedFixture(t, s, "PF", "u@x.test", "e1")
+	enableGitHubOAuthForTest(t, s)
+	if _, err := s.store.Exec(`DROP TABLE provisioned_accounts`); err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer(f.Token))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("got %d %s", rec.Code, rec.Body)
+	}
+}
