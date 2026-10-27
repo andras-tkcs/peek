@@ -104,6 +104,10 @@ Open `/p/<slug>` and use the floating island at the bottom:
 
 Comments live in a side panel. Signed-in viewers comment as their account; anonymous viewers are asked for a name once. Public pages are open to anyone with the link, signed-in pages require an active Peek account, and restricted pages require an account matching a grant. Comments belong to the version they were written on.
 
+### Filters in the address bar
+
+A page can keep its filters in the viewer's address bar with `peek.params` (read) and `peek.setParams({ region: "eu", q: null })` (merge; `null` or `""` removes a key; a string replaces all). Peek mirrors them into the query string of `/p/<slug>` and passes them back to the page on load, up to 2048 characters.
+
 ## Page backends
 
 A page is one HTML file in a sandboxed iframe, so by itself it cannot send an email, keep data or use a secret. A page version can therefore come with a **backend**: a Docker image that Peek runs as a container. The page talks to it with `peek.fetch`, a fetch-like call the Peek bridge provides:
