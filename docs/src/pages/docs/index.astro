@@ -8,9 +8,9 @@ if (!entry) {
   throw new Error('Missing docs index content');
 }
 
-const { Content } = await render(entry);
+const { Content, headings } = await render(entry);
 ---
 
-<DocsShell entry={entry} slug="index">
+<DocsShell entry={entry} slug="index" headings={headings}>
   <Content />
 </DocsShell>

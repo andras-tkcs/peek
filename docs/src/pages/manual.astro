@@ -22,20 +22,20 @@ const { Content } = await render(entry);
         <span>Peek manual</span>
       </a>
       <section class="nav-section">
-        <h2>Start</h2>
+        <p class="nav-heading">Start</p>
         <a href="#start-here">Start here</a>
         <a href="#upload-and-share">Upload and share</a>
         <a href="#review-and-comment">Review and comment</a>
       </section>
       <section class="nav-section">
-        <h2>Use</h2>
+        <p class="nav-heading">Use</p>
         <a href="#owner-tasks">Owner tasks</a>
         <a href="#admin-tasks">Admin tasks</a>
       </section>
       <section class="nav-section">
-        <h2>Run</h2>
+        <p class="nav-heading">Run</p>
         <a href="#operator-tasks">Operator tasks</a>
-        <a href="/peek/docs/reference/">Reference</a>
+        <a href={`${import.meta.env.BASE_URL}docs/reference/`}>Reference</a>
       </section>
     </aside>
 
