@@ -86,6 +86,18 @@ The path starts with `/` and goes to the container; `GET`, `POST`, `PUT`, `PATCH
 
 The container listens on `$PORT` (default 8080) and has a writable `/data` volume; the rest of its filesystem is read-only. Peek sets `PORT`, `PEEK_BACKEND_TOKEN`, `PEEK_UPLOAD_ID` and `PEEK_VERSION`, and adds `X-Peek-Backend-Token` (the backend must reject requests without it), `X-Peek-Upload-Id`, `X-Peek-Version`, `X-Peek-Viewer` (a stable per-page id for the viewer's browser) and, on signed-in and restricted pages only, `X-Peek-User-Id` and `X-Peek-User-Email` to every request. Deleting a page deletes its data volume. See `examples/contact-form` in the repository for a complete backend.
 
+## Keep Filters In The Address Bar
+
+A page that has filters, tabs or a selected row can store them in the viewer's address bar, so a copied link reopens the same view. The Peek bridge provides `peek.params` (a read-only `URLSearchParams` of the page's current state) and `peek.setParams`:
+
+```js
+const region = peek.params.get("region");
+peek.setParams({ region: "eu", q: null }); // merges; null, undefined or "" removes a key
+peek.setParams("region=eu&q=sales");       // a string replaces all params
+```
+
+Peek mirrors the params into the query string of `/p/<slug>` and hands them back to the page on load, so `peek.params` is ready before the page's own scripts run. Assigning `location.hash` inside the page works too. The query string is limited to 2048 characters; `setParams` returns `false` and changes nothing when it is longer.
+
 ## Review In Context
 
 Open `/p/<slug>`. Peek keeps the uploaded page full-screen and adds a small toolbar for comments, view count, and the comments panel. Use the chevron button at the end of the toolbar to hide it while reading; press Shift+H to bring it back (or hide it again). Reloading the page always shows the toolbar.
