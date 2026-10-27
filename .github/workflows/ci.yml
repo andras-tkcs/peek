@@ -21,6 +21,8 @@ jobs:
       GOFLAGS: -mod=readonly
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
@@ -54,6 +56,8 @@ jobs:
       GOFLAGS: -mod=readonly
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
@@ -64,3 +68,72 @@ jobs:
         run: |
           PEEK_DOCKER_TEST=1 PEEK_DOCKER_TEST_IMAGE=peek-example-contact:ci \
             go test -count=1 -run '^TestDockerIntegration' -v ./internal/backends
+      - name: Example module tests
+        working-directory: examples/contact-form
+        run: go test ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build image
+        run: docker build -t peek:ci .
+      - name: Start container and probe health
+        run: |
+          set -euo pipefail
+          id=$(docker run -d -p 7700:7700 peek:ci)
+          trap 'docker logs "$id" || true' EXIT
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:7700/healthz >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://localhost:7700/healthz
+          docker exec "$id" /peekd healthcheck --addr localhost:7700
+
+  cross-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOFLAGS: -mod=readonly
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Vet and build for windows and darwin
+        run: |
+          set -eu
+          for os in windows darwin; do
+            CGO_ENABLED=0 GOOS=$os GOARCH=amd64 go vet ./...
+            CGO_ENABLED=0 GOOS=$os GOARCH=amd64 go build ./cmd/...
+          done
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10.24.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: docs
+        run: pnpm install --frozen-lockfile
+      - name: Build docs
+        working-directory: docs
+        run: pnpm build
+      - name: Check internal links
+        run: node scripts/check-docs-links.mjs docs/dist
