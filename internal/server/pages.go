@@ -269,9 +269,9 @@ func downloadFilename(name, slug string) string {
 // rawSandbox is the sandbox applied to uploaded HTML. It must stay identical to
 // the sandbox attribute of #hn-frame in internal/web/templates/page.gohtml;
 // TestRawSandboxMatchesIframeAttribute enforces this.
-const rawSandbox = "allow-scripts allow-popups"
+const rawSandbox = "allow-scripts allow-popups allow-popups-to-escape-sandbox"
 
-// rawContentCSP starts with "sandbox allow-scripts allow-popups" and lets uploaded HTML run inline scripts/styles and load remote
+// rawContentCSP starts with "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox" and lets uploaded HTML run inline scripts/styles and load remote
 // resources. The sandbox directive gives the document an opaque origin even when
 // /raw is opened as a top-level page, so it can never act as Peek's origin.
 const rawContentCSP = "sandbox " + rawSandbox + "; " +
