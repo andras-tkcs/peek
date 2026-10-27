@@ -392,7 +392,7 @@ html[data-theme="dark"] .astro-code span {
   margin-bottom: 0;
 }
 
-.nav-section h2 {
+.nav-section .nav-heading {
   grid-row: 1 / span 16;
   margin: 0;
   color: var(--faint);
@@ -519,7 +519,7 @@ html[data-theme="dark"] .astro-code span {
     grid-template-columns: 1fr;
   }
 
-  .nav-section h2 {
+  .nav-section .nav-heading {
     grid-row: auto;
     margin-top: 4px;
   }

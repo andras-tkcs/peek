@@ -18,7 +18,15 @@ type NavGroup = {
   }>;
 };
 
-const { entry, slug = 'index' } = Astro.props as { entry: Entry; slug?: string };
+const {
+  entry,
+  slug = 'index',
+  headings = [],
+} = Astro.props as {
+  entry: Entry;
+  slug?: string;
+  headings?: Array<{ depth: number; slug: string; text: string }>;
+};
 const base = import.meta.env.BASE_URL;
 const href = (path: string) => `${base}${path}`;
 
@@ -38,100 +46,16 @@ const pageNav: NavGroup[] = [
   },
 ];
 
-const anchorsBySlug: Record<string, NavGroup[]> = {
-  index: [
-    {
-      title: 'Start',
-      links: [
-        { label: 'What Peek is for', href: '#what-peek-is-for' },
-        { label: 'First useful setup', href: '#first-useful-setup' },
-        { label: 'Choose a setup path', href: '#choose-a-setup-path' },
-        { label: 'What to read next', href: '#what-to-read-next' },
-      ],
-    },
-  ],
-  'using-peek': [
-    {
-      title: 'Use',
-      links: [
-        { label: 'Upload a page', href: '#upload-a-page' },
-        { label: 'Pick visibility', href: '#pick-visibility' },
-        { label: 'Review in context', href: '#review-in-context' },
-        { label: 'Read feedback', href: '#read-feedback' },
-        { label: 'Stats', href: '#stats' },
-        { label: 'CLI workflow', href: '#cli-workflow' },
-      ],
-    },
-  ],
-  'server-setup': [
-    {
-      title: 'Run',
-      links: [
-        { label: 'Install', href: '#install' },
-        { label: 'First run', href: '#first-run' },
-        { label: 'Production shape', href: '#production-shape' },
-        { label: 'Docker', href: '#docker' },
-        { label: 'Proxy and base URL', href: '#proxy-and-base-url' },
-        { label: 'Smoke test', href: '#smoke-test' },
-      ],
-    },
-  ],
-  'deployment-platforms': [
-    {
-      title: 'Deploy',
-      links: [
-        { label: 'Rule of thumb', href: '#rule-of-thumb' },
-        { label: 'Base URL', href: '#base-url' },
-        { label: 'Platform matrix', href: '#platform-matrix' },
-        { label: 'Render', href: '#render' },
-        { label: 'Fly.io', href: '#flyio' },
-        { label: 'Railway', href: '#railway' },
-        { label: 'Kubernetes', href: '#kubernetes' },
-        { label: 'Sources', href: '#sources' },
-      ],
-    },
-  ],
-  'auth-access': [
-    {
-      title: 'Auth',
-      links: [
-        { label: 'Model', href: '#auth-model' },
-        { label: 'OAuth providers', href: '#oauth-providers' },
-        { label: 'Invites', href: '#invites-and-users' },
-        { label: 'CLI login', href: '#cli-login' },
-        { label: 'Upload visibility', href: '#upload-visibility' },
-        { label: 'Parameters', href: '#parameters' },
-      ],
-    },
-  ],
-  'storage-retention': [
-    {
-      title: 'Store',
-      links: [
-        { label: 'Storage model', href: '#storage-model' },
-        { label: 'File storage', href: '#file-storage' },
-        { label: 'S3 storage', href: '#s3-compatible-storage' },
-        { label: 'Limits', href: '#limits-and-quotas' },
-        { label: 'Retention', href: '#retention' },
-        { label: 'Backups', href: '#backups' },
-      ],
-    },
-  ],
-  reference: [
-    {
-      title: 'Reference',
-      links: [
-        { label: 'Server parameters', href: '#server-parameters' },
-        { label: 'Runtime settings', href: '#runtime-settings' },
-        { label: 'CLI configuration', href: '#cli-configuration' },
-        { label: 'Endpoints', href: '#operational-endpoints' },
-        { label: 'Checks', href: '#operator-checks' },
-      ],
-    },
-  ],
-};
-
-const sectionNav = anchorsBySlug[slug] ?? [];
+const sectionNav: NavGroup[] = headings.some((heading) => heading.depth === 2)
+  ? [
+      {
+        title: 'On this page',
+        links: headings
+          .filter((heading) => heading.depth === 2)
+          .map((heading) => ({ label: heading.text, href: `#${heading.slug}` })),
+      },
+    ]
+  : [];
 
 function currentFor(linkHref: string) {
   const current = slug === 'index' ? href('docs/') : href(`docs/${slug}/`);
@@ -152,7 +76,7 @@ function currentFor(linkHref: string) {
       {
         pageNav.map((group) => (
           <section class="nav-section">
-            <h2>{group.title}</h2>
+            <p class="nav-heading">{group.title}</p>
             {group.links.map((link) => (
               <a href={link.href} aria-current={currentFor(link.href)}>
                 {link.label}
@@ -164,7 +88,7 @@ function currentFor(linkHref: string) {
       {
         sectionNav.map((group) => (
           <section class="nav-section">
-            <h2>{group.title}</h2>
+            <p class="nav-heading">{group.title}</p>
             {group.links.map((link) => (
               <a href={link.href}>{link.label}</a>
             ))}
