@@ -12,7 +12,7 @@
 {{if .Invite}}<div hidden data-peek-toast data-toast-type="info" data-toast-message="Accept your invite by signing in."></div>{{end}}
 {{if .Error}}<div hidden data-peek-toast data-toast-type="danger" data-toast-message="{{.Error}}" data-toast-duration="6500"></div>{{end}}
 <div class="w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-sm">
-<div class="mb-4 flex justify-center">{{template "brand-logo" .}}</div>
+<div class="peek-brand-lg mb-6 flex justify-center">{{template "brand-logo" .}}</div>
 {{if .Invite}}<p class="mb-4 rounded-lg border border-primary/25 bg-accent px-3 py-2.5 text-sm text-accent-foreground">Accept your invite by signing in.</p>{{end}}
 {{if .Providers}}
 <div class="flex flex-col gap-2.5 mb-3.5">
@@ -55,10 +55,10 @@
 <form method="POST" action="/login" class="flex flex-col gap-4">
   <p class="text-sm text-muted-foreground">{{if .OAuthEnabled}}Admin sign in{{else}}Sign in with email and password{{end}}</p>
   <input type="hidden" name="method" value="password">
-  <input type="email" name="email" placeholder="Email" required autofocus autocomplete="email" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
-  <input type="password" name="password" placeholder="Password" required autocomplete="current-password" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+  <input type="email" name="email" placeholder="Email" required autofocus autocomplete="email" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+  <input type="password" name="password" placeholder="Password" required autocomplete="current-password" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
-  <button type="submit" class="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Sign in &rarr;</button>
+  <button type="submit" class="h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Sign in &rarr;</button>
 </form>
 {{end}}
 
@@ -66,8 +66,8 @@
 <form method="POST" action="/login" class="flex flex-col gap-4">
   <p class="text-sm text-muted-foreground">Enter your access token to manage uploads.</p>
   <input type="hidden" name="method" value="token">
-  <input type="password" name="token" placeholder="Access token" required {{if not .PasswordLogin}}autofocus{{end}} autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+  <input type="password" name="token" placeholder="Access token" required {{if not .PasswordLogin}}autofocus{{end}} autocomplete="off" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
-  <button type="submit" class="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Sign in &rarr;</button>
+  <button type="submit" class="h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Sign in &rarr;</button>
 </form>
 {{end}}

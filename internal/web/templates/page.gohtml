@@ -112,7 +112,7 @@
           :style="{ borderLeft: '3px solid ' + c.authorColor, backgroundColor: activeComment === c.id ? c.authorSoft : '' }"
           @click="c.selector && locateComment(c)">
         <div class="flex items-center gap-2 mb-1">
-          <span x-show="c.number" class="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-primary-foreground text-[11px] font-semibold shrink-0 align-middle" :style="{ backgroundColor: c.authorColor }" x-text="c.number"></span>
+          <span x-show="c.number" class="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-white text-[11px] font-semibold shrink-0 align-middle" :style="{ backgroundColor: c.authorColor }" x-text="c.number"></span>
           <span class="text-xs text-muted-foreground"><strong class="font-semibold" :style="{ color: c.authorText }" x-text="c.name"></strong> <span x-show="c.verified" class="hn-comment-verified text-[11px] font-medium text-muted-foreground whitespace-nowrap" title="Posted by a signed-in Peek account">&#x2713; signed in</span> &middot; <span x-text="c.created_human"></span></span>
         </div>
         <div x-show="c.scope" class="inline-block text-[11px] px-2 py-0.5 mb-1.5 rounded-md" :style="{ backgroundColor: c.authorSoft, color: c.authorText }" x-text="c.scope"></div>
@@ -145,15 +145,15 @@
 </div>
 
 <div id="hn-name-modal" x-show="nameModalOpen" x-cloak
-     class="fixed inset-0 z-[1300] grid place-items-center p-6 bg-black/45 backdrop-blur-sm"
+     class="fixed inset-0 z-[1300] grid place-items-center p-6 bg-[hsl(var(--scrim)/0.45)] backdrop-blur-sm"
      x-transition.opacity.duration.150ms>
-  <div class="w-[340px] max-w-full bg-card border border-border rounded-xl p-6 shadow-[0_12px_32px_-4px_rgba(0,0,0,.6),0_4px_12px_-4px_rgba(0,0,0,.5)]"
+  <div class="w-[340px] max-w-full bg-card border border-border rounded-2xl p-6 shadow-[var(--shadow-xl)]"
        x-transition.scale.origin-center.duration.150ms>
     <h2 class="text-[17px] font-semibold tracking-tight text-card-foreground mb-1.5">Add your name</h2>
     <p class="text-[13px] text-muted-foreground mb-4 leading-relaxed">It shows next to comments you leave. You can skip this.</p>
     <form @submit.prevent="saveName" class="flex flex-col gap-3.5">
       <input x-ref="nameInput" x-model="nameInput" type="text" placeholder="Your name" maxlength="100" autocomplete="name" required
-             class="h-10 rounded-lg border border-input bg-secondary px-3.5 text-foreground text-[13px] placeholder:text-muted-foreground transition focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20">
+             class="h-11 rounded-lg border border-input bg-secondary px-3.5 text-foreground text-[13px] placeholder:text-muted-foreground transition focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20">
       <div class="flex gap-2 items-center">
         <button type="submit" class="hn-small-button hn-button-primary">Continue</button>
         <button type="button" id="hn-name-skip" @click="skipName" class="hn-small-button ml-auto">Skip</button>

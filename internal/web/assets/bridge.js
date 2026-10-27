@@ -16,7 +16,9 @@
 (function () {
   "use strict";
 
-  var ACCENT = "#1677e8";
+  // The logo's teal-blue (the viewer's --primary); these styles live inside the shared page.
+  var ACCENT = "#0b5f86";
+  var ACCENT_HOVER = "#084b6b";
   var supportsHL = !!(window.Highlight && window.CSS && CSS.highlights);
   var state = {
     modeOn: false,
@@ -35,21 +37,21 @@
       ".hn-pin{position:absolute;display:flex;align-items:center;justify-content:center;" +
         "width:24px;height:24px;padding:0;border-radius:50%;box-sizing:border-box;" +
         "background:" + ACCENT + ";color:#fff;font:700 12px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;" +
-        "letter-spacing:0;box-shadow:0 2px 8px rgba(15,23,42,.28),0 0 0 2px rgba(255,255,255,.95),inset 0 1px 0 rgba(255,255,255,.35);" +
+        "letter-spacing:0;box-shadow:0 2px 8px rgba(10,35,66,.28),0 0 0 2px rgba(255,255,255,.95);" +
         "cursor:pointer;pointer-events:auto;transform:translate(-50%,-50%);transition:transform .12s ease;" +
         "-webkit-font-smoothing:antialiased;user-select:none}" +
       ".hn-pin:hover{transform:translate(-50%,-50%) scale(1.12)}" +
       ".hn-hover-outline{outline:2px solid " + ACCENT + " !important;outline-offset:1px !important;cursor:crosshair}" +
       ".hn-pulse{animation:hn-pulse 1.2s ease-out 1}" +
-      "@keyframes hn-pulse{0%{box-shadow:0 0 0 0 rgba(22,119,232,.42)}100%{box-shadow:0 0 0 14px rgba(22,119,232,0)}}" +
-      "::highlight(hn-highlight){background-color:rgba(22,119,232,.18);color:inherit}" +
-      "::highlight(hn-highlight-active){background-color:rgba(22,119,232,.36);color:inherit}" +
+      "@keyframes hn-pulse{0%{box-shadow:0 0 0 0 rgba(11,95,134,.42)}100%{box-shadow:0 0 0 14px rgba(11,95,134,0)}}" +
+      "::highlight(hn-highlight){background-color:rgba(11,95,134,.18);color:inherit}" +
+      "::highlight(hn-highlight-active){background-color:rgba(11,95,134,.36);color:inherit}" +
       ".hn-sel-btn{position:fixed;z-index:2147483600;display:flex;align-items:center;gap:6px;" +
-        "height:34px;padding:0 13px;border:1px solid #0d73df;border-radius:11px;background:linear-gradient(#3393ff,#1677e8);color:#fff;" +
+        "height:34px;padding:0 13px;border:1px solid " + ACCENT + ";border-radius:12px;background:" + ACCENT + ";color:#fff;" +
         "font:600 13px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;" +
-        "box-shadow:0 2px 4px rgba(15,23,42,.24),inset 0 1px 0 rgba(255,255,255,.36);cursor:pointer;" +
+        "box-shadow:0 8px 24px rgba(10,35,66,.18);cursor:pointer;" +
         "pointer-events:auto;white-space:nowrap;-webkit-font-smoothing:antialiased}" +
-      ".hn-sel-btn:hover{border-color:#0868cc;background:linear-gradient(#2b8af2,#126fda)}";
+      ".hn-sel-btn:hover{border-color:" + ACCENT_HOVER + ";background:" + ACCENT_HOVER + "}";
     var style = document.createElement("style");
     style.id = "hn-style";
     style.textContent = css;

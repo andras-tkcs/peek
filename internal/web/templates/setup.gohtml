@@ -11,15 +11,16 @@
 <body class="grid min-h-screen place-items-center p-6">
 {{if .Error}}<div hidden data-peek-toast data-toast-type="danger" data-toast-message="{{.Error}}" data-toast-duration="6500"></div>{{end}}
 <div class="w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-sm">
+<div class="peek-brand-lg mb-6 flex justify-center">{{template "brand-logo" .}}</div>
 <form method="POST" action="/setup" class="flex flex-col gap-4">
   <h2 class="text-lg font-semibold tracking-tight text-card-foreground">Set up Peek</h2>
   <p class="text-sm text-muted-foreground">Create the first admin account.</p>
-  <input type="email" name="email" placeholder="Admin email" required autofocus autocomplete="email" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
-  <input type="text" name="name" placeholder="Name" autocomplete="name" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
-  <input type="password" name="password" placeholder="Password" required autocomplete="new-password" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+  <input type="email" name="email" placeholder="Admin email" required autofocus autocomplete="email" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+  <input type="text" name="name" placeholder="Name" autocomplete="name" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+  <input type="password" name="password" placeholder="Password" required autocomplete="new-password" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
   <input type="hidden" name="code" value="{{.Code}}">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
-  <button type="submit" class="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Create admin</button>
+  <button type="submit" class="h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Create admin</button>
   {{if .Error}}<p class="text-sm text-destructive">{{.Error}}</p>{{end}}
 </form>
 </div>

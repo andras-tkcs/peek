@@ -1,55 +1,55 @@
 :root {
   color-scheme: light dark;
-  --bg: #ffffff;
-  --fg: #111111;
-  --muted: #555555;
-  --faint: #767676;
-  --line: #d0d0d0;
-  --surface: #f4f4f4;
-  --surface-2: #e9e9e9;
-  --inverse-bg: #111111;
+  --bg: #f5f8fb;
+  --fg: #0a2342;
+  --muted: #4a5e70;
+  --faint: #5f7182;
+  --line: #c9d6e0;
+  --surface: #ffffff;
+  --surface-2: #edf3f7;
+  --inverse-bg: #0b5f86;
   --inverse-fg: #ffffff;
   --mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Liberation Mono", Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #101010;
-    --fg: #eeeeee;
-    --muted: #adadad;
-    --faint: #808080;
-    --line: #3d3d3d;
-    --surface: #181818;
-    --surface-2: #242424;
-    --inverse-bg: #eeeeee;
-    --inverse-fg: #101010;
+    --bg: #061629;
+    --fg: #e6f0f6;
+    --muted: #9fb4c5;
+    --faint: #8aa1b4;
+    --line: #1d3a5a;
+    --surface: #0b2039;
+    --surface-2: #112b49;
+    --inverse-bg: #3fd6bd;
+    --inverse-fg: #04203a;
   }
 }
 
 html[data-theme="light"] {
   color-scheme: light;
-  --bg: #ffffff;
-  --fg: #111111;
-  --muted: #555555;
-  --faint: #767676;
-  --line: #d0d0d0;
-  --surface: #f4f4f4;
-  --surface-2: #e9e9e9;
-  --inverse-bg: #111111;
+  --bg: #f5f8fb;
+  --fg: #0a2342;
+  --muted: #4a5e70;
+  --faint: #5f7182;
+  --line: #c9d6e0;
+  --surface: #ffffff;
+  --surface-2: #edf3f7;
+  --inverse-bg: #0b5f86;
   --inverse-fg: #ffffff;
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #101010;
-  --fg: #eeeeee;
-  --muted: #adadad;
-  --faint: #808080;
-  --line: #3d3d3d;
-  --surface: #181818;
-  --surface-2: #242424;
-  --inverse-bg: #eeeeee;
-  --inverse-fg: #101010;
+  --bg: #061629;
+  --fg: #e6f0f6;
+  --muted: #9fb4c5;
+  --faint: #8aa1b4;
+  --line: #1d3a5a;
+  --surface: #0b2039;
+  --surface-2: #112b49;
+  --inverse-bg: #3fd6bd;
+  --inverse-fg: #04203a;
 }
 
 * {
@@ -113,8 +113,11 @@ input {
 .brand {
   display: inline-flex;
   align-items: center;
+  gap: 10px;
   color: var(--fg);
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
   text-decoration: none;
 }
 
@@ -123,13 +126,9 @@ input {
 }
 
 .brand-logo {
-  width: 92px;
-  height: auto;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
-}
-
-html[data-theme="dark"] .brand-logo {
-  filter: invert(1) grayscale(1) contrast(1.15);
 }
 
 .topline nav {
