@@ -8,6 +8,7 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 - Build provenance attestations for release archives and container images; check an archive with `gh attestation verify <archive> -R andras-tkcs/peek`.
 - `SECURITY.md` with the security policy and private vulnerability reporting.
+- Documentation for `peek.params` / `peek.setParams`, which keep a page's filters in the viewer's address bar.
 - `peek <command> --help` and `peekd --help`, which list the subcommands and the `PEEK_*` environment variables.
 
 ### Changed
