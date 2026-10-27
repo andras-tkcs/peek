@@ -1,0 +1,9 @@
+<!doctype html>
+<title>peek e2e probe</title>
+<p id="t">Hello from the probe page</p>
+<script>
+  window.probe = async function (path) {
+    try { const res = await peek.fetch(path); return "ok:" + res.status; }
+    catch (e) { return "err:" + e.message; }
+  };
+</script>
