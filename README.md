@@ -243,7 +243,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md); please do not open a 
 | CSRF / clickjacking | Dashboard forms require CSRF tokens; CSP with `frame-ancestors 'none'`. |
 | Credentials in clear | Secure cookies + HSTS on https. Server warns on non-local plain http. |
 | Uploaded HTML harms host | Server never executes HTML, only streams bytes. |
-| Uploaded HTML steals data | Rendered in `<iframe sandbox="allow-scripts allow-popups">` and served with CSP `sandbox allow-scripts allow-popups`, so it has an opaque origin even when the raw URL is opened directly; `/raw` refuses non-iframe loads (`Sec-Fetch-Dest`). |
+| Uploaded HTML steals data | Rendered in `<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox">` and served with CSP `sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox`, so it has an opaque origin even when the raw URL is opened directly; `/raw` refuses non-iframe loads (`Sec-Fetch-Dest`). |
 | Cross-origin attacks | Parent and iframe communicate only via `postMessage`. |
 | Bypassing page access | `/raw` requires a short-lived HMAC-signed view token bound to the HttpOnly visitor cookie, and re-checks page access on every load, so revoking a grant or changing visibility takes effect immediately. |
 | Backend container escapes or exhausts the host | Images must match an admin-allowed registry prefix. Every container gets fixed memory, CPU and PID limits, a read-only root filesystem (writable `/tmp` and `/data` only), all capabilities dropped, `no-new-privileges`, and no published ports. Page owners cannot choose mounts, privileges or network mode. The Docker socket is still root on the host; see [docs/operations.md](docs/operations.md#page-backends). |

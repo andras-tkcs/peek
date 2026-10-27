@@ -173,7 +173,7 @@ func TestRawSetsSandboxCSP(t *testing.T) {
 		t.Fatalf("raw = %d: %s", rec.Code, rec.Body.String())
 	}
 	csp := rec.Header().Get("Content-Security-Policy")
-	if !strings.HasPrefix(csp, "sandbox allow-scripts allow-popups;") || csp != rawContentCSP {
+	if !strings.HasPrefix(csp, "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox;") || csp != rawContentCSP {
 		t.Fatalf("raw CSP = %q", csp)
 	}
 }

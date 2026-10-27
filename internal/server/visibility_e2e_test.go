@@ -117,7 +117,7 @@ func TestRawHTMLE2ERejectsLeakedURL(t *testing.T) {
 	assertStatus(t, app.request(t, http.MethodGet, rawPath, nil, withCookies(page.Cookies...), fetchDest("document")), http.StatusForbidden)
 	raw := app.request(t, http.MethodGet, rawPath, nil, withCookies(page.Cookies...), fetchDest("iframe"))
 	assertStatus(t, raw, http.StatusOK)
-	if csp := raw.Header.Get("Content-Security-Policy"); !strings.HasPrefix(csp, "sandbox allow-scripts allow-popups;") {
+	if csp := raw.Header.Get("Content-Security-Policy"); !strings.HasPrefix(csp, "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox;") {
 		t.Fatalf("raw CSP = %q", csp)
 	}
 }
