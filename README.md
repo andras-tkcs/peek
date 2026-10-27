@@ -10,6 +10,8 @@ Share an HTML page inside your company, get a link, and collect feedback directl
 
 Peek is a self-hosted internal review tool for HTML reports, prototypes, build artifacts, and agent-generated pages. Upload a file from the CLI or dashboard, share the preview URL, and let reviewers leave comments pinned to elements, anchored to selected text, or attached to the whole page. It ships as a single static Go binary with pure-Go SQLite and no CGO.
 
+Documentation: https://andras-tkcs.github.io/peek/ (sources in [docs/src/content/docs](docs/src/content/docs)).
+
 ![Peek demo: upload from the CLI, comment in context, and view visits](assets/demo.gif)
 
 ## Quick start
@@ -25,8 +27,11 @@ peek login --host http://localhost:7700
 
 # 4. Share a page (restricted by default: only you, admins and people you grant)
 peek upload mypage.html
-#  -> http://localhost:7700/p/mypage-html-k7m2xq
-peek grant mypage-html-k7m2xq alice@example.com    # emails Alice the link when SMTP is configured
+#  uploaded: http://localhost:7700/p/mypage-k7m2xq
+#  slug:     mypage-k7m2xq
+#  version:  1
+#  visibility: restricted
+peek grant mypage-k7m2xq alice@example.com    # emails Alice the link when SMTP is configured
 
 # Or make it open to anyone with the link
 peek upload mypage.html --visibility public
@@ -36,16 +41,16 @@ Common follow-up commands:
 
 ```sh
 peek list
-peek stats mypage-html-k7m2xq
-peek comments mypage-html-k7m2xq
-peek comments mypage-html-k7m2xq --version 2
-peek upload mypage.html --slug mypage-html-k7m2xq   # new version at /p/mypage-html-k7m2xq/v/2
-peek versions mypage-html-k7m2xq
-peek grant mypage-html-k7m2xq alice@example.com    # for --visibility restricted pages
-peek visibility mypage-html-k7m2xq restricted
-peek visibility mypage-html-k7m2xq public
-peek delete mypage-html-k7m2xq
-peek export mypage-html-k7m2xq
+peek stats mypage-k7m2xq
+peek comments mypage-k7m2xq
+peek comments mypage-k7m2xq --version 2
+peek upload mypage.html --slug mypage-k7m2xq   # new version at /p/mypage-k7m2xq/v/2
+peek versions mypage-k7m2xq
+peek grant mypage-k7m2xq alice@example.com    # for --visibility restricted pages
+peek visibility mypage-k7m2xq restricted
+peek visibility mypage-k7m2xq public
+peek delete mypage-k7m2xq
+peek export mypage-k7m2xq
 ```
 
 ## Install
@@ -56,7 +61,7 @@ peek export mypage-html-k7m2xq
 ```sh
 curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
 ```
-Override with `PEEK_VERSION` / `PEEK_INSTALL_DIR`. `install.sh` verifies the archive against the release's `checksums.txt` and refuses to install on mismatch; releases published before checksums were added (v0.8.1 and older) have no checksums file.
+Override with `PEEK_VERSION` / `PEEK_INSTALL_DIR`. `install.sh` verifies the archive against the release's `checksums.txt` and refuses to install on mismatch; releases published before checksums were added (v0.9.2 and older) have no checksums file. Releases published after v0.14.0 also carry a GitHub build provenance attestation; check an archive with `gh attestation verify <archive> -R andras-tkcs/peek`.
 
 **Go install:**
 ```sh
@@ -74,14 +79,13 @@ docker run -d --name peek -p 7700:7700 \
 For production, pin a release tag (`ghcr.io/andras-tkcs/peek:<version>`) or an image digest (`ghcr.io/andras-tkcs/peek@sha256:…`). The `/data` volume holds the database, uploads, and signing key. On first run Peek prints a one-time setup URL. The image is `scratch`-based, multi-arch (`amd64`/`arm64`), runs as uid 65532.
 
 ```sh
-docker compose up -d              # local stack
-docker compose --profile s3 up -d # with MinIO storage
+docker compose up -d
 ```
 
 ## Features
 
 - **In-context review**: pinned, text-anchored, and page-level comments with numbered on-page markers. Click a comment to jump back to its anchor.
-- **Safe HTML previews**: uploaded pages render in a sandboxed iframe (`sandbox="allow-scripts"`, no `allow-same-origin`) so they cannot read Peek cookies, call the server as the user, or touch the parent page.
+- **Safe HTML previews**: uploaded pages render in a sandboxed iframe (`sandbox="allow-scripts allow-popups"`, no `allow-same-origin`) so they cannot read Peek cookies, call the server as the user, or touch the parent page.
 - **Terminal and browser workflows**: upload, list, delete, change visibility, inspect comments, and view stats from the CLI or web dashboard.
 - **Access controls for internal teams**: public links, signed-in-user pages (any active Peek account), restricted pages (the default) with per-user and Google group grants and a notification email to each new grantee, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, Google org sign-in (no invites), allowed login email domain, token expiry, admin-managed users, and provisioning keys that let a directory such as PrivacyFence create and connect accounts.
 - **Operational basics included**: health/readiness checks, structured JSON logging, Prometheus metrics, audit log, quota and retention controls, consistent SQLite backup, file or S3-compatible storage, and S3 endpoint SSRF protection.
@@ -98,7 +102,7 @@ Open `/p/<slug>` and use the floating island at the bottom:
 2. Click Comment, then click any element to pin a comment to it.
 3. Or leave a page-level note not tied to anything.
 
-Comments live in a side panel. Your name is asked once and remembered. Public pages are open to anyone with the link, signed-in pages require an active Peek account, and restricted pages require an account matching a grant. Comments belong to the version they were written on.
+Comments live in a side panel. Signed-in viewers comment as their account; anonymous viewers are asked for a name once. Public pages are open to anyone with the link, signed-in pages require an active Peek account, and restricted pages require an account matching a grant. Comments belong to the version they were written on.
 
 ## Page backends
 
@@ -115,10 +119,11 @@ const res = await peek.fetch("/api/contact", {
 Peek relays the call to the container after the same public / signed-in / restricted check as the page. The path must start with `/`; methods are `GET`, `POST`, `PUT`, `PATCH` and `DELETE`; only the `content-type` and `accept` headers are sent; request bodies are limited to 1 MiB and responses to 8 MiB. Containers start on the first request and stop after an idle timeout.
 
 ```sh
-peek upload app.html --slug contact --backend ghcr.io/acme/contact-form:1.2
-peek backend env set contact SMTP_PASSWORD --value-stdin
-peek backend restart contact
-peek backend logs contact
+peek upload app.html --visibility public --name contact --backend ghcr.io/acme/contact-form:1.2
+#  note the slug: line, e.g. slug: contact-k7m2xq
+peek backend env set <slug> SMTP_PASSWORD --value-stdin
+peek backend restart <slug>
+peek backend logs <slug>
 ```
 
 The container listens on `$PORT` (default 8080, change it with `--backend-port`) and gets `/data`, a named volume that survives restarts and is deleted with the page. Besides the variables the owner sets, Peek sets `PORT`, `PEEK_BACKEND_TOKEN`, `PEEK_UPLOAD_ID` and `PEEK_VERSION`. Every relayed request carries these headers, and no cookies or `Authorization`:
@@ -137,6 +142,7 @@ Backends need Docker or Podman and an admin who allows image prefixes on the Adm
 ```
 peek login [--host <url>]              browser login when available; token fallback
 peek login --token-stdin               read an access token from stdin
+peek login --oauth                     always use browser login; fails when the server has none
 peek login --token-file <path>         read an access token from a file
 peek config set --host <url>           set the configured server
 peek config show                       show current host + masked token
@@ -159,7 +165,7 @@ peek versions <slug>                   list versions of a page
 peek backend <slug>                    show a page's backends and variable names
 peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
 peek backend remove <slug> [--version <n>|latest]
-peek backend env set <slug> <NAME> (--value-stdin | --value <v>)
+peek backend env set <slug> <NAME> --value <v>|--value-stdin
 peek backend env unset <slug> <NAME>
 peek backend restart <slug>            apply variable changes and restart the container
 peek backend logs <slug> [--version <n>|latest] [--tail <n>]
@@ -172,7 +178,7 @@ peek token revoke <id>                 revoke a token by id (admin only)
 peek provisioner create --name <name>  create a provisioning key (admin only)
 peek provisioner list                  list provisioning keys (admin only)
 peek provisioner revoke <id>           revoke a provisioning key (admin only)
-peek version                           show version
+peek version                           print the CLI version
 ```
 
 Upload visibility is set at creation time with `--visibility public|signed-in|restricted`, and defaults to `restricted`. Use `peek visibility <slug> public` to make the link public, or `peek visibility <slug> signed-in` to require a Peek account (the old name `private` is still accepted). Restricted pages admit only the owner, admins and signed-in viewers matching a grant (`peek grant`); group grants need the `PEEK_GOOGLE_*` settings below. When an admin has configured SMTP on the **Email** tab of the Admin page, adding a grant, or switching a page to restricted, emails the grantees a link to the page. Page passwords were removed: existing password pages became restricted pages that only the owner and admins can open until they are shared. Re-uploading with `--slug` adds a version: `/p/<slug>` serves the latest and `/p/<slug>/v/<n>` any retained version. `peek rename <slug> <new name>` renames a page; its link follows the name and old links redirect. The dashboard's **Access** row action does all of this from the browser.
@@ -210,15 +216,19 @@ Login methods, most secure first: `peek login` (browser), `PEEK_TOKEN=...` env o
 | `--docker-host` | `PEEK_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker or Podman API address (`unix://` or `tcp://`), used with `--backends docker` |
 | `--backend-network` | `PEEK_BACKEND_NETWORK` | `peek-backends` | Docker network that backend containers join |
 
+Other environment variables: `PEEK_LOG_LEVEL` — `debug`, `info` (default) or `warn`; `PEEK_HEALTHCHECK_ADDR` — the address `peekd healthcheck` probes (defaults to `PEEK_ADDR`).
+
 Admins can update runtime settings from the **Admin** page (the **Admin** button next to **Sign out**): max upload size, total storage limit, per-token quotas, retention days, S3 credentials, and the page backend limits (allowed images, memory, CPU, idle stop, registry credentials). Changing the storage backend requires a restart.
 
-`peekd --version` prints the version. `peekd backup [path]` writes a consistent SQLite snapshot via `VACUUM INTO`. `peekd healthcheck` checks `/healthz`.
+`peekd --version` prints the version. `peekd backup [--data <dir>] [path]` writes a consistent SQLite snapshot via `VACUUM INTO` (default `<data>/peek-backup.db`), safe while the server runs. `peekd healthcheck [--addr <host:port|url>]` exits 0 when `/healthz` answers 200; the address defaults to `PEEK_HEALTHCHECK_ADDR`, then `PEEK_ADDR`. `peekd --help` lists every flag and subcommand.
 
 ### CLI (`peek`)
 
 Config saved to `<user-config-dir>/peek/config.json`. Override per-command with `PEEK_HOST` / `PEEK_TOKEN`.
 
 ## Security model
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md); please do not open a public issue.
 
 | Threat | Mitigation |
 | --- | --- |
@@ -240,7 +250,7 @@ Config saved to `<user-config-dir>/peek/config.json`. Override per-command with 
 | Calling a backend around Peek | `/svc` runs the page's access check on every request, requires a custom `X-Peek-Svc` header (which forces a CORS preflight Peek never answers) and a same-origin `Sec-Fetch-Site`; the browser relay refuses `..` segments and stops relaying once the iframe has navigated away. Containers sit on a private network and require a per-container token (`X-Peek-Backend-Token`). |
 | Brute force / spam | Per-IP rate limits on login and comment posting, plus per-account sign-in failure limits. |
 | Malicious content | HTML sniffed, binaries rejected, configurable `MaxBytesReader`; non-upload requests are capped at 64 KiB. |
-| SSRF via S3 | Endpoints must be HTTP(S); private/link-local IPs blocked unless explicitly allowed. |
+| SSRF via S3 | S3 endpoints must use HTTPS and must not resolve to private, link-local or metadata addresses; `--s3-allow-private-endpoint` / `PEEK_S3_ALLOW_PRIVATE_ENDPOINT=true` lifts both, for MinIO or internal stores. |
 | Path traversal / SQLi / link guessing | Slugs are the page name plus a random 6-character suffix (fully random when the name has no letters or digits); all queries parameterized. |
 | Password / IP leakage | Account passwords bcrypt-hashed; analytics IPs SHA-256 hashed. |
 
@@ -294,22 +304,9 @@ Two skills ship in this repo:
 
 ## Architecture
 
-```
-cmd/peekd/          server entrypoint
-cmd/peek/           CLI entrypoint
-internal/backends/  container runtime and lifecycle for page backends
-internal/db/        SQLite store + schema
-internal/models/    data types
-internal/server/    HTTP server, handlers, auth, security
-internal/cli/       CLI client + commands
-internal/web/       Templates and embedded CSS/JS assets
-skills/peek/        consumer agent skill
-skills/peek-server/ server/admin agent skill
-assets/             documentation media
-scripts/            tooling
-```
+See [docs/architecture.md](docs/architecture.md) for the package map and dependency rules.
 
-Runtime CSS/JS lives in `internal/web/assets` and is embedded by Go. The root `assets/` directory is documentation media only. See [docs/architecture.md](docs/architecture.md) for the package map.
+Runtime CSS/JS lives in `internal/web/assets` and is embedded by Go. The root `assets/` directory is documentation media only.
 
 ## License
 
