@@ -1,0 +1,129 @@
+name: Cut release tag
+
+# The only way to cut a release. Pushing the tag is what starts release.yml, which builds
+# everything and creates the GitHub Release once, with all its files.
+#
+# Do not publish a release (or "Create new tag") in the GitHub UI: Releases are immutable, so the
+# release would be locked before release.yml can attach any asset.
+#
+# The tag is pushed with RELEASE_TAG_TOKEN, never GITHUB_TOKEN: GitHub starts no workflow run for
+# an event raised by GITHUB_TOKEN, so such a tag would exist, look like a success, and release
+# nothing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to cut from the tip of main, e.g. v0.15.2 or v0.16.0-rc.1'
+        required: true
+        type: string
+      dry_run:
+        description: 'Run every check and create the tag locally, but do NOT push it'
+        required: false
+        default: true
+        type: boolean
+
+# GITHUB_TOKEN gets read-only access; the one write (the tag) uses RELEASE_TAG_TOKEN.
+permissions:
+  contents: read
+
+concurrency:
+  group: cut-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Settings -> Environments -> release -> Required reviewers makes this a two-person go/no-go.
+    environment: release
+    steps:
+      - name: Check the release token is configured
+        env:
+          RELEASE_TAG_TOKEN: ${{ secrets.RELEASE_TAG_TOKEN }}
+        run: |
+          if [ -z "${RELEASE_TAG_TOKEN}" ]; then
+            echo "::error::RELEASE_TAG_TOKEN is not set. GITHUB_TOKEN cannot be used: a tag it pushes starts no workflow."
+            exit 1
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          fetch-depth: 0
+          # The tag push below authenticates as this token.
+          token: ${{ secrets.RELEASE_TAG_TOKEN }}
+
+      - name: Check the version and create the tag
+        id: tag
+        env:
+          VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'$VERSION' is not vMAJOR.MINOR.PATCH[-prerelease]." >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::Tag $VERSION already exists. A published release is immutable; use a new version." >&2
+            exit 1
+          fi
+          if [ -n "$(git tag --points-at HEAD)" ]; then
+            echo "::error::HEAD already carries a release tag: $(git tag --points-at HEAD | tr '\n' ' ')" >&2
+            exit 1
+          fi
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "::error::main moved while this job was starting; run it again." >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Peek $VERSION"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          else
+            git push origin "refs/tags/$VERSION"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The failure this guards is silent and total (see the header): ask whether the tag started
+      # release.yml instead of trusting the push.
+      - name: Verify the tag started release.yml
+        if: steps.tag.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.tag.outputs.sha }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          for attempt in $(seq 1 12); do
+            FOUND="$(curl -sS --max-time 30 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/runs?event=push&per_page=20" \
+              | jq -r --arg sha "$SHA" \
+                  '[.workflow_runs[]? | select(.head_sha == $sha) | .html_url] | first // empty')" || true
+            if [ -n "$FOUND" ]; then
+              echo "release.yml started: $FOUND"
+              echo "Release build: $FOUND" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Tag $VERSION was pushed, but no release.yml run appeared for $SHA within 2 minutes."
+          echo "::error::Check that RELEASE_TAG_TOKEN is a real user or app token and not GITHUB_TOKEN, then delete the tag and run this again."
+          exit 1
+
+      - name: Summary
+        if: always() && steps.tag.conclusion == 'success'
+        env:
+          VERSION: ${{ inputs.version }}
+          PUSHED: ${{ steps.tag.outputs.pushed }}
+        run: |
+          if [ "$PUSHED" = "true" ]; then
+            echo "## $VERSION: tag pushed, release.yml is running." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## $VERSION: dry run. Every check passed; nothing was pushed. Re-run with dry_run off to release." >> "$GITHUB_STEP_SUMMARY"
+          fi
