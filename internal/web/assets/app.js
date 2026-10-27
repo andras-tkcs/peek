@@ -2,14 +2,17 @@
   "use strict";
 
   const STORAGE_KEY = "hn_name";
+  // One colour per comment author, from the logo's blues and teals outward. `color` carries
+  // white text (the pin number); `text` is AA on the panel in light mode, `darkText` in dark mode.
   const AUTHOR_PALETTE = [
-    { color: "#1677e8", soft: "rgba(22, 119, 232, .12)", text: "#0f5dbb" },
-    { color: "#0e9f6e", soft: "rgba(14, 159, 110, .13)", text: "#047857" },
-    { color: "#d97706", soft: "rgba(217, 119, 6, .14)", text: "#92400e" },
-    { color: "#7c3aed", soft: "rgba(124, 58, 237, .13)", text: "#5b21b6" },
-    { color: "#e11d48", soft: "rgba(225, 29, 72, .12)", text: "#be123c" },
-    { color: "#0891b2", soft: "rgba(8, 145, 178, .13)", text: "#0e7490" },
+    { color: "#0b5f86", soft: "rgba(11, 95, 134, .13)", text: "#0b5f86", darkText: "#7fd3f0" },
+    { color: "#0c7a72", soft: "rgba(12, 122, 114, .14)", text: "#08615a", darkText: "#6fe0cf" },
+    { color: "#a35a00", soft: "rgba(163, 90, 0, .14)", text: "#8a4b00", darkText: "#f3b765" },
+    { color: "#6d3fd1", soft: "rgba(109, 63, 209, .14)", text: "#5b2fb8", darkText: "#b9a2ff" },
+    { color: "#c0264f", soft: "rgba(192, 38, 79, .13)", text: "#a51f43", darkText: "#ff94ad" },
+    { color: "#2456a6", soft: "rgba(36, 86, 166, .14)", text: "#1d4a90", darkText: "#9cb9ff" },
   ];
+  const DARK_SCHEME = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 
   function frame() {
     const f = document.getElementById("hn-frame");
@@ -56,7 +59,7 @@
       created_human: created && !Number.isNaN(created.getTime()) ? created.toLocaleString() : "",
       authorColor: color.color,
       authorSoft: color.soft,
-      authorText: color.text,
+      authorText: DARK_SCHEME && DARK_SCHEME.matches ? color.darkText : color.text,
     };
   }
 

@@ -13,6 +13,8 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ### Changed
 
+- A new logo and UI theme: the logo's navy, teal-blue and mint palette on PrivacyFence's design rules (colours only as tokens, WCAG AA contrast, 44 px controls, larger radii), with a dark theme that follows the system setting.
+- The README, LICENSE and docs footer say that Peek was originally created by Shy Alter (puemos) and is improved and maintained in this repository by Andras Takacs.
 - `peekd` refuses to start when `secret.key` is shorter than 32 bytes instead of replacing it, and writes new keys atomically.
 - The startup log field `metrics_auth` is now `metrics_token_set`.
 - A release tag must point at a commit on `main` and pass vet, race tests and govulncheck before anything is published, and pre-release tags no longer move the `:latest` image.

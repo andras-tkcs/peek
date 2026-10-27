@@ -1,5 +1,5 @@
 <h1>
-  <img src="assets/logo.png" alt="Peek" width="180">
+  <img src="assets/logo.png" alt="" width="64" height="64" align="absmiddle"> Peek
 </h1>
 
 [![CI](https://github.com/andras-tkcs/peek/actions/workflows/ci.yml/badge.svg)](https://github.com/andras-tkcs/peek/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/andras-tkcs/peek?sort=semver)](https://github.com/andras-tkcs/peek/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
@@ -312,6 +312,14 @@ See [docs/architecture.md](docs/architecture.md) for the package map and depende
 
 Runtime CSS/JS lives in `internal/web/assets` and is embedded by Go. The root `assets/` directory is documentation media only.
 
+## Credits
+
+Peek was originally created by [Shy Alter (puemos)](https://github.com/puemos) at [puemos/peek](https://github.com/puemos/peek). This repository is a fork, improved and maintained by [Andras Takacs](https://github.com/andras-tkcs).
+
+This fork is not maintained or endorsed by the original author. Changes made here, and any bugs they introduce, are the responsibility of this repository, so please report issues and security problems [here](https://github.com/andras-tkcs/peek/issues), not upstream. The git history shows who wrote each change.
+
+The logo and UI theme follow the [PrivacyFence](https://github.com/privacyfence/privacyfence) design system.
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The original copyright notice (c) 2026 puemos is kept as the license requires; the modifications in this repository are (c) 2026 Andras Takacs, under the same license.

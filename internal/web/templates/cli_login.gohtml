@@ -15,8 +15,8 @@
     <h2 class="text-lg font-semibold tracking-tight text-card-foreground">Connect the Peek CLI</h2>
     <p class="text-sm text-muted-foreground">Signed in as {{.User}}. Enter the code that <span class="font-mono">peek login</span> printed in your terminal.</p>
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <input type="text" name="code" required maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EFGH" aria-label="CLI login code" class="h-10 rounded-lg border border-input bg-secondary px-4 text-center font-mono text-sm uppercase tracking-wider text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
-    <button type="submit" class="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Continue</button>
+    <input type="text" name="code" required maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EFGH" aria-label="CLI login code" class="h-11 rounded-lg border border-input bg-secondary px-4 text-center font-mono text-sm uppercase tracking-wider text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+    <button type="submit" class="h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Continue</button>
     {{if .Error}}<p class="text-sm text-destructive">{{.Error}}</p>{{end}}
   </form>
 </div>
@@ -48,8 +48,8 @@
       <div><dt class="inline font-medium text-foreground">Requested at:</dt> <dd class="inline">{{.RequestedAt}}</dd></div>
     </dl>
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <button type="submit" name="decision" value="approve" class="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Approve</button>
-    <button type="submit" name="decision" value="deny" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-secondary-foreground transition hover:border-border">Deny</button>
+    <button type="submit" name="decision" value="approve" class="h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Approve</button>
+    <button type="submit" name="decision" value="deny" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-secondary-foreground transition hover:border-border">Deny</button>
     {{if .Error}}<p class="text-sm text-destructive">{{.Error}}</p>{{end}}
   </form>
 </div>

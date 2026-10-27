@@ -1,4 +1,5 @@
 {{define "brand-head"}}
+<link rel="icon" href="{{asset "favicon.svg"}}" type="image/svg+xml">
 <link rel="icon" href="{{asset "favicon.png"}}" type="image/png">
 <link rel="alternate icon" href="{{asset "favicon.ico"}}">
 <link rel="apple-touch-icon" href="{{asset "favicon.png"}}">
@@ -22,8 +23,8 @@
 </ul>
 {{end}}
 {{define "brand-logo"}}
-<img src="{{asset "logo.png"}}" alt="Peek" class="block h-10 w-auto">
+<span class="peek-brand"><img src="{{asset "logo.png"}}" alt="Peek" width="36" height="36" class="peek-brand-mark"><span class="peek-brand-word" aria-hidden="true">Peek</span></span>
 {{end}}
 {{define "brand-link"}}
-<a href="/" class="inline-flex items-center no-underline">{{template "brand-logo" .}}</a>
+<a href="/" class="inline-flex min-h-11 items-center no-underline">{{template "brand-logo" .}}</a>
 {{end}}

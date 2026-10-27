@@ -32,7 +32,8 @@ const githubUrl = 'https://github.com/andras-tkcs/peek';
     <div class="site-frame">
       <header class="topline">
         <a class="brand" href={href('')} aria-label="Peek">
-          <img class="brand-logo" src={href('assets/peek-logo.png')} alt="" aria-hidden="true" />
+          <img class="brand-logo" src={href('assets/peek-logo.png')} alt="" aria-hidden="true" width="36" height="36" />
+          <span aria-hidden="true">Peek</span>
         </a>
         <nav aria-label="Primary navigation">
           <a href={href('')} aria-current={current === 'home' ? 'page' : undefined}>home</a>
@@ -44,7 +45,7 @@ const githubUrl = 'https://github.com/andras-tkcs/peek';
       <slot />
       <footer class="bottombar">
         <a href={githubUrl}>github</a>
-        <span>created by Shy Alter</span>
+        <span>originally created by <a href="https://github.com/puemos/peek">Shy Alter</a> · improved and maintained by Andras Takacs</span>
       </footer>
     </div>
     <script is:inline>

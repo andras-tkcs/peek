@@ -32,8 +32,8 @@
     <h2 class="mb-4 text-base font-semibold tracking-tight text-card-foreground">Invitations <span class="text-xs font-normal text-muted-foreground/70">{{len .Invites}}</span></h2>
     <form method="POST" action="/dashboard/invites" class="mb-4 flex gap-2.5">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
-      <input type="email" name="email" placeholder="person@example.com" required class="h-10 min-w-[180px] flex-1 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
-      <button type="submit" class="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Create invite</button>
+      <input type="email" name="email" placeholder="person@example.com" required class="h-11 min-w-[180px] flex-1 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+      <button type="submit" class="h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Create invite</button>
     </form>
     {{if .Invites}}
     <div class="overflow-x-auto">
@@ -42,7 +42,7 @@
       <tbody>
       {{range .Invites}}
         <tr class="border-b border-border/50 last:border-0 hover:bg-foreground/[0.025]">
-          <td class="h-10 px-3">{{.Email}}</td>
+          <td class="h-11 px-3">{{.Email}}</td>
           <td class="px-3"><span class="rounded-md px-2 py-0.5 text-[11px] font-semibold {{if eq .Status "pending"}}bg-accent text-accent-foreground{{else}}bg-muted text-muted-foreground{{end}}">{{.Status}}</span></td>
           <td class="px-3 text-muted-foreground">{{.Expires}}</td>
           <td class="px-3">{{if .Link}}
@@ -79,7 +79,7 @@
       <tbody>
       {{range .Accounts}}
         <tr class="border-b border-border/50 last:border-0 hover:bg-foreground/[0.025]">
-          <td class="h-10 px-3">{{.Name}}{{if .IsSelf}} <span class="text-muted-foreground">(you)</span>{{end}}{{if .ManagedBy}} <span class="rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">Managed by {{.ManagedBy}}</span>{{end}}</td>
+          <td class="h-11 px-3">{{.Name}}{{if .IsSelf}} <span class="text-muted-foreground">(you)</span>{{end}}{{if .ManagedBy}} <span class="rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">Managed by {{.ManagedBy}}</span>{{end}}</td>
           <td class="px-3 text-muted-foreground">{{if .Email}}{{.Email}}{{else}}token-only{{end}}</td>
           <td class="px-3">{{if .Admin}}<span class="rounded-md bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">admin</span>{{else}}<span class="rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">user</span>{{end}}</td>
           <td class="px-3">{{if .Disabled}}<span class="rounded-md bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">disabled</span>{{else}}<span class="rounded-md bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">active</span>{{end}}</td>
@@ -113,7 +113,7 @@
       <tbody>
       {{range .Provisioners}}
         <tr class="border-b border-border/50 last:border-0 hover:bg-foreground/[0.025]">
-          <td class="h-10 px-3">{{.Name}}</td>
+          <td class="h-11 px-3">{{.Name}}</td>
           <td class="px-3 text-muted-foreground">{{if .Hint}}…{{.Hint}}{{end}}</td>
           <td class="px-3 text-muted-foreground">{{.Created}}</td>
           <td class="px-3 text-muted-foreground">{{.LastUsed}}</td>
@@ -164,7 +164,7 @@
 
         <label class="flex flex-col gap-1">
           <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Auth.Domain.Label}}</span>
-          <input type="text" name="{{.SettingsPanel.Auth.Domain.Key}}" value="{{.SettingsPanel.Auth.Domain.Value}}" placeholder="example.com" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+          <input type="text" name="{{.SettingsPanel.Auth.Domain.Key}}" value="{{.SettingsPanel.Auth.Domain.Value}}" placeholder="example.com" autocomplete="off" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
           <span class="text-xs text-muted-foreground">{{.SettingsPanel.Auth.Domain.Description}}</span>
         </label>
 
@@ -196,7 +196,7 @@
             {{range .Fields}}
             <label class="flex flex-col gap-1">
               <span class="text-sm text-secondary-foreground">{{.Label}}</span>
-              <input type="{{if .IsSecret}}password{{else}}text{{end}}" name="{{.Key}}" value="{{.Value}}" placeholder="{{.Description}}" autocomplete="off" :disabled="!oauth.{{$providerKey}}" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 disabled:opacity-60">
+              <input type="{{if .IsSecret}}password{{else}}text{{end}}" name="{{.Key}}" value="{{.Value}}" placeholder="{{.Description}}" autocomplete="off" :disabled="!oauth.{{$providerKey}}" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 disabled:opacity-60">
               <span class="text-xs text-muted-foreground">{{.Description}}</span>
             </label>
             {{end}}
@@ -225,7 +225,7 @@
           {{range .SettingsPanel.Storage.S3Settings}}
           <label class="flex flex-col gap-1">
             <span class="text-sm text-secondary-foreground">{{.Label}}</span>
-            <input type="{{if .IsSecret}}password{{else}}text{{end}}" name="{{.Key}}" value="{{.Value}}" placeholder="{{.Description}}" autocomplete="off" :disabled="storageBackend !== 's3'" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 disabled:opacity-60">
+            <input type="{{if .IsSecret}}password{{else}}text{{end}}" name="{{.Key}}" value="{{.Value}}" placeholder="{{.Description}}" autocomplete="off" :disabled="storageBackend !== 's3'" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 disabled:opacity-60">
             <span class="text-xs text-muted-foreground">{{.Description}}</span>
           </label>
           {{end}}
@@ -239,7 +239,7 @@
             <label for="setting-{{.Key}}" class="text-sm text-secondary-foreground">{{.Label}}</label>
             <span class="text-xs text-muted-foreground">{{.Description}}</span>
           </div>
-          <div class="flex h-10 overflow-hidden rounded-lg border border-input bg-secondary focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+          <div class="flex h-11 overflow-hidden rounded-lg border border-input bg-secondary focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
             <input id="setting-{{.Key}}" type="number" name="{{.FormKey}}" min="{{.Min}}" max="{{.Max}}" step="{{.Step}}" value="{{.Value}}" class="min-w-0 flex-1 bg-transparent px-3 text-sm text-foreground focus:outline-none">
             <span class="flex min-w-14 items-center justify-center border-l border-border px-3 text-xs font-medium text-muted-foreground">{{.Unit}}</span>
           </div>
@@ -251,17 +251,17 @@
         <div class="grid gap-3 md:grid-cols-2">
           <label class="flex flex-col gap-1">
             <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.Host.Label}}</span>
-            <input type="text" name="{{.SettingsPanel.Email.Host.Key}}" value="{{.SettingsPanel.Email.Host.Value}}" placeholder="{{.SettingsPanel.Email.Host.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <input type="text" name="{{.SettingsPanel.Email.Host.Key}}" value="{{.SettingsPanel.Email.Host.Value}}" placeholder="{{.SettingsPanel.Email.Host.Description}}" autocomplete="off" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
             <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.Host.Description}}</span>
           </label>
           <label class="flex flex-col gap-1">
             <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.Port.Label}}</span>
-            <input type="text" name="{{.SettingsPanel.Email.Port.Key}}" value="{{.SettingsPanel.Email.Port.Value}}" placeholder="{{.SettingsPanel.Email.Port.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <input type="text" name="{{.SettingsPanel.Email.Port.Key}}" value="{{.SettingsPanel.Email.Port.Value}}" placeholder="{{.SettingsPanel.Email.Port.Description}}" autocomplete="off" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
             <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.Port.Description}}</span>
           </label>
           <label class="flex flex-col gap-1">
             <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.TLS.Label}}</span>
-            <select name="{{.SettingsPanel.Email.TLS.Key}}" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <select name="{{.SettingsPanel.Email.TLS.Key}}" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
               <option value="starttls"{{if eq .SettingsPanel.Email.TLSValue "starttls"}} selected{{end}}>starttls</option>
               <option value="tls"{{if eq .SettingsPanel.Email.TLSValue "tls"}} selected{{end}}>tls</option>
               <option value="none"{{if eq .SettingsPanel.Email.TLSValue "none"}} selected{{end}}>none</option>
@@ -270,17 +270,17 @@
           </label>
           <label class="flex flex-col gap-1">
             <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.Username.Label}}</span>
-            <input type="text" name="{{.SettingsPanel.Email.Username.Key}}" value="{{.SettingsPanel.Email.Username.Value}}" placeholder="{{.SettingsPanel.Email.Username.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <input type="text" name="{{.SettingsPanel.Email.Username.Key}}" value="{{.SettingsPanel.Email.Username.Value}}" placeholder="{{.SettingsPanel.Email.Username.Description}}" autocomplete="off" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
             <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.Username.Description}}</span>
           </label>
           <label class="flex flex-col gap-1">
             <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.Password.Label}}</span>
-            <input type="password" name="{{.SettingsPanel.Email.Password.Key}}" value="{{.SettingsPanel.Email.Password.Value}}" placeholder="{{.SettingsPanel.Email.Password.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <input type="password" name="{{.SettingsPanel.Email.Password.Key}}" value="{{.SettingsPanel.Email.Password.Value}}" placeholder="{{.SettingsPanel.Email.Password.Description}}" autocomplete="off" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
             <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.Password.Description}}</span>
           </label>
           <label class="flex flex-col gap-1">
             <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Email.From.Label}}</span>
-            <input type="text" name="{{.SettingsPanel.Email.From.Key}}" value="{{.SettingsPanel.Email.From.Value}}" placeholder="{{.SettingsPanel.Email.From.Description}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <input type="text" name="{{.SettingsPanel.Email.From.Key}}" value="{{.SettingsPanel.Email.From.Value}}" placeholder="{{.SettingsPanel.Email.From.Description}}" autocomplete="off" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
             <span class="text-xs text-muted-foreground">{{.SettingsPanel.Email.From.Description}}</span>
           </label>
         </div>
@@ -296,14 +296,14 @@
           {{range .SettingsPanel.Backends.Fields}}
           <label class="flex flex-col gap-1">
             <span class="text-sm text-secondary-foreground">{{.Label}}</span>
-            <input type="{{if .IsSecret}}password{{else}}text{{end}}" name="{{.Key}}" value="{{.Value}}" autocomplete="off" class="h-10 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+            <input type="{{if .IsSecret}}password{{else}}text{{end}}" name="{{.Key}}" value="{{.Value}}" autocomplete="off" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
             <span class="text-xs text-muted-foreground">{{.Description}}</span>
           </label>
           {{end}}
         </div>
       </div>
 
-      <button type="submit" class="self-start h-10 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Save settings</button>
+      <button type="submit" class="self-start h-11 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">Save settings</button>
     </form>
     <form id="hn-email-test" method="POST" action="/dashboard/email/test" class="m-0">
       <input type="hidden" name="csrf" value="{{.CSRF}}">

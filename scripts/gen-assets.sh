@@ -87,7 +87,13 @@ curl -fsS -b "$COOKIE" -c "$COOKIE" \
 START="$(curl -fsS -X POST "http://localhost:$PORT/api/cli/login/start")"
 DEVICE_CODE="$(printf '%s' "$START" | json_value device_code)"
 USER_CODE="$(printf '%s' "$START" | json_value user_code)"
-APPROVE_HTML="$(curl -fsS -b "$COOKIE" -c "$COOKIE" "http://localhost:$PORT/cli-login/$USER_CODE")"
+ENTRY_HTML="$(curl -fsS -b "$COOKIE" -c "$COOKIE" "http://localhost:$PORT/cli-login")"
+ENTRY_CSRF="$(printf '%s' "$ENTRY_HTML" | csrf_from_html)"
+APPROVE_HTML="$(curl -fsS -b "$COOKIE" -c "$COOKIE" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "csrf=$ENTRY_CSRF" \
+  --data-urlencode "code=$USER_CODE" \
+  "http://localhost:$PORT/cli-login")"
 APPROVE_CSRF="$(printf '%s' "$APPROVE_HTML" | csrf_from_html)"
 curl -fsS -b "$COOKIE" -c "$COOKIE" \
   -H "Content-Type: application/x-www-form-urlencoded" \
