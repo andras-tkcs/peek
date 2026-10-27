@@ -65,7 +65,7 @@ Peek refuses to save a non-empty allowed domain unless at least one active admin
 
 ## Invites And Users
 
-OAuth signup is invite-only. A new OAuth user can create an account only when:
+OAuth signup is invite-only (a person whose account a [provisioning key](#provisioning-keys) already created or adopted can sign in with OAuth without an invite, because Peek matches the email). A new OAuth user can create an account only when:
 
 1. The provider returns a verified email.
 2. The browser has a pending Peek invite cookie.
@@ -75,9 +75,29 @@ If an account already exists with the verified email, Peek links the OAuth ident
 
 When OAuth is enabled, non-admin password and token web login are disabled. Admins keep password login as a recovery path, as long as the admin email also matches the allowed domain when one is configured.
 
-The same rule applies to API tokens of accounts with an email: while OAuth is enabled, a non-admin account's token works only if the account has signed in with OAuth at least once. Automation tokens from `peek token create` have no email and are exempt; only disabling applies to them.
+The same rule applies to API tokens of accounts with an email: while OAuth is enabled, a non-admin account's token works only if the account has signed in with OAuth at least once. Automation tokens from `peek token create` have no email and are exempt; only disabling applies to them. The one other exception is the token a [provisioning key](#provisioning-keys) minted for an account, which skips only the OAuth rule.
 
 Organizations that only use Google Workspace can skip invites entirely with [Google org sign-in](#google-org-sign-in).
+
+## Provisioning Keys
+
+A provisioner is a named key holder, such as PrivacyFence running in organization mode, that may create accounts, adopt existing ones and mint one API token per account it manages, without each person doing a device sign-in. An admin creates its provisioning key on the command line:
+
+```sh
+peek provisioner create --name PrivacyFence
+peek provisioner list
+peek provisioner revoke <id>
+```
+
+The key starts with `peekprov_` and is shown once; store it in the key holder's secret store. The **Admin** page lists provisioners and their account counts, and can revoke a key. The routes are in the [reference](/peek/docs/reference/#provisioning-api).
+
+**Trust.** A provisioning key is trusted to vouch for email addresses, as an OAuth provider is. Holding it is equivalent to being able to act as any non-admin Peek account whose email the holder asserts, including people who never used the key holder. It can never act as an admin: admin accounts are refused when linking, when minting and when a token is used, so a provisioned token stops working the moment its account is promoted to admin. It can never open a dashboard session. The allowed email domain still applies to every request.
+
+**Created and adopted accounts.** If no account has the asserted email, Peek creates a normal non-admin account. If one exists, Peek adopts it and leaves its name, pages and own API keys alone. A disabled account is adopted too, but no token is minted for it. Either way the person signs in to Peek through OAuth like anyone else and keeps their pages when the key is revoked.
+
+**Tokens.** The key holder mints one token per account (90 days by default, up to 365); minting again replaces the previous one. The token appears in the person's own API key list under the provisioner's name. Only the provisioner's own token is exempt from "must sign in with OAuth": the person's other keys follow the normal rule, and the disabled and allowed-domain checks still apply to the provisioned token. Provisioned tokens cannot open a dashboard session.
+
+**Revoking and releasing.** Revoking a key deletes every token it minted and removes its links; the accounts and their pages stay. Releasing a single account does the same for that account alone. Peek never connects to the key holder: it only answers requests, so it keeps working when the key holder is down.
 
 ## Google Org Sign-In
 

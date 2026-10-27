@@ -83,7 +83,7 @@ docker compose --profile s3 up -d # with MinIO storage
 - **In-context review**: pinned, text-anchored, and page-level comments with numbered on-page markers. Click a comment to jump back to its anchor.
 - **Safe HTML previews**: uploaded pages render in a sandboxed iframe (`sandbox="allow-scripts"`, no `allow-same-origin`) so they cannot read Peek cookies, call the server as the user, or touch the parent page.
 - **Terminal and browser workflows**: upload, list, delete, change visibility, inspect comments, and view stats from the CLI or web dashboard.
-- **Access controls for internal teams**: public links, signed-in-user pages (any active Peek account), restricted pages (the default) with per-user and Google group grants and a notification email to each new grantee, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, Google org sign-in (no invites), allowed login email domain, token expiry, and admin-managed users.
+- **Access controls for internal teams**: public links, signed-in-user pages (any active Peek account), restricted pages (the default) with per-user and Google group grants and a notification email to each new grantee, page versions, first-run admin setup, local login, invite-only Google/GitHub/OIDC OAuth, Google org sign-in (no invites), allowed login email domain, token expiry, admin-managed users, and provisioning keys that let a directory such as PrivacyFence create and connect accounts.
 - **Operational basics included**: health/readiness checks, structured JSON logging, Prometheus metrics, audit log, quota and retention controls, consistent SQLite backup, file or S3-compatible storage, and S3 endpoint SSRF protection.
 - **Page backends**: a page version can come with a Docker image that Peek runs as a container; the page calls it with `peek.fetch("/api/contact", ...)` and Peek relays the call after the same access check that guards the page. Off by default (`--backends docker`).
 - **Small deployment footprint**: one static Go binary, pure-Go SQLite, no runtime dependencies.
@@ -169,6 +169,9 @@ peek export <slug>                     export all data for an upload
 peek token create --name <name>        create a user token (admin only)
 peek token list                        list tokens (admin only)
 peek token revoke <id>                 revoke a token by id (admin only)
+peek provisioner create --name <name>  create a provisioning key (admin only)
+peek provisioner list                  list provisioning keys (admin only)
+peek provisioner revoke <id>           revoke a provisioning key (admin only)
 peek version                           show version
 ```
 
