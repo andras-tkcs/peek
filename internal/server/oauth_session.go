@@ -104,7 +104,7 @@ func (s *Server) consumeNextPath(w http.ResponseWriter, r *http.Request) string 
 
 func safeNextPath(next string) bool {
 	return strings.HasPrefix(next, "/") && !strings.HasPrefix(next, "//") &&
-		!strings.ContainsAny(next, "\r\n")
+		!strings.HasPrefix(next, `/\`) && !strings.ContainsAny(next, "\r\n")
 }
 
 func (s *Server) clearCookie(w http.ResponseWriter, name, path string) {

@@ -31,3 +31,16 @@ func TestOAuthCovSetNextPathIgnoresUnsafePath(t *testing.T) {
 		t.Fatalf("cookies = %+v", rec.Result().Cookies())
 	}
 }
+
+func TestSafeNextPathRejectsProtocolRelative(t *testing.T) {
+	for _, next := range []string{"", "dashboard", "//evil.com", `/\evil.com`, "/a\r\nb", "https://evil.com"} {
+		if safeNextPath(next) {
+			t.Errorf("safeNextPath(%q) = true, want false", next)
+		}
+	}
+	for _, next := range []string{"/", "/dashboard", "/u/abc?x=1"} {
+		if !safeNextPath(next) {
+			t.Errorf("safeNextPath(%q) = false, want true", next)
+		}
+	}
+}

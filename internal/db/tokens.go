@@ -12,6 +12,10 @@ import (
 	"github.com/privacyfence/peek/internal/models"
 )
 
+// HashToken returns the lookup hash of a randomly generated, high-entropy bearer
+// token or key. A fast unsalted hash is intended here because the input is not a
+// guessable secret and the hash is used as an indexed lookup key. Passwords use a
+// slow hash elsewhere.
 func HashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
