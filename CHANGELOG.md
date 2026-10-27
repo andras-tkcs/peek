@@ -20,6 +20,7 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 - The startup log field `metrics_auth` is now `metrics_token_set`.
 - A release tag must point at a commit on `main` and pass vet, race tests and govulncheck before anything is published, and pre-release tags no longer move the `:latest` image.
 - The `:main` image is published only after CI passes on `main`.
+- Releases are cut by the **Cut release tag** workflow, and the GitHub Release is created once with all its files after the build succeeds; publishing a release in the GitHub UI no longer works with immutable releases.
 - Popups opened by uploaded pages are no longer sandboxed (`allow-popups-to-escape-sandbox`).
 
 ### Fixed

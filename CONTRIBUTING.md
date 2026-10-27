@@ -83,6 +83,14 @@ Install with `pnpm install --dir docs`, preview with `pnpm docs:dev`, build with
 
 Name branches `<type>/<slug>` with type one of `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `style`. Run `mise run check-full` first. The required checks are `build`, `backend-integration`, `docs`, `docker`, `cross-build`, `e2e` and `browser`. PRs merge with merge commits only (no squash or rebase), so write each commit message for main's history. A user-visible change adds a line under `## [Unreleased]` in CHANGELOG.md. Fill in `.github/pull_request_template.md`.
 
+## Releasing
+
+Cut a release from the Actions tab: run **Cut release tag** (`cut-release.yml`) with the version, for example `v0.15.2`. The default is a dry run that checks the version and creates the tag on the runner only; run it again with `dry_run` off to push the tag. The tag starts **Release** (`release.yml`), which verifies the commit, builds the archives, SBOM and container image, and then creates the GitHub Release once, with every file and `checksums.txt`.
+
+Do not publish a release or "Create new tag" in the GitHub UI. GitHub Releases are immutable: a release published before its files are attached can never get them, and its tag cannot be reused. If that happens, cut the next version.
+
+`cut-release.yml` needs a repository secret `RELEASE_TAG_TOKEN`: a fine-grained token with Contents: write on this repository, owned by an administrator. It cannot be `GITHUB_TOKEN`, because a tag pushed with that starts no workflow. A `v*` tag ruleset that only lets administrators create tags keeps this the only path.
+
 ## Review Bar
 
 A good change is small enough to review, has a clear owner package, includes tests near the invariant it changes, and does not make internal deployment or operations more surprising. Prefer boring Go, explicit errors, narrow interfaces, and standard library behavior where it fits.

@@ -40,7 +40,7 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       id-token: write
       attestations: write
     strategy:
@@ -94,31 +94,50 @@ jobs:
         with:
           subject-path: ${{ steps.pkg.outputs.archive }}
 
-      - name: Upload to release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+      # Nothing is attached to the GitHub Release here: Releases are immutable, so assets can only
+      # be added while the release is still a draft. The finalize job creates the release once, with
+      # every file, after all of these have succeeded.
+      - name: Keep the archive for the release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          files: ${{ steps.pkg.outputs.archive }}
-          generate_release_notes: true
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ steps.pkg.outputs.archive }}
+          if-no-files-found: error
 
-  checksums:
-    name: checksums
-    needs: build
+  # The one place the GitHub Release is created. Releases are immutable once published and accept
+  # no asset uploads, so the release must not exist before this job: it is made as a draft with
+  # every file attached and published last. Cut the tag with cut-release.yml, never by publishing
+  # a release in the GitHub UI, which publishes (and locks) it before any asset exists.
+  finalize:
+    name: GitHub release
+    needs: [build, sbom]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Publish checksums.txt
+      - name: Download release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Download SBOM
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: peek-sbom.spdx.json
+          path: dist
+
+      - name: Create and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          mkdir dist
           cd dist
-          gh release download "$GITHUB_REF_NAME" --pattern 'peek_*.tar.gz' --pattern 'peek_*.zip'
           # Must equal the number of build matrix entries above.
           expected=5
-          count=$(find . -maxdepth 1 -type f -name 'peek_*' | wc -l)
+          count=$(find . -maxdepth 1 -type f \( -name 'peek_*.tar.gz' -o -name 'peek_*.zip' \) | wc -l)
           if [ "$count" -ne "$expected" ]; then
             echo "expected $expected release archives, found $count" >&2
             ls -l >&2
@@ -126,27 +145,40 @@ jobs:
           fi
           sha256sum peek_* > checksums.txt
           cat checksums.txt
-          gh release upload "$GITHUB_REF_NAME" checksums.txt --clobber
+
+          # A published release is immutable and cannot be repaired: stop rather than touch it.
+          if gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft' 2>/dev/null | grep -qx false; then
+            echo "::error::Release $GITHUB_REF_NAME is already published and immutable; cut a new version." >&2
+            exit 1
+          fi
+          # A draft left behind by an earlier failed run of this job is safe to replace.
+          gh release delete "$GITHUB_REF_NAME" --yes 2>/dev/null || true
+
+          flags=()
+          case "$GITHUB_REF_NAME" in *-*) flags+=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes \
+            --title "$GITHUB_REF_NAME" "${flags[@]}" \
+            peek_* checksums.txt peek-sbom.spdx.json
+          gh release edit "$GITHUB_REF_NAME" --draft=false
 
   sbom:
     name: SBOM
     needs: verify
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      # The SBOM-action's own upload to the release is off: the release is immutable, so finalize
+      # attaches this workflow artifact instead.
       - name: Generate SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           format: spdx-json
           output-file: peek-sbom.spdx.json
-      - name: Upload SBOM to release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          files: peek-sbom.spdx.json
+          upload-release-assets: false
 
   docker:
     name: docker image
