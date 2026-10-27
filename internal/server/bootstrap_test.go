@@ -83,10 +83,8 @@ func TestLoadOrCreateSecretTightensExistingFileMode(t *testing.T) {
 	tests := []struct {
 		name     string
 		existing string
-		keep     bool
 	}{
-		{name: "long_existing_secret_is_kept", existing: long, keep: true},
-		{name: "short_existing_secret_is_replaced", existing: "short"},
+		{name: "long_existing_secret_is_kept", existing: long},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -101,12 +99,8 @@ func TestLoadOrCreateSecretTightensExistingFileMode(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tt.keep {
-				if got != tt.existing {
-					t.Fatalf("secret = %q, want %q", got, tt.existing)
-				}
-			} else if got == tt.existing || len(got) != 64 {
-				t.Fatalf("secret = %q, want a new 64 character secret", got)
+			if got != tt.existing {
+				t.Fatalf("secret = %q, want %q", got, tt.existing)
 			}
 			content, err := os.ReadFile(path)
 			if err != nil || string(content) != got {
@@ -149,16 +143,60 @@ func TestLoadOrCreateSecretFailures(t *testing.T) {
 			t.Fatalf("err = %v, want write secret error", err)
 		}
 	})
-	t.Run("short existing secret is replaced", func(t *testing.T) {
+	t.Run("short existing secret is refused", func(t *testing.T) {
 		path := filepath.Join(dir, "short.key")
 		if err := os.WriteFile(path, []byte("short"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		got, err := loadOrCreateSecret(path)
-		if err != nil || len(got) != 64 {
-			t.Fatalf("secret = %q, err = %v", got, err)
+		if _, err := loadOrCreateSecret(path); err == nil {
+			t.Fatal("expected error for a short secret")
+		}
+		if got, _ := os.ReadFile(path); string(got) != "short" {
+			t.Fatalf("file = %q, want unchanged", got)
 		}
 	})
+}
+
+func TestLoadOrCreateSecretRefusesShortFile(t *testing.T) {
+	tests := []struct {
+		name, content, want string
+	}{
+		{"ten bytes", "0123456789", "secret.key is 10 bytes, expected at least 32"},
+		{"empty", "", "secret.key is 0 bytes"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "secret.key")
+			if err := os.WriteFile(path, []byte(tt.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := loadOrCreateSecret(path)
+			if err == nil || !strings.Contains(err.Error(), tt.want) || !strings.Contains(err.Error(), "restore it from backup or delete it") {
+				t.Fatalf("err = %v, want %q and restore hint", err, tt.want)
+			}
+			if got, _ := os.ReadFile(path); string(got) != tt.content {
+				t.Fatalf("file = %q, want unchanged %q", got, tt.content)
+			}
+		})
+	}
+}
+
+func TestLoadOrCreateSecretLeavesNoTempFiles(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := loadOrCreateSecret(filepath.Join(dir, "secret.key")); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "secret.key" {
+		t.Fatalf("dir entries = %v, want only secret.key", entries)
+	}
+	info, err := os.Stat(filepath.Join(dir, "secret.key"))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %v (%v), want 0600", info.Mode().Perm(), err)
+	}
 }
 
 func TestBootstrapSetup(t *testing.T) {
