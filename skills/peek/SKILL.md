@@ -5,14 +5,9 @@ description: Share an HTML file to a self-hosted peek server and get a live prev
 
 # peek — Share HTML and collect feedback
 
-peek is a self-hosted HTML sharing server. You upload an HTML file and get a
-unique, shareable URL. Reviewers open the link and leave comments pinned to a
-specific element, anchored to selected text, or on the whole page. This skill
-covers the **consumer** side: installing the `peek` CLI, uploading pages, and
-reading the comments back.
+peek is a self-hosted HTML sharing server. You upload an HTML file and get a unique, shareable URL. Reviewers open the link and leave comments pinned to a specific element, anchored to selected text, or on the whole page. This skill covers the **consumer** side: installing the `peek` CLI, uploading pages, and reading the comments back.
 
-> Running or administering the server (tokens, email, deployment) is covered
-> by the **peek-server** skill.
+> Running or administering the server (tokens, email, deployment) is covered by the **peek-server** skill.
 
 ## When to use this skill
 
@@ -21,8 +16,7 @@ reading the comments back.
 - The user wants to **read the comments / feedback** left on a page they shared.
 - The user mentions **peek** or a self-hosted HTML sharing server.
 
-Do NOT use this skill for deploying production apps, hosting static sites
-long-term, or serving non-HTML content.
+Do NOT use this skill for deploying production apps, hosting static sites long-term, or serving non-HTML content.
 
 ## Install the CLI
 
@@ -30,37 +24,26 @@ long-term, or serving non-HTML content.
 curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
 ```
 
-This downloads a prebuilt `peek` binary for your OS/arch and installs it
-(`/usr/local/bin`, falling back to `~/.local/bin`). Overrides:
+This downloads a prebuilt `peek` binary for your OS/arch and installs it (`/usr/local/bin`, falling back to `~/.local/bin`). Overrides:
 
-- `PEEK_VERSION=v0.1.0` — install a specific release instead of the latest.
+- `PEEK_VERSION=v0.14.0` — install a specific release (v0.10.0 or newer) instead of the latest.
 - `PEEK_INSTALL_DIR=~/bin` — choose the install directory.
 
 Verify with `peek version`.
 
 ## Configure
 
-Point the CLI at a peek server and authenticate. If the server supports browser
-login, this opens the browser approval flow. Otherwise, paste an access token at
-the hidden prompt:
+Point the CLI at a peek server and authenticate. If the server supports browser login, this opens the browser approval flow. Otherwise, paste an access token at the hidden prompt:
 
 ```sh
 peek login --host https://peek.example.com
 ```
 
-The browser asks for the code that `peek login` prints; type it yourself, never use a code someone sent you. Browser login saves a normal Peek API token locally after approval. For
-token-only servers, use `peek login --token-stdin` or `peek login --token-file
-<path>`. For automation, set `PEEK_TOKEN` per command; OAuth-enabled servers
-require the browser flow for human CLI login. The token never lands in your
-shell history unless you explicitly use `--token`. Config is saved to
-`<user-config-dir>/peek/config.json` (`~/.config/peek` on Linux,
-`~/Library/Application Support/peek` on macOS). You can also set `PEEK_HOST` and
-`PEEK_TOKEN` per command (handy for CI/agents).
+The browser asks for the code that `peek login` prints; type it yourself, never use a code someone sent you. Browser login saves a normal Peek API token locally after approval. For token-only servers, use `peek login --token-stdin` or `peek login --token-file <path>`. For automation, set `PEEK_TOKEN` per command; OAuth-enabled servers require the browser flow for human CLI login. The token never lands in your shell history unless you explicitly use `--token`. Config is saved to `<user-config-dir>/peek/config.json` (`~/.config/peek` on Linux, `~/Library/Application Support/peek` on macOS). You can also set `PEEK_HOST` and `PEEK_TOKEN` per command (handy for CI/agents).
 
 `PEEK_TOKEN` can also be a key the user creates in the Peek web dashboard under **API keys** (it starts with `peek_`). Ask the user to create one there when the CLI login is not possible, and to put it in the environment rather than pasting it into the conversation.
 
-If the user doesn't have a server, token, or invite yet, point them to the
-**peek-server** skill.
+If the user doesn't have a server, token, or invite yet, point them to the **peek-server** skill.
 
 ## Core operations
 
@@ -74,8 +57,10 @@ peek upload path/to/page.html --visibility public   # anyone with the link
 New pages are restricted by default. Output includes the shareable URL and the slug:
 
 ```
-uploaded: https://peek.example.com/p/page-html-k7m2xq
-slug:     page-html-k7m2xq
+uploaded: https://peek.example.com/p/page-k7m2xq
+slug:     page-k7m2xq
+version:  1
+visibility: restricted
 ```
 
 ### Upload raw HTML without a file
@@ -109,13 +94,7 @@ peek grants <slug>                           # list grants
 peek revoke <slug> alice@example.com         # remove (add --group for groups)
 ```
 
-Restricted pages admit only the owner, admins, and signed-in viewers matching a
-grant. Group grants need Google group lookup configured on the server. When the
-server has SMTP email configured, each new grantee gets an email with the link,
-and switching a page to restricted emails everyone who already has a grant.
-Grantees see the page in the dashboard's shared-with-me rows (view only). You can
-also switch an existing page with `peek visibility <slug> restricted`.
-Owners can manage grants in the dashboard's **Access** dialog, and rename a page with `peek rename <slug> <new name>` (old links redirect).
+Restricted pages admit only the owner, admins, and signed-in viewers matching a grant. Group grants need Google group lookup configured on the server. When the server has SMTP email configured, each new grantee gets an email with the link, and switching a page to restricted emails everyone who already has a grant. Grantees see the page in the dashboard's shared-with-me rows (view only). You can also switch an existing page with `peek visibility <slug> restricted`. Owners can manage grants in the dashboard's **Access** dialog, and rename a page with `peek rename <slug> <new name>` (old links redirect).
 
 ### Upload a new version of a page
 
@@ -124,8 +103,7 @@ peek upload page.html --slug <slug>
 peek versions <slug>
 ```
 
-The link stays the same and serves the latest version; `/p/<slug>/v/<n>` serves
-version `n`. `--slug` cannot be combined with `--visibility` or `--name`.
+The link stays the same and serves the latest version; `/p/<slug>/v/<n>` serves version `n`. `--slug` cannot be combined with `--visibility` or `--name`.
 
 ### Give a page a backend (send email, keep data, use secrets)
 
@@ -148,11 +126,9 @@ peek comments <slug>
 peek comments <slug> --version <n>
 ```
 
-Comments belong to the version they were written on; the latest version is
-shown unless `--version` is given.
+Comments belong to the version they were written on; the latest version is shown unless `--version` is given.
 
-Prints every comment with its author, the on-page element/text it's anchored to,
-and the body. You can only read comments for **your own** uploads.
+Prints every comment with its author, the on-page element/text it's anchored to, and the body. You can only read comments for **your own** uploads.
 
 ### Post a comment as your account
 
@@ -223,12 +199,7 @@ The JSON response has the shape `{"slug":"...","url":"https://..."}`.
 
 ## Security notes for agents
 
-- Never put the token in a URL or commit it to a repo. Use `peek login`, the
-  config file, or the `PEEK_TOKEN` env var.
-- Uploaded HTML is sandboxed in an opaque-origin iframe — it cannot touch the
-  server or other visitors.
-- Only token holders can upload, and `peek comments` only returns comments for
-  uploads you own.
-- Use `peek export <slug>` when the user asks for a portable data copy of one
-  upload, and `peek delete-all` only when they explicitly want to remove all
-  uploads owned by the configured token.
+- Never put the token in a URL or commit it to a repo. Use `peek login`, the config file, or the `PEEK_TOKEN` env var.
+- Uploaded HTML is sandboxed in an opaque-origin iframe — it cannot touch the server or other visitors.
+- Only token holders can upload, and `peek comments` only returns comments for uploads you own.
+- Use `peek export <slug>` when the user asks for a portable data copy of one upload, and `peek delete-all` only when they explicitly want to remove all uploads owned by the configured token.
