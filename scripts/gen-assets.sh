@@ -14,7 +14,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 OUT="$ROOT/assets"
-DOCS_OUT="$ROOT/docs/public/assets"
 PORT="${PEEK_ASSET_PORT:-7799}"
 TOKEN=""
 DATA="$(mktemp -d)"
@@ -148,12 +147,6 @@ ffmpeg -y -i "$RAW_VIDEO" \
   -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
   -movflags +faststart \
   "$OUT/demo.mp4" >/dev/null 2>&1
-
-if [ -d "$DOCS_OUT" ]; then
-  mkdir -p "$DOCS_OUT"
-  cp "$OUT/demo.mp4" "$DOCS_OUT/demo.mp4"
-  echo "› mirrored video to docs/public/assets/demo.mp4"
-fi
 
 echo "› encoding README animation (gif)"
 PALETTE="$TMP_ASSETS/demo-palette.png"
