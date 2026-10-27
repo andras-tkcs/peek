@@ -185,3 +185,26 @@ type VisitBucket struct {
 	Time  time.Time
 	Count int
 }
+
+// Provisioner is a key holder that may create, adopt and release accounts through the provisioning API.
+type Provisioner struct {
+	ID                 int64
+	Name               string
+	Hint               string
+	CreatedByAccountID int64
+	CreatedAt          int64
+	LastUsedAt         int64
+	Accounts           int64 // number of links; filled by ListProvisioners only
+}
+
+// ProvisionedAccount is one provisioner's link to one account.
+type ProvisionedAccount struct {
+	ProvisionerID  int64
+	ExternalID     string
+	AccountID      int64
+	CreatedAccount bool
+	TokenID        int64 // 0 when the link holds no token
+	TokenExpiresAt int64 // the held token's expires_at (0 = never or no token)
+	CreatedAt      int64
+	UpdatedAt      int64
+}

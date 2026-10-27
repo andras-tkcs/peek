@@ -115,11 +115,26 @@ peek token revoke <id>             # revoke a token by id
 ```
 
 Tokens are stored hashed and shown only once at creation. Non-admin tokens can
-upload and manage only their own uploads.
+upload and manage only their own uploads. `POST /api/tokens` creates a new
+automation account (no email) together with its token.
 
 Token expiry is available through the admin JSON API by sending
 `{"name":"service","expires_hours":24}` to `POST /api/tokens`. The current CLI
 creates non-expiring tokens.
+
+### Provisioning keys (admin only)
+
+A provisioning key lets a directory such as PrivacyFence create or adopt
+non-admin accounts by email and mint one token per account. It can never act as
+an admin or open a dashboard session.
+
+```sh
+peek provisioner create --name PrivacyFence   # prints the peekprov_ key once
+peek provisioner list                         # ids, account counts, last use
+peek provisioner revoke <id>                  # deletes the tokens it minted
+```
+
+Revoking keeps the accounts and their pages.
 
 ### Manage OAuth and invitations
 

@@ -335,3 +335,21 @@ func TestMigration16AddsUploadBackends(t *testing.T) {
 		}
 	}
 }
+
+func TestMigration17CreatesProvisioningTables(t *testing.T) {
+	path := migCovPrepare(t, 17, `DROP TABLE provisioned_accounts`, `DROP TABLE provisioners`)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var n int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE id=17`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("migration 17 recorded %d times (err %v)", n, err)
+	}
+	for _, table := range []string{"provisioners", "provisioned_accounts"} {
+		if err := s.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&n); err != nil || n != 1 {
+			t.Fatalf("table %s missing (err %v)", table, err)
+		}
+	}
+}

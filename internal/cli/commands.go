@@ -48,6 +48,8 @@ func Run(args []string) int {
 		err = cmdDeleteAll(rest)
 	case "token":
 		err = cmdToken(rest)
+	case "provisioner":
+		err = cmdProvisioner(rest)
 	case "backend":
 		err = cmdBackend(rest)
 	case "help", "-h", "--help":
@@ -105,6 +107,9 @@ Usage:
   peek token create --name <name>      create a new user token (admin only)
   peek token list                      list tokens (admin only)
   peek token revoke <id>               revoke a token by id (admin only)
+  peek provisioner create --name <n>   create a provisioning key (admin only)
+  peek provisioner list                list provisioning keys (admin only)
+  peek provisioner revoke <id>         revoke a provisioning key (admin only)
 
 Token input (most secure first):
   peek login                           browser login when available; otherwise hidden prompt

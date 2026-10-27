@@ -348,3 +348,75 @@ func TestDashboardAccountRowsListFailure(t *testing.T) {
 		t.Fatalf("rows after drop = %+v, want nil", rows)
 	}
 }
+
+func dashboardProvisionerRevokeRequest(s *Server, accountID int64, id string) *http.Request {
+	form := url.Values{"csrf": {"csrf-token"}}
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/provisioners/"+id+"/revoke", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", id)
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: makeWebSession(s.secret, strconv.FormatInt(accountID, 10), sessionTTL)})
+	req.AddCookie(&http.Cookie{Name: csrfCookie, Value: "csrf-token"})
+	return req
+}
+
+func TestDashboardProvisionerRevokeStopsTheKey(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	f := newProvisionedFixture(t, s, "PF", "u@example.test", "e1")
+
+	rec := httptest.NewRecorder()
+	s.handleDashboardProvisionerRevoke(rec, dashboardProvisionerRevokeRequest(s, admin.ID, strconv.FormatInt(f.Provisioner.ID, 10)))
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/admin?ok=provisioner_revoked" {
+		t.Fatalf("status = %d, location = %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if r := doRequest(t, s, http.MethodGet, "/api/provisioning/self", nil, asBearer(f.Key)); r.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked key still works: %d", r.Code)
+	}
+	if r := doRequest(t, s, http.MethodGet, "/api/uploads", nil, asBearer(f.Token)); r.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked token still works: %d", r.Code)
+	}
+	if got := auditActions(t, s)["provisioner.revoke"]; got != "Admin" && got != "admin@example.test" {
+		t.Fatalf("audit actor = %q", got)
+	}
+}
+
+func TestDashboardProvisionerRevokeUnknownID(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	for _, id := range []string{"999", "abc"} {
+		rec := httptest.NewRecorder()
+		s.handleDashboardProvisionerRevoke(rec, dashboardProvisionerRevokeRequest(s, admin.ID, id))
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/admin?err=not_found" {
+			t.Fatalf("%s: status = %d, location = %q", id, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+}
+
+func TestDashboardProvisionerRevokeFailure(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	f := newProvisionedFixture(t, s, "PF", "u@example.test", "e1")
+	if _, err := s.store.Exec(`CREATE TRIGGER fail_prov BEFORE DELETE ON provisioners BEGIN SELECT RAISE(ABORT,'injected'); END`); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	s.handleDashboardProvisionerRevoke(rec, dashboardProvisionerRevokeRequest(s, admin.ID, strconv.FormatInt(f.Provisioner.ID, 10)))
+	if rec.Header().Get("Location") != "/admin?err=provisioner_revoke_failed" {
+		t.Fatalf("location = %q", rec.Header().Get("Location"))
+	}
+}
+
+func TestDashboardProvisionerRevokeRedirectsNonAdmin(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	user := newAccountWithToken(t, s, "user@example.test", "user-token", false)
+	f := newProvisionedFixture(t, s, "PF", "u@example.test", "e1")
+	rec := httptest.NewRecorder()
+	s.handleDashboardProvisionerRevoke(rec, dashboardProvisionerRevokeRequest(s, user.ID, strconv.FormatInt(f.Provisioner.ID, 10)))
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
+		t.Fatalf("status = %d, location = %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if r := doRequest(t, s, http.MethodGet, "/api/provisioning/self", nil, asBearer(f.Key)); r.Code != http.StatusOK {
+		t.Fatalf("key revoked by non-admin: %d", r.Code)
+	}
+}

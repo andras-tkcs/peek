@@ -120,6 +120,9 @@ peek backend env set <slug> <NAME> (--value-stdin | --value <v>)
 peek backend env unset <slug> <NAME>
 peek backend restart <slug>
 peek backend logs <slug> [--version <n>|latest] [--tail <n>]
+peek provisioner create --name <name>
+peek provisioner list
+peek provisioner revoke <id>
 ```
 
 `--slug` uploads a new version of an existing page you own (admins can target any page). It cannot be combined with `--visibility` or `--name`. A new upload is `restricted` unless `--visibility` says otherwise. `grant` and `revoke` take a user email by default and a Google group email with `--group`; group grants need the `PEEK_GOOGLE_*` server settings. `grants` lists a page's grants. `versions` lists a page's versions with size, time and URL. `comments` shows the latest version's comments unless `--version` is given. Page names (the `--name` value or the file name) are limited to 200 characters. The former `--password` flags were removed together with page passwords.
@@ -144,6 +147,11 @@ peek backend logs <slug> [--version <n>|latest] [--tail <n>]
 | `PUT /api/uploads/<slug>/backend/env/<NAME>` | Set a variable. JSON body `{"value":"..."}`; applies on the next container start. |
 | `DELETE /api/uploads/<slug>/backend/env/<NAME>` | Remove a variable. |
 | `POST /api/uploads/<slug>/backend/restart` | Stop the page's backends; they start again on the next request. |
+| `POST\|GET /api/provisioners`, `DELETE /api/provisioners/<id>` | Admin: create (returns the key once), list and revoke provisioning keys. |
+| `GET /api/provisioning/self` | Provisioning key: the key holder's name and account count. |
+| `PUT /api/provisioning/accounts/<external_id>` | Provisioning key: create or adopt the account for an email. |
+| `POST /api/provisioning/accounts/<external_id>/token` | Provisioning key: mint the account's token, replacing the previous one. |
+| `DELETE /api/provisioning/accounts/<external_id>` | Provisioning key: release the account and revoke its token. |
 | `GET\|POST\|PUT\|PATCH\|DELETE /svc/<slug>/v/<n>/<path>` | Relay to the version's backend; used by `peek.fetch`, not called directly. Same access check as the page, and requires the `X-Peek-Svc: 1` header. |
 
 ## Account Comment API
@@ -162,6 +170,25 @@ curl -s -X POST -H "Authorization: Bearer $PEEK_TOKEN" \
   -d '{"body":"Looks good","selector":"#hero","element_text":"Hero copy"}' \
   "$PEEK_HOST/api/uploads/<slug>/account-comments"
 ```
+
+## Provisioning API
+
+An admin creates a provisioning key with `peek provisioner create` or `POST /api/provisioners` (body `{"name":"PrivacyFence"}`, 1 to 100 characters, else 400 `name required`; the 201 answer is `{"id","name","key"}`). `GET /api/provisioners` lists `id`, `name`, `hint`, `created_at`, `last_used_at` and `accounts`, never the key. `DELETE /api/provisioners/{id}` answers `{"revoked": id}`, 400 `invalid id` or 404 `not found`, and deletes the tokens the key minted. See [Provisioning Keys](/peek/docs/auth-access/#provisioning-keys) for the trust model.
+
+The key holder authenticates with `Authorization: Bearer peekprov_...`. A missing key gives 401 `missing token` and an unknown one 401 `invalid token`; ordinary API tokens are refused on these routes and provisioning keys on every other route. `{external_id}` is the key holder's stable id for the person and must match `^[A-Za-z0-9._@-]{1,200}$`, else 400 `invalid external id`. Bodies are JSON; a bad one gives 400 `invalid json`.
+
+| Route | Request | Answer |
+| --- | --- | --- |
+| `GET /api/provisioning/self` | none | 200 `{"name","accounts"}` |
+| `PUT /api/provisioning/accounts/{external_id}` | `{"email","name"}` | 200 `{"external_id","account_id","email","name","created","adopted","disabled","has_token","token_expires_at"}` |
+| `POST /api/provisioning/accounts/{external_id}/token` | `{"expires_days": 90}` | 201 `{"token","token_id","expires_at"}` |
+| `DELETE /api/provisioning/accounts/{external_id}` | none | 200 `{"released": true}` |
+
+`PUT` creates the account or adopts the one with that email, and is idempotent. `email` is trimmed and lower-cased and must have exactly one `@` with text on both sides and at most 254 bytes, else 400 `invalid email`. `name` is optional (the part of the email before `@` is used for a new account) and at most 100 characters, else 400 `name too long`. `created` is true only on the request that created the account, `adopted` is true when the account existed before, and `has_token` is true while the held token has not expired. Errors: 403 `account email domain is not allowed`, 409 `account is a Peek admin; connect it by hand`, and 409 `account is linked to another external id or email`.
+
+`POST .../token` mints a token named after the provisioner and replaces the previous one. `expires_days` is 1 to 365 and defaults to 90 when absent or 0, else 400 `expires_days must be 1 to 365`. Errors: 404 `not found` (no link for this key), 403 `account disabled`, 403 `account email domain is not allowed` and 409 `account is a Peek admin; connect it by hand`. `DELETE` answers 404 `not found` without a link and otherwise deletes the token and the link; the account stays.
+
+Every call is audited as `provisioning.account_upsert`, `provisioning.token_issue` or `provisioning.account_release` with the actor `provisioner:<name>`. No audit entry or log line carries a key, a token, an email or a name.
 
 ## Operational Endpoints
 

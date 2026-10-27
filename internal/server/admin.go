@@ -206,16 +206,72 @@ func (s *Server) dashboardAccountRows(ctx context.Context, selfID int64) []accou
 		slog.Error("dashboard account list failed", "err", err)
 		return nil
 	}
+	managedBy, err := s.store.ProvisionedByAccount(ctx)
+	if err != nil {
+		slog.Error("dashboard provisioned accounts failed", "err", err)
+	}
 	out := make([]accountDashRow, 0, len(accounts))
 	for _, a := range accounts {
 		out = append(out, accountDashRow{
-			ID:       a.ID,
-			Name:     a.Name,
-			Email:    a.Email,
-			Admin:    a.IsAdmin,
-			Disabled: a.Disabled,
-			IsSelf:   a.ID == selfID,
+			ID:        a.ID,
+			Name:      a.Name,
+			Email:     a.Email,
+			Admin:     a.IsAdmin,
+			Disabled:  a.Disabled,
+			IsSelf:    a.ID == selfID,
+			ManagedBy: managedBy[a.ID],
 		})
 	}
 	return out
+}
+
+func (s *Server) dashboardProvisionerRows(ctx context.Context) []provisionerDashRow {
+	list, err := s.store.ListProvisioners(ctx)
+	if err != nil {
+		slog.Error("dashboard provisioner list failed", "err", err)
+		return nil
+	}
+	out := make([]provisionerDashRow, 0, len(list))
+	for _, p := range list {
+		lastUsed := "never"
+		if p.LastUsedAt > 0 {
+			lastUsed = time.Unix(p.LastUsedAt, 0).UTC().Format(time.RFC3339)
+		}
+		out = append(out, provisionerDashRow{
+			ID:       p.ID,
+			Name:     p.Name,
+			Hint:     p.Hint,
+			Created:  time.Unix(p.CreatedAt, 0).UTC().Format(time.RFC3339),
+			LastUsed: lastUsed,
+			Accounts: p.Accounts,
+		})
+	}
+	return out
+}
+
+func (s *Server) handleDashboardProvisionerRevoke(w http.ResponseWriter, r *http.Request) {
+	owner, ok := s.webAuth(r)
+	if !ok || !owner.IsAdmin {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if !s.parseAdminForm(w, r) {
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		adminError(w, r, flashNotFound)
+		return
+	}
+	name, err := s.revokeProvisioner(r, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			adminError(w, r, flashNotFound)
+			return
+		}
+		adminError(w, r, flashProvisionerRevokeFailed)
+		return
+	}
+	s.auditRequest(r, owner.Name, "provisioner.revoke", auditDetail("id", strconv.FormatInt(id, 10), "name", name))
+	adminOK(w, r, flashProvisionerRevoked)
 }

@@ -17,6 +17,7 @@ Peek is an internal company tool, not a SaaS product. Architecture choices shoul
 - `internal/backends` owns the container engine client (Docker Engine API, also served by Podman), image reference rules, and the lifecycle of page backend containers: lazy start, idle stop, the running cap, and cleanup. It knows nothing about uploads, settings, or HTTP routing; `internal/server` resolves a page version into a `backends.Spec` and relays requests to the endpoint the manager returns.
 - `internal/mail` owns SMTP delivery and message formatting for notification emails; it knows nothing about uploads or HTTP.
 - `internal/uploadquota` owns the transport- and database-neutral upload quota contract shared by the upload service, HTTP server, and SQLite store.
+- Provisioning persistence is `internal/db/provisioners.go` and `internal/db/provisioned_accounts.go`; its HTTP side is `internal/server/api_provisioners.go`, `internal/server/api_provisioning.go` and `internal/server/provisioning_auth.go`.
 - `internal/db` owns SQLite schema, migrations, persistence rules, transactional constraints, and database-level invariants such as quota checks and last-admin protection.
 - `internal/objectstore` owns upload byte storage. The server depends only on its `Storage` interface, while file and S3 implementation details stay outside the HTTP package.
 - `internal/web` owns server-rendered templates, template view models, static asset embedding, and HTML rendering configuration.

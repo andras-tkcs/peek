@@ -428,3 +428,23 @@ func TestPasswordLoginRejectsOversizedEmailWithoutLimiterKey(t *testing.T) {
 		t.Fatalf("limiter holds %d keys, want 0", n)
 	}
 }
+
+func TestLoginWithTokenRefusesProvisionedToken(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	f := newProvisionedFixture(t, s, "PF", "u@x.test", "e1")
+	if err := s.store.SetSetting(context.Background(), "auth_token_login_enabled", "true"); err != nil {
+		t.Fatal(err)
+	}
+	other := newAccountWithToken(t, s, "o@x.test", "peek_other-token-1234", false)
+	form := func(tok string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(url.Values{"token": {tok}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return req
+	}
+	if _, err := s.loginWithToken(form(f.Token)); err == nil || err.Error() != "token login disabled" {
+		t.Fatalf("provisioned token: err = %v", err)
+	}
+	if a, err := s.loginWithToken(form("peek_other-token-1234")); err != nil || a.ID != other.ID {
+		t.Fatalf("ordinary token: %v, %v", a, err)
+	}
+}
