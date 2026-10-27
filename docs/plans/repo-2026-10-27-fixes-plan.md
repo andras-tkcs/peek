@@ -25,7 +25,7 @@ Reviewed at `183ecc3`, which is still `origin/main` on 2026-10-27, so every find
 - A database created by v0.10.0 and opened by today's code differs from a fresh database in exactly one column property: `uploads.visibility` defaults to `'password'` instead of `'restricted'` (measured on 2026-10-27 with v0.10.0's `db.Open`, comparing `pragma_table_info` of every table). It is harmless today because the only insert, `internal/db/uploads.go:60`, always sets `visibility`.
 - v0.10.0's `mise.toml` pins Go 1.26.9, which `mise` cannot download in the container; building that tag works with the already-installed toolchain: `GO="$(go env GOROOT)/bin/go"` from the repo root, then `GOTOOLCHAIN=local "$GO" build ...` inside the worktree.
 - `docs/public/assets/screenshots/*.png` and `assets/screenshots/*.png` hold the same 11 stale images (last regenerated in `fdf745e`); `scripts/gen-screenshots.sh` writes `assets/screenshots/` and mirrors to `docs/public/assets/screenshots/`. README references neither copy; the site uses `docs/public/assets/screenshots/`. `docs/public/assets/demo.mp4` is referenced nowhere (`scripts/gen-assets.sh:154-155` mirrors it). `gen-screenshots.sh` needs `sqlite3` (install with `apt-get update && apt-get install -y sqlite3` in the container), `pnpm install` at the repo root, and Chromium (`/opt/pw-browsers/chromium-*/chrome-linux64/chrome` in the container).
-- The docs site's sidebar section links are hard-coded in `docs/src/components/DocsShell.astro:37-127` (`anchorsBySlug`); group titles are `<h2>` before the page `<h1>`; `docs/src/pages/manual.astro:35` hard-codes `/peek/docs/reference/`; `docs/src/pages/index.astro:35` shows literal backticks around `Peek`.
+- The docs site's sidebar section links are hard-coded in `docs/src/components/DocsShell.astro:37-127` (`anchorsBySlug`); group titles are `<h2>` before the page `<h1>`; `docs/src/pages/manual.astro:38` hard-codes `/peek/docs/reference/`; `docs/src/pages/index.astro:35` shows literal backticks around `Peek`.
 - The devflow profile schema allows `git.merge_style` values `merge-commit` and `squash` only, and `docs.changelog` needs `file` and `section` (for example `## [Unreleased]`).
 - Coverage today: total 96.3%; `internal/server` 96.7%, `internal/db` 93.8%, `internal/objectstore` 99.1%. `scripts/coverage-gate.sh` checks only the total, default 90.0.
 
@@ -42,13 +42,13 @@ Every name, string and command below is final. Phases point here by subsection.
   ```sh
   set -euo pipefail
   id=$(docker run -d -p 7700:7700 peek:ci)
+  trap 'docker logs "$id" || true' EXIT
   for i in $(seq 1 30); do
     curl -fsS http://localhost:7700/healthz >/dev/null && break
     sleep 1
   done
   curl -fsS http://localhost:7700/healthz
   docker exec "$id" /peekd healthcheck --addr localhost:7700
-  docker logs "$id"
   ```
 - New job `cross-build` (`timeout-minutes: 15`, `env: GOFLAGS: -mod=readonly`): checkout, setup-go (`go-version-file: go.mod`, `cache: true`), step `Vet and build for windows and darwin`:
   ```sh
@@ -112,7 +112,7 @@ Every name, string and command below is final. Phases point here by subsection.
   (The inputs `subject-path`, `subject-name`, `subject-digest` and `push-to-registry` were checked in that SHA's `action.yml`.)
 - `docker-main.yml`: `on:` becomes `workflow_run: { workflows: [CI], types: [completed], branches: [main] }` plus the existing `workflow_dispatch:`. The job gets
   `if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository)`. The `event == 'push'` and `head_repository` conditions are required: `branches: [main]` matches the head branch name, so without them a fork PR from a branch called `main` would build fork code with `packages: write`. Add a job-level `env: { SHA: "${{ github.event.workflow_run.head_sha || github.sha }}" }`; the checkout gets `ref: ${{ env.SHA }}` and `persist-credentials: false`; add a step `id: sha` running `echo "short=${SHA::7}" >> "$GITHUB_OUTPUT"`; the metadata `tags:` become `type=raw,value=main` and `type=raw,value=sha-${{ steps.sha.outputs.short }}`; the build args become `VERSION=main-${{ env.SHA }}` and `COMMIT=${{ env.SHA }}`. (`type=ref`/`type=sha` are dropped because under `workflow_run` `github.sha` is the latest default-branch commit, not necessarily the one CI tested.)
-- New `.github/dependabot.yml`, `version: 2`, every entry `schedule: { interval: weekly }` and a `groups:` entry named `<ecosystem>-minor-patch` with `update-types: [minor, patch]` (use `npm-root-minor-patch` and `npm-docs-minor-patch` for the two npm entries): `gomod` directory `/`; `github-actions` directory `/`; `docker` with `directories: [/, /examples/contact-form]`; `npm` directory `/docs`; `npm` directory `/`.
+- New `.github/dependabot.yml`, `version: 2`, every entry `schedule: { interval: weekly }` and a `groups:` entry named `<ecosystem>-minor-patch` with `patterns: ["*"]` and `update-types: [minor, patch]` (use `npm-root-minor-patch` and `npm-docs-minor-patch` for the two npm entries): `gomod` directory `/`; `github-actions` directory `/`; `docker` with `directories: [/, /examples/contact-form]`; `npm` directory `/docs`; `npm` directory `/`.
 - New `.github/workflows/vuln.yml`, `name: Vulnerability scan`, `on: { schedule: [{ cron: '23 4 * * 1' }], workflow_dispatch: {} }` (block style), `permissions: contents: read`, one job `govulncheck` (`timeout-minutes: 15`): checkout (`persist-credentials: false`), setup-go (`go-version-file: go.mod`), run `go install golang.org/x/vuln/cmd/govulncheck@v1.9.0` then `govulncheck ./...`.
 - Base images pinned by index digest (resolved 2026-10-27 through `mirror.gcr.io` / `gcr.io`):
   - `Dockerfile:4` → `FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build`
@@ -158,11 +158,11 @@ Every name, string and command below is final. Phases point here by subsection.
   ```
 - `Run`, `runBackup` and `runHealthcheck` return 0 when parsing fails with `errors.Is(err, flag.ErrHelp)` (the FlagSet has already printed usage); `Run` does so before printing `peekd: %v`. `backupArgs` returns the parse error unchanged so `runBackup` can test it.
 - `serveConfig` gets a field `Listener net.Listener // when set, runServe serves on it instead of listening on Addr (tests)`. In `runServe`, the goroutine calls `hs.Serve(cfg.Listener)` when `cfg.Listener != nil`, else `hs.ListenAndServe()`; the `http.ErrServerClosed` handling is unchanged.
-- `serve_test.go`: delete `freeAddr`; `serveTestConfig` opens `ln, err := net.Listen("tcp", "127.0.0.1:0")`, registers `t.Cleanup(func() { _ = ln.Close() })`, and sets `Listener: ln, Addr: ln.Addr().String()`. A test that needs a real bind failure keeps setting `Addr` itself with `Listener` nil.
+- `serve_test.go`: delete `freeAddr`; `serveTestConfig` opens `ln, err := net.Listen("tcp", "127.0.0.1:0")`, registers `t.Cleanup(func() { _ = ln.Close() })`, and sets `Listener: ln, Addr: ln.Addr().String()`. A test that needs a real bind failure sets `Listener` back to nil: in `TestRunServeFailsWhenAddressInUse` (serve_test.go:218) add `cfg.Listener = nil` right after `cfg.Addr = ln.Addr().String()`, or runServe would serve on the pre-opened listener and the test would hang.
 
 ### D6. CLI help — DOC-13 (CLI)
 
-- `usage()` keeps printing the whole text to stderr. Add these lines to the usage text, in these places: after `  peek login --token-stdin ...` add `  peek login --oauth                    always use browser login; fails when the server has none`; after `  peek config show` nothing; replace `  peek backend env set <slug> <NAME> --value-stdin   set a backend environment variable` with `  peek backend env set <slug> <NAME> --value <v>|--value-stdin   set a backend environment variable`; after the `peek provisioner revoke` line add `  peek version                         print the CLI version`.
+- `usage()` keeps printing the whole text to stderr. Add these lines to the usage text, in these places: after the `  peek login --token-stdin ...` line under `Usage:` (not the one under "Token input") add `  peek login --oauth                    always use browser login; fails when the server has none`; replace `  peek backend env set <slug> <NAME> --value-stdin   set a backend environment variable` with `  peek backend env set <slug> <NAME> --value <v>|--value-stdin   set a backend environment variable`; after the `peek provisioner revoke` line add `  peek version                         print the CLI version`.
 - New `func commandUsage(cmd string) string` returns `"Usage:\n"` followed by every line of the usage text whose trimmed text starts with `"peek " + cmd + " "` or equals `"peek " + cmd`, each ending in `\n` (so `peek login --help` also shows the `peek login` lines from "Token input").
 - New `func wantsHelp(args []string) bool`: true when any element is `-h` or `--help`.
 - In `Run`, after `cmd, rest := args[0], args[1:]` and before the `switch`: if `cmd` is one of the dispatched command names (login, config, upload, list, delete, visibility, rename, grant, revoke, grants, versions, stats, comments, export, delete-all, token, provisioner, backend) and `wantsHelp(rest)`, print `commandUsage(cmd)` to stderr and return 0. Keep the names in one `var commandNames = []string{...}` next to `Run`.
@@ -220,7 +220,7 @@ Every step asserts exit code 0 and prints stdout and stderr on failure.
   3. Non-frame messages are ignored: `page.evaluate(() => window.postMessage({ hn: "togglebar" }, "*"))`, then `frame.evaluate(() => parent.postMessage({ hn: "togglebar" }, "*"))`; `page.waitForSelector("#hn-bar", { state: "hidden", timeout: 5000 })`; wait 500 ms; `#hn-bar` must still be hidden (if the page's own message had been honoured, the two toggles would cancel out).
   4. Comment round-trip: send `{ hn: "togglebar" }` from the frame again and wait for `#hn-bar` visible; click `#hn-comment-btn`; `frame.click("#t")`; wait for `#hn-body` visible; fill it with `e2e comment`; submit with `page.click("#hn-comment-form [type=submit]")`; if `#hn-name-modal` becomes visible within 2 s, click `#hn-name-skip`; then poll `GET ${BASE}/api/uploads/${SLUG}/comments` (from Node's `fetch`) every 200 ms for 10 s until the body contains `e2e comment`.
 - Root `package.json` `scripts`: add `"e2e-browser": "scripts/e2e-browser.sh"`.
-- `ci.yml`: new job `browser` (`timeout-minutes: 15`, `env: GOFLAGS: -mod=readonly`): checkout, setup-go, pnpm/action-setup, setup-node (`cache: pnpm`, `cache-dependency-path: pnpm-lock.yaml`), `pnpm install --frozen-lockfile`, step `Browser end-to-end test` running `CHROME="$(command -v google-chrome)" scripts/e2e-browser.sh`.
+- `ci.yml`: new job `browser` (`timeout-minutes: 15`, `env: GOFLAGS: -mod=readonly`): checkout (`persist-credentials: false`), setup-go, pnpm/action-setup, setup-node (`cache: pnpm`, `cache-dependency-path: pnpm-lock.yaml`), `pnpm install --frozen-lockfile`, step `Browser end-to-end test` running `CHROME="$(command -v google-chrome)" scripts/e2e-browser.sh`.
 
 ### D10. Real-release upgrade fixture — TST-8 (oldest supported in-place upgrade: v0.10.0, confirmed by the owner)
 
@@ -239,7 +239,7 @@ Every step asserts exit code 0 and prints stdout and stderr on failure.
 
 ### D11. Coverage ratchet — TST-9
 
-`scripts/coverage-gate.sh`: `min="${COVERAGE_MIN:-95.0}"`, new `pkg_min="${COVERAGE_PACKAGE_MIN:-93.0}"` and `packages="${COVERAGE_PACKAGES:-internal/server internal/db internal/objectstore}"`; after the total check (keep its message format), compute each package's statement coverage directly from the profile: `module=$(go list -m)`, then for each package `awk -v pkg="$module/$p" 'NR > 1 { split($1, a, ":"); f = a[1]; sub(/\/[^\/]*$/, "", f); if (f == pkg) { n += $2; if ($3 > 0) c += $2 } } END { if (n == 0) print "none"; else printf "%.1f", 100 * c / n }' "$profile"`; print `coverage gate: OK <pkg> <pct>% >= <min>%` or `coverage gate: FAIL <pkg> <pct>% < <min>%` (or `coverage gate: FAIL <pkg> has no statements in <profile>`), and exit 1 after checking all packages if any failed. Update the usage comment. `mise.toml` `[tasks.coverage]` description → `Run tests with coverage and fail below the 95% total or 93% per-core-package gates`. `ci.yml` step name → `Coverage (gate >= 95.0% total, >= 93.0% per core package)`.
+`scripts/coverage-gate.sh`: `min="${COVERAGE_MIN:-95.0}"`, new `pkg_min="${COVERAGE_PACKAGE_MIN:-93.0}"` and `packages="${COVERAGE_PACKAGES:-internal/server internal/db internal/objectstore}"`; after the total check (keep its message format), compute each package's statement coverage directly from the profile: `module=$(go list -m)`, then for each package `awk -v pkg="$module/$p" 'NR > 1 { split($1, a, ":"); f = a[1]; sub(/\/[^\/]*$/, "", f); if (f == pkg) { n += $2; if ($3 > 0) c += $2 } } END { if (n == 0) print "none"; else printf "%.1f", 100 * c / n }' "$profile"`; compare the unrounded percentage with the floor (awk prints it with `%.1f` only for display, so compute the comparison in the same awk or print the raw value and format separately); print `coverage gate: OK <pkg> <pct>% >= <min>%` or `coverage gate: FAIL <pkg> <pct>% < <min>%` (or `coverage gate: FAIL <pkg> has no statements in <profile>`), and exit 1 after checking all packages if any failed. Update the usage comment. `mise.toml` `[tasks.coverage]` description → `Run tests with coverage and fail below the 95% total or 93% per-core-package gates`. `ci.yml` step name → `Coverage (gate >= 95.0% total, >= 93.0% per core package)`.
 
 ### D12. Governance files — SEC-3 code part, SEC-9 code part, DOC-15, DOC-17, DOC-10 (profile)
 
@@ -301,6 +301,7 @@ Everything only the repository owner can do is a GitHub setting, and none of it 
 - **MinIO tags (D2).** They could not be resolved from the container; `ma5` checks them. If the owner reports they do not exist, a follow-up replaces them.
 - **Screenshots (WEB-1) are checked by eye.** Acceptance is mechanical only for the file set; `ma5` covers the content.
 - **Coverage gate (D11).** If raising the defaults fails on the feature branch, a phase did not test its code: fix the tests, never lower the floor.
+- **CHANGELOG.md.** Only p20 edits it, even though p12 sets `docs.changelog` and p16 documents the rule; a worker that wants to add a line leaves it for p20.
 - **Required checks.** Adding them before the jobs exist on `main` blocks every PR; `ma6` is therefore done right after merge, and the page says so.
 
 ## Implementation manifest
@@ -339,10 +340,11 @@ verify_after_merge:
 final_checks:
   - docs/plans/repo-2026-10-27-fixes-plan.md and docs/plans/repo-2026-10-27-fixes-plan-manual-steps.html are deleted and `git grep -n 'repo-2026-10-27-fixes-plan'` has no output
   - CHANGELOG.md has entries under "## [Unreleased]" and no version heading
+  - "for f in .github/workflows/*.yml; do test $(grep -c 'persist-credentials: false' $f) -eq $(grep -c 'actions/checkout@' $f) || echo BAD $f; done prints nothing (SEC-6)"
   - PEEK_E2E=1 go test -count=1 -run '^TestE2E' ./internal/e2e passes
   - 'pnpm install --frozen-lockfile && CHROME="$(ls /opt/pw-browsers/chromium-*/chrome-linux64/chrome | head -1)" scripts/e2e-browser.sh prints "browser e2e: OK"'
   - 'pnpm install --dir docs --frozen-lockfile && pnpm --dir docs build && node scripts/check-docs-links.mjs docs/dist prints "docs links: OK"'
-  - every finding id of the review (SEC-1..11, TST-1..6, TST-8..12, DOC-1..6, DOC-8..10, DOC-12..17, WEB-1..6, WEB-8, WEB-9) appears in the acceptance of a merged phase, and the PR body lists the GitHub-settings parts of SEC-1, SEC-2, SEC-3, SEC-4, SEC-8 and SEC-9 as manual_after items
+  - every finding id of the review except SEC-8 (settings only, ma2) (SEC-1..7, SEC-9..11, TST-1..6, TST-8..12, DOC-1..6, DOC-8..10, DOC-12..17, WEB-1..6, WEB-8, WEB-9) appears in the acceptance of a merged phase, and the PR body lists the GitHub-settings parts of SEC-1, SEC-2, SEC-3, SEC-4, SEC-8 and SEC-9 as manual_after items
 phases:
   - id: p1-ci-pr-jobs
     title: CI jobs on every PR (docker, cross-build, docs, example module) and the docs link check
@@ -470,15 +472,15 @@ phases:
       - internal/backends/manager_test.go
     brief: |
       Findings: DOC-3, DOC-13 (peekd part), TST-11. Spec: plan Design D5.
-      1. DOC-3: change internal/peekd/run.go:129 help text, :30 comment and :337 log field per D5. Grep the repo for `metrics_auth` (`git grep -n metrics_auth`) and update any test or doc that names it.
+      1. DOC-3: change internal/peekd/run.go:129 help text, :30 comment and :337 log field per D5. Grep for `metrics_auth` outside the plan (`git grep -n metrics_auth -- ':!docs/plans' ':!CHANGELOG.md'`) and update any test or doc that names it.
       2. DOC-13: add writeServeUsage and `fs.Usage` per D5; make Run, runBackup and runHealthcheck return 0 on flag.ErrHelp (internal/peekd/backup.go, internal/peekd/healthcheck.go).
       3. Tests in internal/peekd/run_test.go: add a helper `captureStderr(t *testing.T, fn func()) string` (swap os.Stderr for an os.Pipe, restore in t.Cleanup, read the pipe after fn returns); `TestRunHelpPrintsUsageAndExitsZero`: `Run([]string{"--help"})` returns 0 and the captured text contains `peekd backup [--data <dir>] [path]`, `peekd healthcheck`, `PEEK_BASE_URL`, `PEEK_LOG_LEVEL`, `PEEK_HEALTHCHECK_ADDR` and `-metrics-token`; `-h` also returns 0; `Run([]string{"backup", "-h"})` and `Run([]string{"healthcheck", "-h"})` return 0. Keep TestRunUnknownFlagReturnsUsageError (still 2).
-      4. TST-11 peekd part: add `Listener` to serveConfig and the hs.Serve branch in runServe per D5; rewrite serveTestConfig and delete freeAddr per D5. Check every caller of serveTestConfig and freeAddr (`grep -n 'freeAddr\|serveTestConfig' internal/peekd/*_test.go`).
+      4. TST-11 peekd part: add `Listener` to serveConfig and the hs.Serve branch in runServe per D5; rewrite serveTestConfig and delete freeAddr per D5, and add `cfg.Listener = nil` in TestRunServeFailsWhenAddressInUse (D5). Check every caller of serveTestConfig and freeAddr (`grep -n 'freeAddr\|serveTestConfig' internal/peekd/*_test.go`).
       5. TST-11 backends part: in internal/backends/manager.go add a field `onWait func() // test hook: called before Ensure waits for a start in progress` to Manager and call `if m.onWait != nil { m.onWait() }` in Ensure directly before the `select { case <-e.ready: ...` at manager.go:192. In internal/backends/export_test.go add `func (m *Manager) SetOnWaitForTest(f func()) { m.onWait = f }`. In TestManagerEnsureConcurrentWaitsForInflightStart (internal/backends/manager_test.go:293): before the first `go call()`, `waiting := make(chan struct{}, 1)` and `m.SetOnWaitForTest(func() { waiting <- struct{}{} })`; replace the `time.Sleep(20 * time.Millisecond)` line with `<-waiting`.
       6. Run `go test -race -count=1 ./internal/peekd ./internal/backends` and `go build ./... && ./bin/peekd --help` style check: `go run ./cmd/peekd --help; echo $?` prints the usage and 0.
     acceptance:
       - "git grep -n 'empty = unauthenticated\\|empty = open' internal/peekd prints nothing (DOC-3)"
-      - "grep -n 'metrics_token_set' internal/peekd/run.go matches and git grep -n 'metrics_auth' prints nothing (DOC-3)"
+      - "grep -n 'metrics_token_set' internal/peekd/run.go matches and git grep -n metrics_auth -- ':!docs/plans' ':!CHANGELOG.md' prints nothing (DOC-3)"
       - "go run ./cmd/peekd --help 2>&1 | grep -c 'backup\\|healthcheck' prints at least 2, and go run ./cmd/peekd --help exits 0 (DOC-13)"
       - "go test ./internal/peekd -run '^TestRunHelpPrintsUsageAndExitsZero$' -count=1 passes (DOC-13)"
       - "grep -n 'time.Sleep(20 \\* time.Millisecond)' internal/backends/manager_test.go prints nothing (TST-11)"
@@ -554,7 +556,7 @@ phases:
     brief: |
       Finding: TST-6. Spec: plan Design D9.
       1. Create scripts/e2e-browser-page.html, scripts/e2e-browser.sh (chmod +x, commit the mode) and scripts/e2e-browser.mjs per D9. Add the `e2e-browser` script to the root package.json; do not change dependencies (playwright-core 1.60.0 is already there).
-      2. Add the `browser` job to .github/workflows/ci.yml per D9.
+      2. Add the `browser` job to .github/workflows/ci.yml per D9; its checkout has `persist-credentials: false` (SEC-6).
       3. Run it in the container: `pnpm install --frozen-lockfile && CHROME="$(ls /opt/pw-browsers/chromium-*/chrome-linux64/chrome | head -1)" scripts/e2e-browser.sh`. It must print `browser e2e: OK`.
       4. Prove the path check is tested: in internal/web/assets/app.js temporarily replace `if (!(url.origin === location.origin && url.pathname.startsWith(prefix))) {` with `if (false) {`, rerun step 3 and see check 1 fail, then `git checkout -- internal/web/assets/app.js`. Same for `if (e.source !== frame()) return;` → delete the line, see check 3 fail, restore.
       Stop condition: the D9 risk in plan "Risks and open questions" (composer does not open, or the positive control is not `ok:<status>`): stop with status=blocked and report what happened. Never weaken a check to pass.
@@ -582,7 +584,7 @@ phases:
     acceptance:
       - "go test ./internal/db -run '^(TestOpenUpgradesReleaseFixture|TestUpgradedSchemaMatchesFresh)$' -count=1 passes (TST-8)"
       - "test -f internal/db/testdata/peek-v0.10.0.db && grep -c '\"release\":\"v0.10.0\"' internal/db/testdata/peek-v0.10.0.json prints 1 (TST-8)"
-      - "grep -n \"'password'\" internal/db/release_fixture_test.go matches only the documented uploads.visibility exception"
+      - "grep -c 'uploads.visibility' internal/db/release_fixture_test.go prints at least 1 and the exception comment of D10 is present verbatim (grep -n 'Databases created before migration 15' internal/db/release_fixture_test.go matches)"
       - "go test -race -count=1 ./internal/db passes"
 
   - id: p11-coverage-ratchet
@@ -648,7 +650,7 @@ phases:
       9. SEC-3: add `To report a vulnerability, see [SECURITY.md](SECURITY.md); please do not open a public issue.` as the first line under `## Security model`.
       10. DOC-16c: replace the code block under `## Architecture` with one sentence: `See [docs/architecture.md](docs/architecture.md) for the package map and dependency rules.` and keep the sentence about runtime CSS/JS and the root `assets/` directory.
     acceptance:
-      - "grep -rn -- '--slug contact' README.md examples skills docs prints nothing (DOC-1)"
+      - "grep -rn --exclude-dir=plans -- '--slug contact' README.md examples skills docs prints nothing (DOC-1)"
       - "grep -rn 'html-k7m2xq' README.md prints nothing (DOC-2)"
       - "grep -c 'PEEK_HEALTHCHECK_ADDR\\|PEEK_LOG_LEVEL' README.md prints at least 2 (DOC-4)"
       - "grep -n 'must be HTTP(S)' README.md prints nothing (DOC-5)"
@@ -657,6 +659,7 @@ phases:
       - "grep -c 'sandbox=\"allow-scripts\"' README.md prints 0 (DOC-16)"
       - "grep -n 'gh attestation verify' README.md prints 1 line (SEC-7)"
       - "grep -c SECURITY.md README.md prints at least 1 (SEC-3)"
+      - "grep -c 'internal/server/    HTTP server' README.md prints 0 and grep -n 'docs/architecture.md) for the package map and dependency rules' README.md matches (DOC-16)"
       - "grep -c 'andras-tkcs.github.io/peek' README.md prints at least 1 (WEB-6)"
 
   - id: p14-skills
@@ -690,7 +693,7 @@ phases:
       - docs/operations.md
     brief: |
       Findings: DOC-6, DOC-5 (operations), DOC-16d, SEC-3 (link), SEC-11 (operator note). Facts: plan "Current state" (migration-to-release table). No hard wrapping.
-      1. DOC-6: in "## Upgrades And Rollbacks" keep the two general paragraphs at the top and the "Rollback is simplest..." paragraph at the end; regroup every release note under `### <version>` headings, newest first: `### Unreleased` (new note for migration 17), `### v0.14.0` (migration 16), `### v0.13.0` (new note for migration 14, then migration 15), `### v0.10.0` (migrations 11, 12, 13, then the raw-route/sandbox, trusted-proxy and API-token-rules notes, rewritten to start with what changed, for example "The unversioned `/raw/<slug>` route is removed ...", never with "This release" or "This version"), `### v0.9.0` (migration 10), `### v0.8.0` (migrations 7, 8 and 9). Remove every "This release".
+      1. DOC-6: in "## Upgrades And Rollbacks" keep the two general paragraphs at the top and the "Rollback is simplest..." paragraph at the end; regroup every release note under `### <version>` headings, newest first: `### Unreleased` (new note for migration 17), `### v0.14.0` (migration 16), `### v0.13.0` (new note for migration 14, then migration 15), `### v0.10.0` (migrations 11, 12, 13, then the three other notes, whose first sentences become exactly: "The unversioned `/raw/<slug>` route is removed and uploaded HTML is served with a CSP `sandbox`.", "With `--trusted-proxy`, `X-Forwarded-For` is trusted only from `PEEK_TRUSTED_PROXY_CIDRS` (default loopback)." and "API tokens follow the allowed email domain and OAuth-required rules (see First Run And Access).", each keeping the rest of its current text), `### v0.9.0` (migration 10), `### v0.8.0` (migrations 7, 8 and 9). Remove every "This release".
       2. New notes, worded from internal/db/migrations.go: migration 14 (`visibility_signed_in`) renames the `private` visibility to `signed-in` for existing pages (`UPDATE uploads SET visibility='signed-in' WHERE visibility='private'`); older binaries do not know `signed-in`, so roll back by restoring the pre-upgrade backup. Migration 17 (`provisioning`) adds the `provisioners` and `provisioned_accounts` tables for provisioning keys; older binaries ignore both tables, so a rollback keeps accounts and tokens working but provisioning keys stop working until the upgrade is re-applied.
       3. DOC-5: the S3 paragraph (around docs/operations.md:127) starts with the DOC-5 sentence of D13, then keeps the existing details about CGNAT, NAT64 and bucket names.
       4. DOC-16d: docs/operations.md:57 links "the Provisioning keys section" to `src/content/docs/auth-access.md#provisioning-keys`.
@@ -748,28 +751,28 @@ phases:
       1. scripts/gen-screenshots.sh: set `OUT="$ROOT/docs/public/assets/screenshots"`, delete `DOCS_OUT` and the block that mirrors screenshots into it (keep the hero.png mirror), update the header comment and the last echo to name docs/public/assets/screenshots/.
       2. `git rm -r assets/screenshots` (README does not reference it; verify with `git grep -n 'assets/screenshots' -- ':!docs/public'` that nothing outside the site does, apart from the script you just changed).
       3. WEB-9b: `git rm docs/public/assets/demo.mp4` and delete the lines in scripts/gen-assets.sh that mirror demo.mp4 into docs/public/assets (around :152-156), keeping assets/demo.mp4 and the GIF.
-      4. Regenerate: `apt-get update && apt-get install -y sqlite3`, `pnpm install --frozen-lockfile`, then `CHROME="$(ls /opt/pw-browsers/chromium-*/chrome-linux64/chrome | head -1)" scripts/gen-screenshots.sh`. All 11 PNGs and docs/public/assets/hero.png must be rewritten.
-      5. Look at docs/public/assets/screenshots/05-dashboard-uploads.png and 08-admin-auth.png (open the images): 05 must show the Restricted default and no "Password" option; note in your report which fields 08 shows, because p18 adjusts its caption. Stop condition: if 05 still shows "Password", the script seeded old data or used an old binary; stop with status=blocked.
+      4. Regenerate: `apt-get update && apt-get install -y sqlite3`, `pnpm install --frozen-lockfile`, then `CHROME="$(ls /opt/pw-browsers/chromium-*/chrome-linux64/chrome | head -1)" scripts/gen-screenshots.sh`. All 11 PNGs and docs/public/assets/hero.png must be rewritten. The script also writes assets/hero.png (an untracked intermediate): delete it and do not commit it.
+      5. Look at docs/public/assets/screenshots/05-dashboard-uploads.png and 08-admin-auth.png (open the images): 05 must show the Restricted default and no "Password" option. Stop condition: if 05 still shows "Password", the script seeded old data or used an old binary; stop with status=blocked.
     acceptance:
       - "find . -name '05-dashboard-uploads.png' -not -path '*/node_modules/*' | wc -l prints 1 (WEB-1)"
       - "git diff --stat origin/main -- docs/public/assets/screenshots lists all 11 PNG files as changed (WEB-1)"
       - "test ! -e docs/public/assets/demo.mp4 (WEB-9)"
       - "grep -n 'DOCS_OUT' scripts/gen-screenshots.sh prints nothing"
-      - "the worker's report states that 05-dashboard-uploads.png shows Restricted and no Password, and lists the fields visible in 08-admin-auth.png (WEB-1, WEB-9f)"
+      - "the worker's report states that 05-dashboard-uploads.png shows Restricted and no Password (WEB-1)"
 
   - id: p18-site-content
     title: Complete the site reference, add restore, upgrade, email and audit guidance, fix naming
-    depends_on: [p5-peekd-help-and-test-timing, p6-cli-help, p13-readme, p15-operations-doc, p17-screenshots]
+    depends_on: [p1-ci-pr-jobs, p5-peekd-help-and-test-timing, p6-cli-help, p13-readme, p15-operations-doc, p17-screenshots]
     complexity: M
     touches:
       - docs/src/content/docs/**
     brief: |
       Findings: WEB-2, WEB-3, WEB-4, WEB-9 (c, f). Texts: plan Design D13. No hard wrapping. Use the current code as the source: internal/server/routes.go, `go run ./cmd/peek help`, `go run ./cmd/peekd --help`.
-      1. WEB-2: in docs/src/content/docs/reference.md "## Page And API Routes", add one table row per route in internal/server/routes.go that is missing (at least: GET /api/uploads, DELETE /api/uploads/{slug}, POST /api/uploads/{slug}/visibility, POST /api/uploads/{slug}/name, GET /api/uploads/{slug}/stats, GET|PUT /api/settings, GET /api/audit, GET /api/uploads/{slug}/export, DELETE /api/uploads-by-owner, GET /api/auth/providers, GET /raw/{slug}/v/{n}, GET /api/uploads/{slug}/views, the /api/tokens and /api/provisioners routes), each with method, path, auth (`token`, `admin token`, `page access` or `none`, read from the wrapper in routes.go: authToken → token, authAdmin → admin token, no wrapper → page access or none per the handler) and one line. Replace the "CLI Commands" block with the full output of `go run ./cmd/peek help 2>&1` (the usage text after p6).
+      1. WEB-2: in docs/src/content/docs/reference.md "## Page And API Routes", add one table row per route in internal/server/routes.go that is missing (at least: GET /api/uploads, DELETE /api/uploads/{slug}, POST /api/uploads/{slug}/visibility, POST /api/uploads/{slug}/name, GET /api/uploads/{slug}/stats, GET|PUT /api/settings, GET /api/audit, GET /api/uploads/{slug}/export, DELETE /api/uploads-by-owner, GET /api/auth/providers, GET /raw/{slug}/v/{n}, GET /api/uploads/{slug}/views, the /api/tokens and /api/provisioners routes), each with method, path, auth (from the wrapper in routes.go: `authToken` → `token`, `authAdmin` → `admin token`, `authProvisioner` → `provisioning key`; unwrapped routes: `/api/auth/providers`, `/api/cli/login/start`, `/api/cli/login/poll` → `none`; `/api/uploads/{slug}/comments` (GET and POST), `/api/uploads/{slug}/views`, `/raw/{slug}/v/{n}`, `/svc/...`, `/p/...` → `page access`) and one line. Replace the "CLI Commands" block with the full output of `go run ./cmd/peek help 2>&1` (the usage text after p6).
       2. WEB-3: add `## peekd Subcommands` to reference.md with a table: `peekd --version`; `peekd backup [--data <dir>] [path]` (default `<data>/peek-backup.db`, VACUUM INTO, safe while running); `peekd healthcheck [--addr <host:port|url>]` (reads PEEK_HEALTHCHECK_ADDR, then PEEK_ADDR; exit 0 on 200 from /healthz); and a row for PEEK_HEALTHCHECK_ADDR and PEEK_LOG_LEVEL in the server parameters section, same wording as README (p13).
       3. WEB-4: in storage-retention.md add `## Restore` with the five steps of D13 after "## Backups"; add `## Upgrades And Rollbacks` that condenses docs/operations.md's upgrade section (take a backup first, try on a staging copy, roll back by restoring the pre-upgrade backup plus object storage, and the per-version notes as a short list linking to https://github.com/andras-tkcs/peek/blob/main/docs/operations.md#upgrades-and-rollbacks); in server-setup.md add `## Email` (SMTP is configured by an admin on the Admin page, Email tab; what it is used for: grant and restricted-page emails, invites; the test-email button) worded from docs/operations.md:83-91; in auth-access.md add a `## Audit Log` section saying admins read it with `GET /api/audit` (admin token) and what is recorded, worded from docs/operations.md's Observability section.
       4. WEB-9c: replace `kicker: Settings / Auth` and `kicker: Settings / Storage` with `Admin / Auth` and `Admin / Storage`, and every "Settings" naming of the Admin page in image alt texts (`Peek Settings Auth tab` → `Peek Admin page, Auth tab`, same for Storage and Limits).
-      5. WEB-9f: rewrite the 08-admin-auth caption/alt text in auth-access.md to list only the fields the regenerated image shows (p17's report).
+      5. WEB-9f: open docs/public/assets/screenshots/08-admin-auth.png (view the image) and rewrite its caption/alt text in auth-access.md to list exactly the fields it shows, nothing else.
       6. Build and check: `pnpm install --dir docs --frozen-lockfile && pnpm --dir docs build && node scripts/check-docs-links.mjs docs/dist`.
     acceptance:
       - "for r in /api/settings /api/audit /api/tokens /export /stats /visibility uploads-by-owner /raw/ 'delete-all' 'token create' 'config show' -- '--oauth'; do grep -qF -- \"$r\" docs/src/content/docs/reference.md || echo MISSING $r; done prints nothing (WEB-2)"
@@ -780,7 +783,7 @@ phases:
 
   - id: p19-site-shell
     title: Sidebar section links from page headings, heading order, base-path link, home-page backticks
-    depends_on: []
+    depends_on: [p1-ci-pr-jobs]
     complexity: S
     touches:
       - docs/src/components/DocsShell.astro
@@ -789,16 +792,16 @@ phases:
     brief: |
       Findings: WEB-8, WEB-9 (a, d, e).
       1. WEB-8: in docs/src/pages/docs/[slug].astro use `const { Content, headings } = await render(entry);` and pass `headings` to DocsShell; do the same in docs/src/pages/docs/index.astro (it renders the `index` entry). In DocsShell.astro accept `headings: Array<{ depth: number; slug: string; text: string }> = []`, delete `anchorsBySlug`, and build `sectionNav` as one group titled `On this page` whose links are the depth-2 headings (`label: text`, `href: '#' + slug`). Pages without headings show no section group.
-      2. WEB-9d: render every sidebar group title (in DocsShell.astro and docs/src/pages/manual.astro; the landing page docs/src/pages/index.astro has no sidebar) as `<p class="nav-heading">` instead of `<h2>`, and change the CSS selectors `.nav-section h2` (docs/src/styles/site.css:395 and :522) to `.nav-section .nav-heading` with the same rules.
-      3. WEB-9e: in docs/src/pages/manual.astro replace `href="/peek/docs/reference/"` with the base helper used in that file or `${import.meta.env.BASE_URL}docs/reference/`.
+      2. WEB-9d: render every sidebar group title (in DocsShell.astro and the literal `<h2>Start</h2>`, `<h2>Use</h2>`, `<h2>Run</h2>` of docs/src/pages/manual.astro; leave the content `<h2>`s of the landing page docs/src/pages/index.astro alone) as `<p class="nav-heading">` instead of `<h2>`, and change the CSS selectors `.nav-section h2` (docs/src/styles/site.css:395 and :522) to `.nav-section .nav-heading` with the same rules.
+      3. WEB-9e: in docs/src/pages/manual.astro:38 replace `href="/peek/docs/reference/"` with ``href={`${import.meta.env.BASE_URL}docs/reference/`}``.
       4. WEB-9a: docs/src/pages/index.astro:35 replace the literal `` `Peek` `` with `<code>Peek</code>`.
-      5. `pnpm install --dir docs --frozen-lockfile && pnpm --dir docs build && node scripts/check-docs-links.mjs docs/dist` (the script exists once p1 has merged; if it is not on your branch yet, skip only that last command and say so).
+      5. `pnpm install --dir docs --frozen-lockfile && pnpm --dir docs build && node scripts/check-docs-links.mjs docs/dist` .
     acceptance:
-      - "after pnpm --dir docs build: grep -c 'href=\"#provisioning-keys\"' docs/dist/docs/auth-access/index.html prints at least 2 and grep -c 'href=\"#add-a-backend\"' docs/dist/docs/using-peek/index.html prints at least 1 (WEB-8)"
+      - "after pnpm --dir docs build: sed -n '/<aside/,/<\/aside>/p' docs/dist/docs/auth-access/index.html | grep -c 'href=\"#provisioning-keys\"' prints 1 and sed -n '/<aside/,/<\/aside>/p' docs/dist/docs/using-peek/index.html | grep -c 'href=\"#add-a-backend\"' prints 1 (WEB-8; today both print 0)"
       - "grep -n 'anchorsBySlug' docs/src/components/DocsShell.astro prints nothing (WEB-8)"
       - "grep -c '`Peek`' docs/dist/index.html prints 0 (WEB-9)"
       - "grep -n '\"/peek/' docs/src/pages/*.astro prints nothing (WEB-9)"
-      - "grep -rn '<h2>{group.title}</h2>' docs/src prints nothing (WEB-9)"
+      - "grep -rn '<h2>{group.title}</h2>' docs/src prints nothing and grep -c '<h2>\\(Start\\|Use\\|Run\\)</h2>' docs/src/pages/manual.astro prints 0 (WEB-9)"
 
   - id: p20-retire
     title: Changelog entries, final consistency pass, delete the plan
@@ -809,7 +812,7 @@ phases:
       - docs/plans/**
     brief: |
       1. Add to CHANGELOG.md under `## [Unreleased]` (no version heading) a `### Added` list: build provenance attestations for release archives and images (`gh attestation verify <archive> -R andras-tkcs/peek`); SECURITY.md with private vulnerability reporting; `peek <command> --help` and `peekd --help` (subcommands and PEEK_* variables). A `### Changed` list: peekd refuses to start when `secret.key` is shorter than 32 bytes instead of replacing it, and writes new keys atomically; the startup log field `metrics_auth` is now `metrics_token_set`; a release tag must point at a commit on main and pass vet, race tests and govulncheck before anything is published, and pre-release tags no longer move the `:latest` image; the `:main` image is published only after CI passes on main. A `### Fixed` list: the contact-form example and README backend commands; slug examples; the `--metrics-token` help text.
-      2. Run every acceptance grep of the phases above once more on the merged branch and fix any that regressed in files this phase may touch; for other files, report the regression with status=blocked.
+      2. Run every acceptance grep of the phases above once more on the merged branch (repo-wide greps exclude docs/plans and CHANGELOG.md, which quote the strings they search for) and fix any that regressed in files this phase may touch; for other files, report the regression with status=blocked.
       3. `git rm docs/plans/repo-2026-10-27-fixes-plan.md docs/plans/repo-2026-10-27-fixes-plan-manual-steps.html`; if docs/plans is then empty, nothing else is needed. `git grep -n 'repo-2026-10-27-fixes-plan'` must print nothing.
       4. `mise run check-full` passes.
     acceptance:
