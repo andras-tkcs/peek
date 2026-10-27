@@ -26,6 +26,8 @@ PEEK_DATA=/var/lib/peek peekd backup /backups/peek-$(date +%F).db
 
 `peekd backup` refuses to overwrite an existing destination file.
 
+peekd refuses to start when secret.key exists but is shorter than 32 bytes, instead of replacing it: restore the file from the same backup as peek.db, or delete it only if losing every session, API token signature and encrypted setting (S3 keys, OAuth secret) is acceptable.
+
 If you use S3 storage, also back up or lifecycle-manage the bucket according to your internal retention policy. The SQLite backup contains object metadata, comments, auth state, settings, and analytics, not the remote object bytes themselves.
 
 ## Startup Configuration
@@ -54,7 +56,7 @@ On first run, Peek creates a one-time setup URL in the logs and stores the setup
 
 For company usage, prefer OAuth/SSO with invite-only signup. Google Workspace organizations can use `auth_google_org_signup` instead of invites. Admins can configure Google, GitHub, or generic OpenID Connect on the **Admin** page (the **Admin** button next to **Sign out**), create invite links, and promote or disable users later. Direct bearer tokens remain appropriate for internal automation, CI jobs, and agents. Users can create their own from **Dashboard → API keys**. API tokens follow the same account rules as dashboard sign-in: a token is refused with 403 when its account is disabled, when its email does not match the allowed email domain, or, while OAuth login is enabled, when a non-admin account has no linked OAuth identity (the token a provisioning key minted for an account is the one exception to the OAuth rule). Tokens from `peek token create` / `POST /api/tokens` belong to automation accounts without an email; only disabling applies to them. Tokens from `peek login` expire 90 days after approval; dashboard keys and admin tokens do not expire unless created with `expires_hours`.
 
-A directory such as PrivacyFence can create and connect accounts through a provisioning key: see the Provisioning keys section of the auth documentation. The key is shown once by `peek provisioner create`; keep it in the key holder's secret store, and revoke it with `peek provisioner revoke <id>` if it leaks.
+A directory such as PrivacyFence can create and connect accounts through a provisioning key: see [the Provisioning keys section](src/content/docs/auth-access.md#provisioning-keys) of the auth documentation. The key is shown once by `peek provisioner create`; keep it in the key holder's secret store, and revoke it with `peek provisioner revoke <id>` if it leaks.
 
 ## Page Access
 
@@ -124,7 +126,7 @@ Re-uploading to an existing page with `peek upload --slug` adds a version. Every
 
 Retention cleanup runs in the background. It deletes a page when its newest version is older than the configured number of days, and prunes older versions individually together with the comments written on them. The newest version of a page is never pruned. Visits are kept. `0` disables automatic cleanup. A version uploaded while its page is being deleted can leave one orphaned object in storage. Keep retention aligned with your company’s data handling policy rather than treating Peek as an unlimited archive.
 
-For S3-compatible storage, private/link-local endpoints are blocked by default to avoid SSRF. Set `PEEK_S3_ALLOW_PRIVATE_ENDPOINT=true` only for explicit private deployments such as local MinIO or controlled internal object stores. The SSRF guard also blocks CGNAT (`100.64.0.0/10`), NAT64/6to4/Teredo, benchmarking, multicast and reserved ranges. Bucket names must be DNS-compatible (3–63 lowercase letters, digits, dots, hyphens); a stored bucket that does not match stops startup with `invalid s3 bucket`.
+S3 endpoints must use HTTPS and must not resolve to private, link-local or metadata addresses; `--s3-allow-private-endpoint` / `PEEK_S3_ALLOW_PRIVATE_ENDPOINT=true` lifts both, for MinIO or internal stores. The SSRF guard also blocks CGNAT (`100.64.0.0/10`), NAT64/6to4/Teredo, benchmarking, multicast and reserved ranges. Bucket names must be DNS-compatible (3–63 lowercase letters, digits, dots, hyphens); a stored bucket that does not match stops startup with `invalid s3 bucket`.
 
 Request bodies are limited to 64 KiB on every route except page uploads, which use the maximum upload size, and the backend relay (`/svc/`), which allows 1 MiB.
 
@@ -138,13 +140,23 @@ Peek logs structured JSON to stderr. Set `PEEK_LOG_LEVEL=debug`, `info`, or `war
 
 ## Upgrades And Rollbacks
 
-Before upgrading, take a SQLite backup and confirm you know where uploaded object bytes live. Run the new binary against a staging copy of the data directory when changing storage, auth, retention, or database-related code.
+Before upgrading, take a SQLite backup and confirm you know where uploaded object bytes live. Run the new binary against a staging copy of the data directory when changing storage, auth, retention, or database-related code. Security fixes and how to report a vulnerability: [SECURITY.md](../SECURITY.md).
 
-This release adds migrations 7 (`upload_versions`, which also adds a `version` column to comments and visits and backfills one version per existing page) and 8 (`upload_grants`). Existing objects are not moved and existing `private` pages keep their meaning.
+### Unreleased
 
-Migration 9 (`upload_slug_aliases`) keeps the old links of renamed pages reserved. Do not roll back to an older binary once a page has been renamed: older binaries do not reserve old links, so a new upload could overwrite a renamed page's first version. Restore the pre-upgrade backup and object storage instead.
+Migration 17 (`provisioning`) adds the `provisioners` and `provisioned_accounts` tables for provisioning keys. Older binaries ignore both tables, so a rollback keeps accounts and tokens working but provisioning keys stop working until the upgrade is re-applied.
 
-Migration 10 (`token_hint_last_used`) adds `hint` and `last_used_at` to `tokens`. Tokens created before it show `—` instead of their last four characters on the dashboard. Older binaries ignore both columns, so tokens keep working after a rollback, but older binaries still cannot revoke a token that uploaded a page.
+### v0.14.0
+
+Migration 16 (`upload_backends`) adds the `upload_backends` and `upload_backend_env` tables for page backends. Older binaries ignore both tables, so a rollback keeps pages working but their backends stop being served. Containers started by the newer binary are labelled `peek.managed=true`; remove leftovers with `docker ps -a --filter label=peek.managed=true` if you roll back while backends are running.
+
+### v0.13.0
+
+Migration 14 (`visibility_signed_in`) renames the `private` visibility to `signed-in` for existing pages (`UPDATE uploads SET visibility='signed-in' WHERE visibility='private'`). Older binaries do not know `signed-in`, so roll back by restoring the pre-upgrade backup.
+
+Migration 15 (`drop_password_visibility`) turns every password page into a restricted page and clears its stored password hash. Those pages are visible to their owner and admins only until they are shared with people or groups, and no email is sent for the conversion. A rollback cannot restore them as password pages; restore the pre-upgrade backup if you need the old passwords. The CLI's `--password` and `--password-stdin` flags are gone, and the default visibility of a new upload is `restricted`.
+
+### v0.10.0
 
 Migration 11 (`cli_login_request_context`) adds `request_ip` and `request_user_agent` to `cli_login_devices`, shown on the CLI login approval page.
 
@@ -152,15 +164,21 @@ Migration 12 (`account_session_epoch`) adds `session_epoch` to `accounts`; dashb
 
 Migration 13 (`comment_account_id`) adds a nullable `account_id` to `comments`. Comments written before it are shown as unverified. Older binaries ignore the column, so a rollback keeps comments readable but new comments lose the verified marker.
 
-This release removes the unversioned `/raw/<slug>` route and serves uploaded HTML with a CSP `sandbox`. Pages opened before the upgrade must be reloaded. The `hn_csrf` cookie is now HttpOnly.
+The unversioned `/raw/<slug>` route is removed and uploaded HTML is served with a CSP `sandbox`. Pages opened before the upgrade must be reloaded. The `hn_csrf` cookie is now HttpOnly.
 
-With `--trusted-proxy`, `X-Forwarded-For` is now trusted only from `PEEK_TRUSTED_PROXY_CIDRS` (default loopback). Deployments whose proxy connects from another address must set it, or all clients share the proxy's rate-limit bucket.
+With `--trusted-proxy`, `X-Forwarded-For` is trusted only from `PEEK_TRUSTED_PROXY_CIDRS` (default loopback). Deployments whose proxy connects from another address must set it, or all clients share the proxy's rate-limit bucket.
 
-This release also applies the allowed email domain and OAuth-required rules to API tokens (see First Run And Access); check which personal API keys that affects before upgrading.
+API tokens follow the allowed email domain and OAuth-required rules (see First Run And Access); check which personal API keys that affects before upgrading.
 
-Migration 15 (`drop_password_visibility`) turns every password page into a restricted page and clears its stored password hash. Those pages are visible to their owner and admins only until they are shared with people or groups, and no email is sent for the conversion. A rollback cannot restore them as password pages; restore the pre-upgrade backup if you need the old passwords. The CLI's `--password` and `--password-stdin` flags are gone, and the default visibility of a new upload is `restricted`.
+### v0.9.0
 
-Migration 16 (`upload_backends`) adds the `upload_backends` and `upload_backend_env` tables for page backends. Older binaries ignore both tables, so a rollback keeps pages working but their backends stop being served. Containers started by the newer binary are labelled `peek.managed=true`; remove leftovers with `docker ps -a --filter label=peek.managed=true` if you roll back while backends are running.
+Migration 10 (`token_hint_last_used`) adds `hint` and `last_used_at` to `tokens`. Tokens created before it show `—` instead of their last four characters on the dashboard. Older binaries ignore both columns, so tokens keep working after a rollback, but older binaries still cannot revoke a token that uploaded a page.
+
+### v0.8.0
+
+Migrations 7 (`upload_versions`, which also adds a `version` column to comments and visits and backfills one version per existing page) and 8 (`upload_grants`). Existing objects are not moved and existing `private` pages keep their meaning.
+
+Migration 9 (`upload_slug_aliases`) keeps the old links of renamed pages reserved. Do not roll back to an older binary once a page has been renamed: older binaries do not reserve old links, so a new upload could overwrite a renamed page's first version. Restore the pre-upgrade backup and object storage instead.
 
 Rollback is simplest when the database has not been migrated by a newer binary. If a release includes migrations, treat rollback as restoring the pre-upgrade backup plus object storage state.
 
