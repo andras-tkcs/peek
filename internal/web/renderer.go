@@ -136,6 +136,18 @@ type AccountDashboardRow struct {
 	Admin    bool
 	Disabled bool
 	IsSelf   bool
+
+	ManagedBy string // provisioner names, empty when no provisioner manages the account
+}
+
+// ProvisionerDashboardRow is one provisioning key on the admin page.
+type ProvisionerDashboardRow struct {
+	ID       int64
+	Name     string
+	Hint     string
+	Created  string // RFC 3339 date, as the other rows format dates
+	LastUsed string // "never" for 0
+	Accounts int64
 }
 
 type SettingRow struct {
@@ -248,6 +260,7 @@ type AdminData struct {
 	SettingsPanel   DashboardSettings
 	Invites         []InviteDashboardRow
 	Accounts        []AccountDashboardRow
+	Provisioners    []ProvisionerDashboardRow
 	Error           string
 	FlashSuccess    string
 }

@@ -46,6 +46,7 @@ func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, owner *mode
 		SettingsPanel:   panel,
 		Invites:         s.dashboardInviteRows(r.Context()),
 		Accounts:        s.dashboardAccountRows(r.Context(), owner.ID),
+		Provisioners:    s.dashboardProvisionerRows(r.Context()),
 	}
 	flash := resolveFlash(q, nil, s.baseURL)
 	data.Error = flash.Error

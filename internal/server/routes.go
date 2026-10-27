@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /dashboard/invites/revoke/{id}", s.handleDashboardRevokeInvite)
 	mux.HandleFunc("POST /dashboard/users/{id}/admin", s.handleDashboardUserAdmin)
 	mux.HandleFunc("POST /dashboard/users/{id}/disabled", s.handleDashboardUserDisabled)
+	mux.HandleFunc("POST /dashboard/provisioners/{id}/revoke", s.handleDashboardProvisionerRevoke)
 	mux.HandleFunc("GET /dashboard/stats/{slug}", s.handleDashboardStats)
 
 	return s.withMiddleware(mux)

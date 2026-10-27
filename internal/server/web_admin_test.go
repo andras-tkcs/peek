@@ -260,3 +260,37 @@ func TestAdminBackendsSettingsSave(t *testing.T) {
 		t.Fatalf("backend_memory_mb changed to %q", got)
 	}
 }
+
+func TestAdminPageListsProvisionersWithoutKey(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	f := newProvisionedFixture(t, s, "PrivacyFence", "u@example.test", "e1")
+
+	rec := doRequest(t, s, http.MethodGet, "/admin", nil, asSession(s, admin.ID))
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(body, "PrivacyFence") || !strings.Contains(body, "…"+f.Provisioner.Hint) {
+		t.Fatalf("GET /admin = %d, provisioner not listed: %s", rec.Code, body)
+	}
+	if strings.Contains(body, f.Key) {
+		t.Fatal("admin page leaks the provisioning key")
+	}
+	if !strings.Contains(body, "Managed by PrivacyFence") {
+		t.Fatal("admin page missing Managed by badge")
+	}
+	if strings.Contains(body, "No provisioning keys.") {
+		t.Fatal("empty text shown with a key present")
+	}
+}
+
+func TestAdminPageShowsNoProvisioningKeys(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+
+	rec := doRequest(t, s, http.MethodGet, "/admin", nil, asSession(s, admin.ID))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No provisioning keys.") {
+		t.Fatalf("GET /admin = %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "Managed by") {
+		t.Fatal("Managed by badge without a provisioner")
+	}
+}

@@ -789,3 +789,41 @@ func TestAdminRendersBackendsTab(t *testing.T) {
 		t.Fatalf("enabled backends tab wrong: %s", on)
 	}
 }
+
+func TestAdminProvisionersCardRenders(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplateAdmin, AdminData{
+		CSRF: "csrf",
+		User: "Admin",
+		Accounts: []AccountDashboardRow{
+			{ID: 1, Name: "Alice", Email: "a@x.test", ManagedBy: "PrivacyFence"},
+			{ID: 2, Name: "Bob", Email: "b@x.test"},
+		},
+		Provisioners: []ProvisionerDashboardRow{{ID: 4, Name: "PrivacyFence", Hint: "abcd", Created: "2026-01-02T03:04:05Z", LastUsed: "never", Accounts: 3}},
+	})
+	if err != nil {
+		t.Fatalf("execute admin: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{
+		"PrivacyFence", "…abcd", "2026-01-02T03:04:05Z", "never",
+		`action="/dashboard/provisioners/4/revoke"`, `name="csrf" value="csrf"`,
+		"Managed by PrivacyFence",
+		"Create a provisioning key with peek provisioner create --name &lt;name&gt;. Revoking a key signs every account it manages out of that system; the accounts and their pages stay.",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("admin page missing %q: %s", want, html)
+		}
+	}
+	if strings.Contains(html, "No provisioning keys.") || strings.Count(html, "Managed by") != 1 {
+		t.Fatalf("unexpected empty text or badge count: %s", html)
+	}
+
+	empty, err := renderer.Execute(TemplateAdmin, AdminData{CSRF: "csrf", User: "Admin"})
+	if err != nil || !strings.Contains(string(empty), "No provisioning keys.") {
+		t.Fatalf("empty state missing: %v", err)
+	}
+}

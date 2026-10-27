@@ -10,6 +10,7 @@ type dashAPIKey = webui.DashboardAPIKey
 type apiKeyShownData = webui.APIKeyShownData
 type inviteDashRow = webui.InviteDashboardRow
 type accountDashRow = webui.AccountDashboardRow
+type provisionerDashRow = webui.ProvisionerDashboardRow
 type dashData = webui.DashboardData
 type adminData = webui.AdminData
 type statsVisit = webui.StatsVisit

@@ -39,6 +39,7 @@ const (
 	flashInviteNotUsed            = "invite_not_used"
 	flashBadInvite                = "bad_invite"
 	flashInviteRevokeFailed       = "invite_revoke_failed"
+	flashProvisionerRevokeFailed  = "provisioner_revoke_failed"
 	flashBadUser                  = "bad_user"
 	flashLastAdminRemove          = "last_admin_remove"
 	flashLastAdminDisable         = "last_admin_disable"
@@ -55,16 +56,17 @@ const (
 	flashEmailTestFailed          = "email_test_failed"
 	flashShareNotifyFailed        = "share_notify_failed"
 
-	flashInviteCreated = "invite_created"
-	flashInviteRevoked = "invite_revoked"
-	flashUserUpdated   = "user_updated"
-	flashSettingsSaved = "settings_saved"
-	flashAPIKeyRevoked = "api_key_revoked"
-	flashVisibilitySet = "visibility_set"
-	flashGrantAdded    = "grant_added"
-	flashGrantRemoved  = "grant_removed"
-	flashRenamed       = "renamed"
-	flashEmailTestSent = "email_test_sent"
+	flashInviteCreated      = "invite_created"
+	flashInviteRevoked      = "invite_revoked"
+	flashProvisionerRevoked = "provisioner_revoked"
+	flashUserUpdated        = "user_updated"
+	flashSettingsSaved      = "settings_saved"
+	flashAPIKeyRevoked      = "api_key_revoked"
+	flashVisibilitySet      = "visibility_set"
+	flashGrantAdded         = "grant_added"
+	flashGrantRemoved       = "grant_removed"
+	flashRenamed            = "renamed"
+	flashEmailTestSent      = "email_test_sent"
 )
 
 // flashMessages is the only source of flash text. {slug}, {visibility} and
@@ -91,6 +93,7 @@ var flashMessages = map[string]string{
 	flashInviteNotUsed:            "invites are not used while Google org sign-in is on",
 	flashBadInvite:                "bad invite",
 	flashInviteRevokeFailed:       "invite revoke failed",
+	flashProvisionerRevokeFailed:  "provisioning key revoke failed",
 	flashBadUser:                  "bad user",
 	flashLastAdminRemove:          "cannot remove last admin",
 	flashLastAdminDisable:         "cannot disable last admin",
@@ -120,16 +123,17 @@ var flashMessages = map[string]string{
 	"upload_name_required":          "name is required",
 	"upload_name_too_long":          "name must be 200 characters or fewer",
 
-	flashInviteCreated: "invite created",
-	flashInviteRevoked: "invite revoked",
-	flashUserUpdated:   "user updated",
-	flashSettingsSaved: "settings saved",
-	flashAPIKeyRevoked: "API key revoked",
-	flashVisibilitySet: "/p/{slug} is now {visibility}",
-	flashGrantAdded:    "Shared /p/{slug} with {email}",
-	flashGrantRemoved:  "Removed access from /p/{slug}",
-	flashRenamed:       "Renamed to /p/{slug}",
-	flashEmailTestSent: "test email sent",
+	flashInviteCreated:      "invite created",
+	flashInviteRevoked:      "invite revoked",
+	flashProvisionerRevoked: "provisioning key revoked",
+	flashUserUpdated:        "user updated",
+	flashSettingsSaved:      "settings saved",
+	flashAPIKeyRevoked:      "API key revoked",
+	flashVisibilitySet:      "/p/{slug} is now {visibility}",
+	flashGrantAdded:         "Shared /p/{slug} with {email}",
+	flashGrantRemoved:       "Removed access from /p/{slug}",
+	flashRenamed:            "Renamed to /p/{slug}",
+	flashEmailTestSent:      "test email sent",
 }
 
 func dashboardError(w http.ResponseWriter, r *http.Request, code string) {
