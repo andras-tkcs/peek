@@ -3,9 +3,37 @@ package cli
 import (
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/andras-tkcs/peek/internal/version"
 )
+
+// commandNames are the commands Run dispatches to a cmdXxx function; each one
+// answers --help and -h with its own usage lines.
+var commandNames = []string{
+	"login", "config", "upload", "list", "delete", "visibility", "rename",
+	"grant", "revoke", "grants", "versions", "stats", "comments", "export",
+	"delete-all", "token", "provisioner", "backend",
+}
+
+// wantsHelp reports whether args ask for help.
+func wantsHelp(args []string) bool {
+	return slices.ContainsFunc(args, func(a string) bool { return a == "-h" || a == "--help" })
+}
+
+// commandUsage returns the usage lines of one command.
+func commandUsage(cmd string) string {
+	var b strings.Builder
+	b.WriteString("Usage:\n")
+	for _, line := range strings.Split(usageText, "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "peek "+cmd+" ") || t == "peek "+cmd {
+			b.WriteString(line + "\n")
+		}
+	}
+	return b.String()
+}
 
 // Run dispatches a command. args is argv without the program name.
 func Run(args []string) int {
@@ -14,6 +42,10 @@ func Run(args []string) int {
 		return 1
 	}
 	cmd, rest := args[0], args[1:]
+	if slices.Contains(commandNames, cmd) && wantsHelp(rest) {
+		fmt.Fprint(os.Stderr, commandUsage(cmd))
+		return 0
+	}
 	var err error
 	switch cmd {
 	case "login":
@@ -70,12 +102,14 @@ func Run(args []string) int {
 	return 0
 }
 
-func usage() {
-	fmt.Fprint(os.Stderr, `peek — Peek CLI
+func usage() { fmt.Fprint(os.Stderr, usageText) }
+
+const usageText = `peek — Peek CLI
 
 Usage:
   peek login [--host <url>]             sign in with browser login when available
   peek login --token-stdin              read an access token from stdin
+  peek login --oauth                    always use browser login; fails when the server has none
   peek config set --host <url>          set host (use 'login' / --token-stdin for the token)
   peek config show
   peek upload <file.html> [--name <filename>]
@@ -95,7 +129,7 @@ Usage:
   peek backend <slug>                  show backends and environment variable names
   peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
   peek backend remove <slug> [--version <n>|latest]
-  peek backend env set <slug> <NAME> --value-stdin   set a backend environment variable
+  peek backend env set <slug> <NAME> --value <v>|--value-stdin   set a backend environment variable
   peek backend env unset <slug> <NAME>
   peek backend restart <slug>          stop the backend so it restarts with new variables
   peek backend logs <slug> [--version <n>|latest] [--tail <n>]
@@ -110,6 +144,7 @@ Usage:
   peek provisioner create --name <n>   create a provisioning key (admin only)
   peek provisioner list                list provisioning keys (admin only)
   peek provisioner revoke <id>         revoke a provisioning key (admin only)
+  peek version                         print the CLI version
 
 Token input (most secure first):
   peek login                           browser login when available; otherwise hidden prompt
@@ -123,5 +158,4 @@ Token input (most secure first):
 
 Environment overrides:
   PEEK_HOST, PEEK_TOKEN
-`)
-}
+`
