@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 type S3Storage struct {
 	getSetting           func(string) string
 	allowPrivateEndpoint bool
 	client               *http.Client
+	now                  func() time.Time // nil in production; tests inject a fixed clock
 }
 
 func NewS3Storage(allowPrivateEndpoint bool, getSetting func(string) string) *S3Storage {
@@ -22,6 +24,13 @@ func NewS3Storage(allowPrivateEndpoint bool, getSetting func(string) string) *S3
 		getSetting:           getSetting,
 		client:               newS3HTTPClient(allowPrivateEndpoint),
 	}
+}
+
+func (s *S3Storage) clock() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
 }
 
 func (s *S3Storage) endpoint() string { return s.getSetting("s3_endpoint") }

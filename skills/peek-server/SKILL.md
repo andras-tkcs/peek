@@ -5,10 +5,7 @@ description: Run and administer a self-hosted peek server — the HTML sharing s
 
 # peek-server — Run and administer a peek server
 
-peek is a self-hosted HTML sharing server (`peekd`) with a companion CLI
-(`peek`). This skill covers **running and administering** the server: starting
-`peekd`, issuing access tokens, managing page access and share emails, configuring
-runtime limits/storage, and deploying behind a reverse proxy.
+peek is a self-hosted HTML sharing server (`peekd`) with a companion CLI (`peek`). This skill covers **running and administering** the server: starting `peekd`, issuing access tokens, managing page access and share emails, configuring runtime limits/storage, and deploying behind a reverse proxy.
 
 > Just uploading HTML and reading comments as a client? Use the **peek** skill.
 
@@ -47,9 +44,7 @@ go build -o bin/peek  ./cmd/peek
 peekd --addr :7700 --data ./data --base-url https://peek.example.com
 ```
 
-On first run, `peekd` prints a one-time setup URL. Open it to create the first
-local admin account. After setup, use the dashboard or `peek login --host
-https://peek.example.com`.
+On first run, `peekd` prints a one-time setup URL. Open it to create the first local admin account. After setup, use the dashboard or `peek login --host https://peek.example.com`.
 
 ### Docker
 
@@ -62,9 +57,7 @@ docker run -d --name peek -p 7700:7700 \
 
 For production, pin a release tag (`ghcr.io/andras-tkcs/peek:<version>`) or an image digest (`ghcr.io/andras-tkcs/peek@sha256:…`).
 
-The image runs as uid `65532` and stores the SQLite DB, uploads, and generated
-secret under `/data`. If bind-mounting a host directory, make it writable by
-uid `65532`.
+The image runs as uid `65532` and stores the SQLite DB, uploads, and generated secret under `/data`. If bind-mounting a host directory, make it writable by uid `65532`.
 
 ### Configuration
 
@@ -92,19 +85,16 @@ uid `65532`.
 | `--backends` | `PEEK_BACKENDS` | `off` | Page backends: `off` or `docker` |
 | `--docker-host` | `PEEK_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker or Podman API address (`unix://` or `tcp://`) |
 | `--backend-network` | `PEEK_BACKEND_NETWORK` | `peek-backends` | Docker network for backend containers |
+| `--s3-allow-private-endpoint` | `PEEK_S3_ALLOW_PRIVATE_ENDPOINT` | `false` | Allow private/link-local S3 endpoints and http:// for dev or internal stores |
+| `--oidc-allow-private-issuer` | `PEEK_OIDC_ALLOW_PRIVATE_ISSUER` | `false` | Allow http/private OIDC issuers for local SSO testing |
 
-`PEEK_LOG_LEVEL` controls structured JSON log verbosity (`debug`, `info`,
-`warn`). `peekd --version` prints the server version.
+`PEEK_LOG_LEVEL` controls structured JSON log verbosity (`debug`, `info`, `warn`). `PEEK_HEALTHCHECK_ADDR` is the address `peekd healthcheck` probes (defaults to `PEEK_ADDR`). `peekd --version` prints the server version.
 
-Admins can update these runtime settings from the dashboard: max upload size,
-total storage limit, max uploads per token, max storage per token, retention
-days, S3 credentials, and the page backend limits. Changing the storage backend itself requires a
-restart.
+Admins can update these runtime settings from the dashboard: max upload size, total storage limit, max uploads per token, max storage per token, retention days, S3 credentials, and the page backend limits. Changing the storage backend itself requires a restart.
 
 ## Administer with the CLI
 
-Configure the CLI against the server with browser login (see the **peek** skill
-for `peek login`), then:
+Configure the CLI against the server with browser login (see the **peek** skill for `peek login`), then:
 
 ### Manage access tokens (admin only)
 
@@ -114,19 +104,13 @@ peek token list                    # list tokens (ids + names)
 peek token revoke <id>             # revoke a token by id
 ```
 
-Tokens are stored hashed and shown only once at creation. Non-admin tokens can
-upload and manage only their own uploads. `POST /api/tokens` creates a new
-automation account (no email) together with its token.
+Tokens are stored hashed and shown only once at creation. Non-admin tokens can upload and manage only their own uploads. `POST /api/tokens` creates a new automation account (no email) together with its token.
 
-Token expiry is available through the admin JSON API by sending
-`{"name":"service","expires_hours":24}` to `POST /api/tokens`. The current CLI
-creates non-expiring tokens.
+Token expiry is available through the admin JSON API by sending `{"name":"service","expires_hours":24}` to `POST /api/tokens`. The current CLI creates non-expiring tokens.
 
 ### Provisioning keys (admin only)
 
-A provisioning key lets a directory such as PrivacyFence create or adopt
-non-admin accounts by email and mint one token per account. It can never act as
-an admin or open a dashboard session.
+A provisioning key lets a directory such as PrivacyFence create or adopt non-admin accounts by email and mint one token per account. It can never act as an admin or open a dashboard session.
 
 ```sh
 peek provisioner create --name PrivacyFence   # prints the peekprov_ key once
@@ -138,28 +122,17 @@ Revoking keeps the accounts and their pages.
 
 ### Manage OAuth and invitations
 
-Admins can use the web dashboard Settings section to enable Google and/or GitHub
-OAuth. Create web OAuth credentials with these callback URLs:
+Admins can enable Google, GitHub or generic OpenID Connect on the Admin page. Create web OAuth credentials with these callback URLs:
 
 ```text
 https://peek.example.com/oauth/google/callback
 https://peek.example.com/oauth/github/callback
+https://peek.example.com/oauth/oidc/callback
 ```
 
-For local GitHub testing, create a temporary OAuth App at
-`https://github.com/settings/applications/new` with `Homepage URL` set to the
-local base URL and `Authorization callback URL` set to
-`http://127.0.0.1:<port>/oauth/github/callback`.
+For local GitHub testing, create a temporary OAuth App at `https://github.com/settings/applications/new` with `Homepage URL` set to the local base URL and `Authorization callback URL` set to `http://127.0.0.1:<port>/oauth/github/callback`.
 
-OAuth signups are invite-only. Create manual invite links in the dashboard and
-send them to users. Admins can also set an allowed email domain in Settings to
-restrict human login, CLI browser approval, and invites to one exact domain.
-When OAuth is enabled, non-admin dashboard and CLI login must use OAuth; the
-local password form remains available to admins if the admin email matches the
-allowed domain. When OAuth is not enabled, token login remains available and can
-be disabled from Settings. Direct bearer tokens still work for API/automation.
-The same verified email maps to the same Peek account across Google and GitHub.
-Admins can disable users or promote/demote admins in the dashboard later.
+OAuth signups are invite-only. Create manual invite links in the dashboard and send them to users. Admins can also set an allowed email domain in Settings to restrict human login, CLI browser approval, and invites to one exact domain. When OAuth is enabled, non-admin dashboard and CLI login must use OAuth; the local password form remains available to admins if the admin email matches the allowed domain. When OAuth is not enabled, token login remains available and can be disabled from Settings. Direct bearer tokens still work for API/automation. The same verified email maps to the same Peek account across Google and GitHub. Admins can disable users or promote/demote admins in the dashboard later.
 
 Google Workspace organizations can instead turn on `auth_google_org_signup` in Settings. It requires Google login with client credentials and an allowed email domain (not gmail.com or googlemail.com). While it is on, a Google Workspace account (Google's `hd` claim) with a verified email in the allowed domain gets a non-admin account on first sign-in, GitHub and OIDC sign-in are inactive, and invites are inactive (existing invites return when it is off). Non-admin password and token login stay disabled and admins keep the password form. Enable it in this order: make sure an active admin has an email in the allowed domain, set the domain, configure Google login, then turn the mode on.
 
@@ -204,15 +177,11 @@ curl -fsS -H "Authorization: Bearer $PEEK_METRICS_TOKEN" http://127.0.0.1:7700/m
 PEEK_DATA=./data peekd backup ./peek-backup.db
 ```
 
-`/healthz` is liveness, `/readyz` checks database reachability, and `/metrics`
-emits Prometheus text metrics and always needs `Authorization: Bearer <token>`:
-the `--metrics-token` (or `PEEK_METRICS_TOKEN_FILE`) value when set, otherwise
-an admin API token.
+`/healthz` is liveness, `/readyz` checks database reachability, and `/metrics` emits Prometheus text metrics and always needs `Authorization: Bearer <token>`: the `--metrics-token` (or `PEEK_METRICS_TOKEN_FILE`) value when set, otherwise an admin API token.
 
 ## Deployment
 
-peek speaks plain HTTP and expects a **TLS-terminating reverse proxy** in front
-(this is what enables `Secure` cookies + HSTS). Example with Caddy:
+peek speaks plain HTTP and expects a **TLS-terminating reverse proxy** in front (this is what enables `Secure` cookies + HSTS). Example with Caddy:
 
 ```
 peek.example.com {
@@ -220,21 +189,10 @@ peek.example.com {
 }
 ```
 
-Run `peekd` with `--base-url https://peek.example.com` so links and cookie flags
-are correct. If your proxy forwards `X-Forwarded-For` and you want those client
-IPs used for analytics/audit logs, also set `--trusted-proxy`, and `--trusted-proxy-cidrs` if the proxy does not connect from localhost; otherwise Peek
-intentionally ignores forwarded IP headers. Back up the `data/` directory — it
-holds the DB, uploads, and the signing secret.
+Run `peekd` with `--base-url https://peek.example.com` so links and cookie flags are correct. If your proxy forwards `X-Forwarded-For` and you want those client IPs used for analytics/audit logs, also set `--trusted-proxy`, and `--trusted-proxy-cidrs` if the proxy does not connect from localhost; otherwise Peek intentionally ignores forwarded IP headers. Back up the `data/` directory — it holds the DB, uploads, and the signing secret.
 
-For S3-compatible storage, set `--storage s3` plus endpoint, bucket, region, and
-credentials. S3 endpoints must be HTTP(S), HTTPS unless localhost, and cannot
-resolve to private/link-local IPs.
+For S3-compatible storage, set `--storage s3` plus endpoint, bucket, region, and credentials. S3 endpoints must use HTTPS and must not resolve to private, link-local or metadata addresses; `--s3-allow-private-endpoint` / `PEEK_S3_ALLOW_PRIVATE_ENDPOINT=true` lifts both, for MinIO or internal stores.
 
 ## Web dashboard
 
-The server also serves a browser dashboard at `/login`. Sign in with a token or
-an enabled OAuth provider to upload (file, paste HTML, or an empty page), list
-and delete pages, see the restricted pages shared with them, manage access, and
-view stats. Admins can also edit runtime limits, retention,
-S3 and SMTP email settings, OAuth providers, invites, and users — no CLI required. Direct
-non-technical users there.
+The server also serves a browser dashboard at `/login`. Sign in with a token or an enabled OAuth provider to upload (file, paste HTML, or an empty page), list and delete pages, see the restricted pages shared with them, manage access, and view stats. Admins can also edit runtime limits, retention, S3 and SMTP email settings, OAuth providers, invites, and users — no CLI required. Direct non-technical users there.

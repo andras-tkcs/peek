@@ -8,11 +8,10 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 )
 
 func (s *S3Storage) signRequest(req *http.Request, key string, payload []byte) {
-	t := time.Now().UTC()
+	t := s.clock().UTC()
 	dateShort := t.Format("20060102")
 	dateLong := t.Format("20060102T150405Z")
 	service := "s3"

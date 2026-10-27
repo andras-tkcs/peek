@@ -36,12 +36,13 @@ func (s *Server) setCookie(w http.ResponseWriter, c *http.Cookie) {
 
 func loadOrCreateSecret(path string) (string, error) {
 	if b, err := os.ReadFile(path); err == nil {
-		if len(b) >= 32 {
-			if err := os.Chmod(path, 0o600); err != nil {
-				slog.Warn("could not restrict secret file permissions", "path", path, "err", err)
-			}
-			return string(b), nil
+		if len(b) < 32 {
+			return "", fmt.Errorf("%s is %d bytes, expected at least 32; restore it from backup or delete it to generate a new key", filepath.Base(path), len(b))
 		}
+		if err := os.Chmod(path, 0o600); err != nil {
+			slog.Warn("could not restrict secret file permissions", "path", path, "err", err)
+		}
+		return string(b), nil
 	} else if !os.IsNotExist(err) {
 		return "", fmt.Errorf("read secret: %w", err)
 	}
@@ -50,14 +51,37 @@ func loadOrCreateSecret(path string) (string, error) {
 		return "", fmt.Errorf("generate secret: %w", err)
 	}
 	s := hex.EncodeToString(b)
-	if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
+	if err := writeSecretFile(path, []byte(s)); err != nil {
 		return "", fmt.Errorf("write secret: %w", err)
 	}
-	// WriteFile keeps the mode of a file that already existed.
-	if err := os.Chmod(path, 0o600); err != nil {
-		return "", fmt.Errorf("restrict secret: %w", err)
-	}
 	return s, nil
+}
+
+// writeSecretFile writes data to path with mode 0600 through a temp file and a
+// rename, so a crash never leaves a truncated secret behind.
+func writeSecretFile(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".secret-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := f.Name()
+	defer os.Remove(tmpName)
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 const setupCodeFile = "setup.key"

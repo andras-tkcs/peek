@@ -220,10 +220,16 @@ func TestSessionCookieForgeryIsRefused(t *testing.T) {
 	e := newMatrixEnv(t)
 	u := e.page(t, "m-forge", models.UploadVisibilitySignedIn)
 	good := makeWebSession(e.s.secret, "1", sessionTTL)
+	last := good[len(good)-1]
+	repl := byte('0')
+	if last == '0' {
+		repl = '1'
+	}
+	tampered := good[:len(good)-1] + string(repl)
 	for name, val := range map[string]string{
 		"plain account id": "1",
 		"unsigned subject": "1.9999999999.",
-		"bad signature":    strings.TrimSuffix(good, good[len(good)-1:]) + "0",
+		"bad signature":    tampered,
 		"other secret":     makeWebSession("some-other-secret", "1", sessionTTL),
 		"expired":          makeWebSession(e.s.secret, "1", -sessionTTL),
 	} {

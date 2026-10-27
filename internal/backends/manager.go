@@ -79,6 +79,7 @@ type Manager struct {
 	instance string
 	limits   func(ctx context.Context) Limits
 	dial     func(ctx context.Context, network, addr string) (net.Conn, error)
+	onWait   func() // test hook: called before Ensure waits for a start in progress
 	now      func() time.Time
 
 	mu      sync.Mutex
@@ -190,6 +191,9 @@ func (m *Manager) Ensure(ctx context.Context, spec Spec) (Endpoint, error) {
 		}
 		if e != nil {
 			m.mu.Unlock()
+			if m.onWait != nil {
+				m.onWait()
+			}
 			select {
 			case <-e.ready:
 			case <-ctx.Done():

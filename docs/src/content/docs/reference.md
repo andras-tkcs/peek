@@ -33,7 +33,22 @@ kicker: peekd reference
 | `--docker-host` | `PEEK_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker or Podman API address, `unix://` or `tcp://`. |
 | `--backend-network` | `PEEK_BACKEND_NETWORK` | `peek-backends` | Docker network backend containers join. peekd must be able to reach it. |
 
-`PEEK_LOG_LEVEL` accepts `debug`, `info`, or `warn`. Any other value falls back to info.
+Two settings have no flag:
+
+| Env | Default | Notes |
+| --- | --- | --- |
+| `PEEK_LOG_LEVEL` | `info` | `debug`, `info` or `warn`. Any other value falls back to info. |
+| `PEEK_HEALTHCHECK_ADDR` | `PEEK_ADDR` | The address `peekd healthcheck` probes. |
+
+## peekd Subcommands
+
+| Command | Notes |
+| --- | --- |
+| `peekd --version` | Prints the version. |
+| `peekd backup [--data <dir>] [path]` | Writes a consistent SQLite snapshot via `VACUUM INTO` (default `<data>/peek-backup.db`), safe while the server runs. |
+| `peekd healthcheck [--addr <host:port\|url>]` | Exits 0 when `/healthz` answers 200. The address defaults to `PEEK_HEALTHCHECK_ADDR`, then `PEEK_ADDR`. |
+
+`peekd --help` lists every flag and subcommand.
 
 ## Runtime Settings
 
@@ -103,56 +118,109 @@ peek login --token <value>
 ## CLI Commands
 
 ```text
-peek upload <file.html> [--visibility public|signed-in|restricted] [--name <filename>]
-peek upload <file.html> --slug <slug>
-peek visibility <slug> public|signed-in|restricted
-peek rename <slug> <new name>
-peek grant <slug> <email> [--group]
-peek revoke <slug> <email> [--group]
-peek grants <slug>
-peek versions <slug>
-peek comments <slug> [--version <n>]
-peek upload <file.html> --backend <image> [--backend-port <n>]
-peek backend <slug>
-peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
-peek backend remove <slug> [--version <n>|latest]
-peek backend env set <slug> <NAME> (--value-stdin | --value <v>)
-peek backend env unset <slug> <NAME>
-peek backend restart <slug>
-peek backend logs <slug> [--version <n>|latest] [--tail <n>]
-peek provisioner create --name <name>
-peek provisioner list
-peek provisioner revoke <id>
+peek — Peek CLI
+
+Usage:
+  peek login [--host <url>]             sign in with browser login when available
+  peek login --token-stdin              read an access token from stdin
+  peek login --oauth                    always use browser login; fails when the server has none
+  peek config set --host <url>          set host (use 'login' / --token-stdin for the token)
+  peek config show
+  peek upload <file.html> [--name <filename>]
+  peek upload <file.html> --visibility public|signed-in
+  peek upload <file.html> --visibility restricted
+  peek upload <file.html> --slug <slug>        upload a new version of an existing page
+  peek upload <file.html> --backend <image> [--backend-port <n>]  attach a backend container
+  peek list
+  peek delete <slug>
+  peek visibility <slug> public
+  peek visibility <slug> signed-in
+  peek visibility <slug> restricted
+  peek rename <slug> <new name>        rename a page; its link follows the name and old links redirect
+  peek grant <slug> <email> [--group]  give a user (or Google group) access to a restricted page
+  peek revoke <slug> <email> [--group] remove a grant
+  peek grants <slug>                   list grants on a page
+  peek backend <slug>                  show backends and environment variable names
+  peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
+  peek backend remove <slug> [--version <n>|latest]
+  peek backend env set <slug> <NAME> --value <v>|--value-stdin   set a backend environment variable
+  peek backend env unset <slug> <NAME>
+  peek backend restart <slug>          stop the backend so it restarts with new variables
+  peek backend logs <slug> [--version <n>|latest] [--tail <n>]
+  peek stats <slug>
+  peek versions <slug>                 list versions of one of your pages
+  peek comments <slug> [--version <n>]  list comments (latest version by default)
+  peek export <slug>                   export all data for an upload
+  peek delete-all                      delete all your uploads
+  peek token create --name <name>      create a new user token (admin only)
+  peek token list                      list tokens (admin only)
+  peek token revoke <id>               revoke a token by id (admin only)
+  peek provisioner create --name <n>   create a provisioning key (admin only)
+  peek provisioner list                list provisioning keys (admin only)
+  peek provisioner revoke <id>         revoke a provisioning key (admin only)
+  peek version                         print the CLI version
+
+Token input (most secure first):
+  peek login                           browser login when available; otherwise hidden prompt
+  peek login --token-stdin             read token from a pipe
+  peek login --token-file <path>       read token from a file
+  peek login --token <token>           discouraged: exposed in history & 'ps'
+  PEEK_TOKEN=…  (env override)          handy for CI
+  peek config set --token-stdin        read token from a pipe
+  peek config set --token-file <path>  read token from a file
+  peek config set --token <token>      discouraged: exposed in history & 'ps'
+
+Environment overrides:
+  PEEK_HOST, PEEK_TOKEN
 ```
 
 `--slug` uploads a new version of an existing page you own (admins can target any page). It cannot be combined with `--visibility` or `--name`. A new upload is `restricted` unless `--visibility` says otherwise. `grant` and `revoke` take a user email by default and a Google group email with `--group`; group grants need the `PEEK_GOOGLE_*` server settings. `grants` lists a page's grants. `versions` lists a page's versions with size, time and URL. `comments` shows the latest version's comments unless `--version` is given. Page names (the `--name` value or the file name) are limited to 200 characters. The former `--password` flags were removed together with page passwords.
 
 ## Page And API Routes
 
-| Route | Purpose |
-| --- | --- |
-| `/p/<slug>` | Latest version of a page. |
-| `/p/<slug>/v/<n>` | Version `n` of a page, with a banner when it is not the latest. |
-| `POST /api/upload` | Upload a page. Add `slug=<slug>` (form field, or query parameter for raw HTML) to add a version. |
-| `GET /api/uploads/<slug>/versions` | List versions (owner or admin). |
-| `GET /api/uploads/<slug>/grants` | List grants (owner or admin). |
-| `POST /api/uploads/<slug>/grants` | Add a grant. JSON body `{"kind":"user\|group","email":"..."}`. |
-| `DELETE /api/uploads/<slug>/grants` | Remove a grant. Same JSON body. |
-| `POST /api/uploads/<slug>/name` | Rename a page. JSON body `{"name":"..."}`; returns the new `slug`, `url` and `name`. The link follows the name; old links redirect. |
-| `GET /api/uploads/<slug>/comments?v=<n>` | Comments for version `n`; defaults to the latest. |
-| `GET /api/uploads/<slug>/backend` | Backends per version (`image`, `port`, `running`) and variable names (owner or admin). Values are never returned. |
-| `PUT /api/uploads/<slug>/versions/<n\|latest>/backend` | Set a version's backend. JSON body `{"image":"...","port":8080}`. |
-| `DELETE /api/uploads/<slug>/versions/<n\|latest>/backend` | Remove a version's backend. |
-| `GET /api/uploads/<slug>/versions/<n\|latest>/backend/logs?tail=<n>` | Last log lines (1–2000, default 200) of a running backend, as plain text. |
-| `PUT /api/uploads/<slug>/backend/env/<NAME>` | Set a variable. JSON body `{"value":"..."}`; applies on the next container start. |
-| `DELETE /api/uploads/<slug>/backend/env/<NAME>` | Remove a variable. |
-| `POST /api/uploads/<slug>/backend/restart` | Stop the page's backends; they start again on the next request. |
-| `POST\|GET /api/provisioners`, `DELETE /api/provisioners/<id>` | Admin: create (returns the key once), list and revoke provisioning keys. |
-| `GET /api/provisioning/self` | Provisioning key: the key holder's name and account count. |
-| `PUT /api/provisioning/accounts/<external_id>` | Provisioning key: create or adopt the account for an email. |
-| `POST /api/provisioning/accounts/<external_id>/token` | Provisioning key: mint the account's token, replacing the previous one. |
-| `DELETE /api/provisioning/accounts/<external_id>` | Provisioning key: release the account and revoke its token. |
-| `GET\|POST\|PUT\|PATCH\|DELETE /svc/<slug>/v/<n>/<path>` | Relay to the version's backend; used by `peek.fetch`, not called directly. Same access check as the page, and requires the `X-Peek-Svc: 1` header. |
+| Route | Auth | Purpose |
+| --- | --- | --- |
+| `/p/<slug>` | page access | Latest version of a page. |
+| `/p/<slug>/v/<n>` | page access | Version `n` of a page, with a banner when it is not the latest. |
+| `POST /api/upload` | token | Upload a page. Add `slug=<slug>` (form field, or query parameter for raw HTML) to add a version. |
+| `GET /api/uploads` | token | List your pages (admins see all). |
+| `DELETE /api/uploads/<slug>` | token | Delete a page (owner or admin). |
+| `POST /api/uploads/<slug>/visibility` | token | Change visibility. JSON body `{"visibility":"public\|signed-in\|restricted"}`. |
+| `GET /api/uploads/<slug>/stats` | token | View statistics for a page. |
+| `GET /api/uploads/<slug>/export` | token | Export all data for a page. |
+| `GET /api/uploads/<slug>/views` | page access | Total and unique view counts and a 7-day view histogram for a page. |
+| `DELETE /api/uploads-by-owner` | token | Delete all of the caller's pages (`peek delete-all`). |
+| `GET /raw/<slug>/v/<n>` | page access | Raw HTML of version `n`, served with a sandboxing CSP. |
+| `GET /api/auth/providers` | none | Enabled login providers. |
+| `POST /api/cli/login/start` | none | Start a browser login for the CLI. |
+| `POST /api/cli/login/poll` | none | Poll a browser login for the CLI. |
+| `POST /api/tokens` | admin token | Create an access token. |
+| `GET /api/tokens` | admin token | List access tokens. |
+| `DELETE /api/tokens/<id>` | admin token | Revoke an access token. |
+| `GET /api/settings` | admin token | Read the runtime settings (secrets are not returned). |
+| `PUT /api/settings` | admin token | Update runtime settings. |
+| `GET /api/audit` | admin token | Read the audit log. |
+| `GET /api/uploads/<slug>/versions` | token | List versions (owner or admin). |
+| `GET /api/uploads/<slug>/grants` | token | List grants (owner or admin). |
+| `POST /api/uploads/<slug>/grants` | token | Add a grant. JSON body `{"kind":"user\|group","email":"..."}`. |
+| `DELETE /api/uploads/<slug>/grants` | token | Remove a grant. Same JSON body. |
+| `POST /api/uploads/<slug>/name` | token | Rename a page. JSON body `{"name":"..."}`; returns the new `slug`, `url` and `name`. The link follows the name; old links redirect. |
+| `GET /api/uploads/<slug>/comments?v=<n>` | page access | Comments for version `n`; defaults to the latest. |
+| `POST /api/uploads/<slug>/comments` | page access | Add a comment as a viewer of the page. |
+| `POST /api/uploads/<slug>/account-comments` | token | Add a comment under the token's account name; see [Account Comment API](#account-comment-api). |
+| `GET /api/uploads/<slug>/backend` | token | Backends per version (`image`, `port`, `running`) and variable names (owner or admin). Values are never returned. |
+| `PUT /api/uploads/<slug>/versions/<n\|latest>/backend` | token | Set a version's backend. JSON body `{"image":"...","port":8080}`. |
+| `DELETE /api/uploads/<slug>/versions/<n\|latest>/backend` | token | Remove a version's backend. |
+| `GET /api/uploads/<slug>/versions/<n\|latest>/backend/logs?tail=<n>` | token | Last log lines (1–2000, default 200) of a running backend, as plain text. |
+| `PUT /api/uploads/<slug>/backend/env/<NAME>` | token | Set a variable. JSON body `{"value":"..."}`; applies on the next container start. |
+| `DELETE /api/uploads/<slug>/backend/env/<NAME>` | token | Remove a variable. |
+| `POST /api/uploads/<slug>/backend/restart` | token | Stop the page's backends; they start again on the next request. |
+| `POST\|GET /api/provisioners`, `DELETE /api/provisioners/<id>` | admin token | Admin: create (returns the key once), list and revoke provisioning keys. |
+| `GET /api/provisioning/self` | provisioning key | Provisioning key: the key holder's name and account count. |
+| `PUT /api/provisioning/accounts/<external_id>` | provisioning key | Provisioning key: create or adopt the account for an email. |
+| `POST /api/provisioning/accounts/<external_id>/token` | provisioning key | Provisioning key: mint the account's token, replacing the previous one. |
+| `DELETE /api/provisioning/accounts/<external_id>` | provisioning key | Provisioning key: release the account and revoke its token. |
+| `GET\|POST\|PUT\|PATCH\|DELETE /svc/<slug>/v/<n>/<path>` | page access | Relay to the version's backend; used by `peek.fetch`, not called directly. Same access check as the page, and requires the `X-Peek-Svc: 1` header. |
 
 ## Account Comment API
 
