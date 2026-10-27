@@ -69,6 +69,28 @@ CREATE TABLE IF NOT EXISTS upload_backend_env (
 	updated_at INTEGER NOT NULL,
 	PRIMARY KEY (upload_id, name)
 );`},
+	{17, "provisioning", `
+CREATE TABLE IF NOT EXISTS provisioners (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL,
+	key_hash TEXT NOT NULL UNIQUE,
+	hint TEXT,
+	created_by_account_id INTEGER REFERENCES accounts(id),
+	created_at INTEGER NOT NULL,
+	last_used_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS provisioned_accounts (
+	provisioner_id INTEGER NOT NULL REFERENCES provisioners(id) ON DELETE CASCADE,
+	external_id TEXT NOT NULL,
+	account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+	created_account INTEGER NOT NULL DEFAULT 0,
+	token_id INTEGER REFERENCES tokens(id) ON DELETE SET NULL,
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL,
+	PRIMARY KEY (provisioner_id, external_id),
+	UNIQUE (provisioner_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_provisioned_accounts_token ON provisioned_accounts(token_id);`},
 }
 
 func (s *Store) runMigrations() error {
