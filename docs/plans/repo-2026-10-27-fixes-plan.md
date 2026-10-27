@@ -118,7 +118,7 @@ Every name, string and command below is final. Phases point here by subsection.
   - `Dockerfile:4` → `FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build`
   - `examples/contact-form/Dockerfile:1` → `FROM golang:1.26.10@sha256:24a707af49702fa44f02785475d02fb752f6982d3e9c0afb7696e1f0204e7ce9 AS build`
   - `examples/contact-form/Dockerfile:8` → `FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab`
-- `docker-compose.yml`: `minio` image `minio/minio:RELEASE.2025-09-07T16-13-09Z`, `minio-init` image `minio/mc:RELEASE.2025-08-13T08-35-41Z` (MinIO stopped publishing new community images after these; the tags could not be resolved from the container and are checked by the owner in `ma5`); `minio` ports `"127.0.0.1:9100:9000"` and `"127.0.0.1:9101:9001"`; a comment line directly above `minio:` reading `# Local development only: well-known credentials, bound to 127.0.0.1.`
+- `docker-compose.yml`: drop MinIO entirely (owner's decision, 2026-10-27): delete the services `minio`, `minio-init` and `peek-s3` (the whole `s3` profile) and the `minio-data` volume. The remaining services (`peek`, `peek-backends`, `mailpit`) are unchanged. S3-compatible storage stays supported by peekd; only the bundled local MinIO stack goes. (This removes the floating `minio/minio:latest` and `minio/mc:latest` tags and the MinIO console exposed with default credentials, so SEC-10's compose half is fixed by removal.)
 
 ### D3. `secret.key` fails closed — SEC-11
 
@@ -288,7 +288,7 @@ Everything only the repository owner can do is a GitHub setting, and none of it 
 - `ma2-security-features` — enable private vulnerability reporting (SEC-3), Dependabot alerts and security updates (SEC-4), CodeQL default setup for Go and Actions (SEC-8).
 - `ma3-release-tag-ruleset` — new tag ruleset "release tags" for `v*` (SEC-2).
 - `ma4-actions-settings` — confirm workflow permissions are read-only by default and fork PRs from outside collaborators need approval (review group 6, step 5).
-- `ma5-visual-and-compose-check` — look at the regenerated screenshots in the PR and confirm the pinned MinIO images pull (WEB-1, SEC-10).
+- `ma5-screenshot-check` — look at the regenerated screenshots in the PR (WEB-1).
 - `ma6-required-checks` — right after the PR merges: require `backend-integration`, `docs`, `docker`, `cross-build`, `e2e` and `browser`, strict up-to-date branches, and conversation resolution (SEC-1); then confirm the post-merge runs (Pages deploy on push, Docker (main) after CI).
 
 ## Risks and open questions
@@ -298,7 +298,6 @@ Everything only the repository owner can do is a GitHub setting, and none of it 
 - **D10 fixture needs v0.10.0's request shapes.** The comment, password-upload and grant request shapes must be read from the v0.10.0 sources (`git show v0.10.0:<path>`). If v0.10.0 cannot be built with the installed toolchain, or `TestUpgradedSchemaMatchesFresh` finds a difference other than `uploads.visibility`'s default, stop with `status=blocked` and report the difference; do not add it to the allow-list.
 - **D3 changes behaviour other tests may rely on.** If any test other than the two named in "Current state" fails because it relied on a short `secret.key` being replaced, stop with `status=blocked`.
 - **D4 vector.** If `TestS3SignRequestMatchesKnownVector` fails with the code unchanged except for the clock, the signer differs from AWS's canonical form (for example an extra signed header); stop with `status=blocked` and report the canonical request instead of changing the expected value.
-- **MinIO tags (D2).** They could not be resolved from the container; `ma5` checks them. If the owner reports they do not exist, a follow-up replaces them.
 - **Screenshots (WEB-1) are checked by eye.** Acceptance is mechanical only for the file set; `ma5` covers the content.
 - **Coverage gate (D11).** If raising the defaults fails on the feature branch, a phase did not test its code: fix the tests, never lower the floor.
 - **CHANGELOG.md.** Only p20 edits it, even though p12 sets `docs.changelog` and p16 documents the rule; a worker that wants to add a line leaves it for p20.
@@ -326,9 +325,9 @@ manual_after:
   - id: ma4-actions-settings
     title: Confirm default workflow permissions are read-only and outside-collaborator fork PRs need approval
     why: the review could not read these settings through the API; they bound what a malicious PR workflow could do.
-  - id: ma5-visual-and-compose-check
-    title: Check the regenerated screenshots and that the pinned MinIO images pull
-    why: WEB-1 screenshots can only be judged by eye, and the MinIO tags in docker-compose.yml could not be resolved from the container (SEC-10).
+  - id: ma5-screenshot-check
+    title: Check the regenerated screenshots
+    why: WEB-1 screenshots can only be judged by eye.
   - id: ma6-required-checks
     title: Right after merging, make the new CI jobs required and turn on strict checks and conversation resolution
     why: SEC-1; a required check that has never reported on main would block every PR, so this happens after the jobs exist on main.
@@ -394,7 +393,7 @@ phases:
       1. release.yml: add the `verify` job first; add `needs: verify` to build, sbom and docker; `persist-credentials: false` on every checkout; build-job permissions and the "Attest build provenance" step; docker-job permissions, `id: push`, the conditional `latest` tag and the "Attest image provenance" step.
       2. docker-main.yml: the workflow_run trigger, the job `if:` with all three conditions (do not drop the `event == 'push'` and `head_repository` checks; D2 explains why), the `SHA` env, checkout `ref`, the `sha` step, the raw tags and build args.
       3. New .github/dependabot.yml and .github/workflows/vuln.yml per D2.
-      4. Pin the three FROM lines and update docker-compose.yml per D2 (MinIO tags, 127.0.0.1 ports, the comment line).
+      4. Pin the three FROM lines and remove the MinIO services, the peek-s3 service and the minio-data volume from docker-compose.yml per D2. Check the result with `python3 -c "import yaml; d=yaml.safe_load(open('docker-compose.yml')); print(sorted(d['services']), sorted(d['volumes']))"`: it prints `['mailpit', 'peek', 'peek-backends'] ['peek-backends-data', 'peek-data']`.
       5. Parse every workflow and dependabot.yml with python3 yaml.safe_load.
       Stop condition: if a pinned digest or tag in D2 looks wrong to you, do not substitute another value from memory; keep D2's value and say so in your report. These workflows cannot run in the container.
     acceptance:
@@ -406,7 +405,7 @@ phases:
       - "for f in release.yml docker-main.yml vuln.yml; do test $(grep -c 'persist-credentials: false' .github/workflows/$f) -eq $(grep -c 'actions/checkout@' .github/workflows/$f) || echo BAD $f; done prints nothing (SEC-6)"
       - "grep -c 'package-ecosystem' .github/dependabot.yml prints 5 and grep -ln 'schedule:' .github/workflows/*.yml lists vuln.yml (SEC-4)"
       - "grep -nE '^FROM .*@sha256:' Dockerfile examples/contact-form/Dockerfile prints 3 lines (SEC-10)"
-      - "grep -n ':latest' docker-compose.yml prints nothing and grep -c '127.0.0.1:910' docker-compose.yml prints 2 (SEC-10)"
+      - "grep -n ':latest' docker-compose.yml prints nothing and grep -ci 'minio' docker-compose.yml prints 0 (SEC-10)"
       - "python3 yaml.safe_load of .github/workflows/*.yml and .github/dependabot.yml exits 0"
 
   - id: p3-server-test-fixes
@@ -649,6 +648,7 @@ phases:
       8. DOC-5: README.md:243 table cell becomes the DOC-5 sentence of D13.
       9. SEC-3: add `To report a vulnerability, see [SECURITY.md](SECURITY.md); please do not open a public issue.` as the first line under `## Security model`.
       10. DOC-16c: replace the code block under `## Architecture` with one sentence: `See [docs/architecture.md](docs/architecture.md) for the package map and dependency rules.` and keep the sentence about runtime CSS/JS and the root `assets/` directory.
+      11. Owner decision (MinIO dropped, see D2): delete the README line `docker compose --profile s3 up -d # with MinIO storage` (README.md:78) so the block only shows `docker compose up -d`.
     acceptance:
       - "grep -rn --exclude-dir=plans -- '--slug contact' README.md examples skills docs prints nothing (DOC-1)"
       - "grep -rn 'html-k7m2xq' README.md prints nothing (DOC-2)"
@@ -661,6 +661,7 @@ phases:
       - "grep -c SECURITY.md README.md prints at least 1 (SEC-3)"
       - "grep -c 'internal/server/    HTTP server' README.md prints 0 and grep -n 'docs/architecture.md) for the package map and dependency rules' README.md matches (DOC-16)"
       - "grep -c 'andras-tkcs.github.io/peek' README.md prints at least 1 (WEB-6)"
+      - "grep -n 'profile s3' README.md prints nothing"
 
   - id: p14-skills
     title: Agent skills accuracy and unwrapped lines

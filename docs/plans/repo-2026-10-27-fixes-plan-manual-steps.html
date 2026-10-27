@@ -146,15 +146,14 @@ footer { color: var(--muted); font-size: 14px; }
     </article>
 
     <article class="task" data-task="ma5">
-      <div class="task-head"><h3>5. Look at the screenshots and pull the MinIO images</h3><span class="meta">about 5 min</span></div>
-      <div class="id">ma5-visual-and-compose-check · WEB-1, SEC-10</div>
-      <p class="why">Only a person can judge the regenerated screenshots. The pinned MinIO image tags in <code>docker-compose.yml</code> could not be checked from Claude's container.</p>
+      <div class="task-head"><h3>5. Look at the screenshots</h3><span class="meta">about 3 min</span></div>
+      <div class="id">ma5-screenshot-check · WEB-1</div>
+      <p class="why">Only a person can judge the regenerated screenshots.</p>
       <ol class="steps">
         <li><input type="checkbox" id="ma5-1"><label for="ma5-1"><span>In the PR, open the <strong>Files changed</strong> tab and find <code>docs/public/assets/screenshots/05-dashboard-uploads.png</code>.</span><span class="see">The upload form shows <strong>Restricted</strong> as the default, there is no <strong>Password</strong> option, and page links end in a random suffix such as <code>/p/demo-k7m2xq</code>.</span></label></li>
         <li><input type="checkbox" id="ma5-2"><label for="ma5-2"><span>Skim the other ten PNGs in the same folder, especially <code>08-admin-auth.png</code>, and compare it with its caption in <code>docs/src/content/docs/auth-access.md</code> in the same PR.</span><span class="see">Each image shows today's UI and the caption names only what the image shows.</span></label></li>
-        <li><input type="checkbox" id="ma5-3"><label for="ma5-3"><span>On a machine with Docker, in a checkout of the PR branch, run <code>docker compose --profile s3 pull minio minio-init</code>.</span><span class="see">Both images download. If a tag is not found, say so in the PR; Claude will replace it.</span></label></li>
       </ol>
-      <div class="report"><span>Paste into the PR:</span><pre>ma5 screenshots: OK / not OK (which: ___); MinIO pull: pass / fail</pre></div>
+      <div class="report"><span>Paste into the PR:</span><pre>ma5 screenshots: OK / not OK (which: ___)</pre></div>
     </article>
 
     <article class="task" data-task="ma6">
