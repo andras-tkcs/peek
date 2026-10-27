@@ -81,7 +81,7 @@ description = "Run the end-to-end test of the built peek and peekd binaries"
 run = "PEEK_E2E=1 go test -count=1 -run '^TestE2E' ./internal/e2e"
 
 [tasks.coverage]
-description = "Run tests with coverage and fail below the 90% total-statement gate"
+description = "Run tests with coverage and fail below the 95% total or 93% per-core-package gates"
 run = "sh scripts/coverage-gate.sh"
 
 [tasks.govulncheck]
