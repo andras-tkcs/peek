@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/backends"
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/backends"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 const uploadTestHTML = "<html><body>hello</body></html>"

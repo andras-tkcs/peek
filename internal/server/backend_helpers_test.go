@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/backends/backendstest"
-	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/privacyfence/peek/internal/backends/backendstest"
+	"github.com/privacyfence/peek/internal/db"
 )
 
 const backendTestAdminToken = "dev-admin-token"

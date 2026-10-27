@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	webui "github.com/andras-tkcs/peek/internal/web"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 func TestRenderHTMLUninitializedRendererReturns500(t *testing.T) {

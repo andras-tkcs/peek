@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	"github.com/andras-tkcs/peek/internal/models"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/db"
+	"github.com/privacyfence/peek/internal/models"
+	webui "github.com/privacyfence/peek/internal/web"
 	"golang.org/x/crypto/bcrypt"
 )
 

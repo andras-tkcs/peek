@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/privacyfence/peek/internal/db"
 )
 
 func initDefaultSettings(ctx context.Context, store *db.Store, secret string, maxUpload, maxTotalSize int64, retentionDays int, s3Defaults map[string]string) error {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/backends"
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/backends"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 const backendTestImage = "ghcr.io/acme/contact-form:1"

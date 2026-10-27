@@ -1,7 +1,7 @@
 #!/bin/sh
 # install.sh — install the `peek` CLI from a GitHub release.
 #
-#   curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/privacyfence/peek/main/install.sh | sh
 #
 # Environment overrides:
 #   PEEK_VERSION       release tag to install (default: latest)
@@ -11,7 +11,7 @@
 # releases page or build from source — see the peek-server skill / README.
 set -eu
 
-REPO="andras-tkcs/peek"
+REPO="privacyfence/peek"
 BIN="peek"
 
 err() { echo "install.sh: $*" >&2; exit 1; }

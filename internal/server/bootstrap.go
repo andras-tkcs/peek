@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/privacyfence/peek/internal/db"
 )
 
 func isLocalBaseURL(u string) bool {

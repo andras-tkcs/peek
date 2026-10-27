@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func grantPost(t *testing.T, s *Server, account int64, path, kind, email string, csrf bool) string {

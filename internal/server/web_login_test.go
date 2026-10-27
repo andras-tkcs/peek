@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/db"
+	webui "github.com/privacyfence/peek/internal/web"
 	"golang.org/x/crypto/bcrypt"
 )
 

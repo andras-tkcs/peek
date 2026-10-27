@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func (s *Store) CreateCLILoginDevice(ctx context.Context, deviceCode, userCode string, expiresAt time.Time) error {

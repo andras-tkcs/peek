@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 // webAuth validates the signed session cookie and returns the account.

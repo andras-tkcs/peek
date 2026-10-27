@@ -152,6 +152,8 @@ Before upgrading, take a SQLite backup and confirm you know where uploaded objec
 
 ### Unreleased
 
+The container image moved to `ghcr.io/privacyfence/peek`; `ghcr.io/andras-tkcs/peek` receives no new tags. Change the image in your compose file or unit before pulling, and verify attestations with `gh attestation verify ... -R privacyfence/peek`. The data volume and its layout are unchanged.
+
 Migration 17 (`provisioning`) adds the `provisioners` and `provisioned_accounts` tables for provisioning keys. Older binaries ignore both tables, so a rollback keeps accounts and tokens working but provisioning keys stop working until the upgrade is re-applied.
 
 ### v0.14.0

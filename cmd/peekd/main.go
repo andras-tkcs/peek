@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/andras-tkcs/peek/internal/peekd"
+	"github.com/privacyfence/peek/internal/peekd"
 )
 
 func main() {

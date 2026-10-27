@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	webui "github.com/andras-tkcs/peek/internal/web"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 func (s *Server) renderHTML(w http.ResponseWriter, status int, templateName string, data any) {

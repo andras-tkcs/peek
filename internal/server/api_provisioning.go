@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/privacyfence/peek/internal/db"
 )
 
 var externalIDPattern = regexp.MustCompile(`^[A-Za-z0-9._@-]{1,200}$`)

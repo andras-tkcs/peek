@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 var errGoogleWorkspaceRequired = errors.New("google workspace account required")

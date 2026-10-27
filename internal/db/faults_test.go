@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/privacyfence/peek/internal/uploadquota"
 )
 
 // failOn makes every statement of kind op (INSERT, UPDATE or DELETE) on table

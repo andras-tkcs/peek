@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 const pageCovHTML = "<!doctype html><html><body>hello</body></html>"

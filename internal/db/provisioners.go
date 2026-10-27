@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 const provisionerColumns = `id,name,COALESCE(hint,''),COALESCE(created_by_account_id,0),created_at,last_used_at`

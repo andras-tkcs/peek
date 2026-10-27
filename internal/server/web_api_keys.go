@@ -12,8 +12,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/andras-tkcs/peek/internal/models"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/models"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 const (

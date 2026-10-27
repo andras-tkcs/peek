@@ -18,10 +18,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/backends"
-	"github.com/andras-tkcs/peek/internal/groups"
-	"github.com/andras-tkcs/peek/internal/server"
-	"github.com/andras-tkcs/peek/internal/version"
+	"github.com/privacyfence/peek/internal/backends"
+	"github.com/privacyfence/peek/internal/groups"
+	"github.com/privacyfence/peek/internal/server"
+	"github.com/privacyfence/peek/internal/version"
 )
 
 type serveConfig struct {

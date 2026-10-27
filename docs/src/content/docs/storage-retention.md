@@ -111,4 +111,4 @@ Rollback is simplest when the database has not been migrated by a newer binary. 
 - v0.9.0: migration 10 adds token hint and last-used columns.
 - v0.8.0: migrations 7 to 9; do not roll back once a page has been renamed, restore the backup instead.
 
-The full notes are in the [operator guide](https://github.com/andras-tkcs/peek/blob/main/docs/operations.md#upgrades-and-rollbacks).
+The full notes are in the [operator guide](https://github.com/privacyfence/peek/blob/main/docs/operations.md#upgrades-and-rollbacks).

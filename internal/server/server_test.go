@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	"github.com/andras-tkcs/peek/internal/objectstore"
+	"github.com/privacyfence/peek/internal/db"
+	"github.com/privacyfence/peek/internal/objectstore"
 )
 
 type admGroupStub struct{}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 // provisionedFixture is a provisioner with one linked account and a minted token.

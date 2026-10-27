@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/privacyfence/peek/internal/db"
 )
 
 func TestAuthTokenStoresVerifiedAPIToken(t *testing.T) {

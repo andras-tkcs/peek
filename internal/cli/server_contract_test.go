@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	"github.com/andras-tkcs/peek/internal/server"
+	"github.com/privacyfence/peek/internal/db"
+	"github.com/privacyfence/peek/internal/server"
 )
 
 // TestCLIAgainstRealServer runs the CLI against a real in-process server so

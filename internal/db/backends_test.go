@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/models"
-	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/privacyfence/peek/internal/models"
+	"github.com/privacyfence/peek/internal/uploadquota"
 )
 
 func TestUploadBackendRoundTripAndUpsert(t *testing.T) {

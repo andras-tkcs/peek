@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/privacyfence/peek/internal/uploadquota"
 )
 
 func newProv(t *testing.T, s *Store, name, key string) int64 {

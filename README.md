@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="" width="64" height="64" align="absmiddle"> Peek
 </h1>
 
-[![CI](https://github.com/andras-tkcs/peek/actions/workflows/ci.yml/badge.svg)](https://github.com/andras-tkcs/peek/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/andras-tkcs/peek?sort=semver)](https://github.com/andras-tkcs/peek/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
+[![CI](https://github.com/privacyfence/peek/actions/workflows/ci.yml/badge.svg)](https://github.com/privacyfence/peek/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/privacyfence/peek?sort=semver)](https://github.com/privacyfence/peek/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
 
 
 
@@ -10,7 +10,7 @@ Share an HTML page inside your company, get a link, and collect feedback directl
 
 Peek is a self-hosted internal review tool for HTML reports, prototypes, build artifacts, and agent-generated pages. Upload a file from the CLI or dashboard, share the preview URL, and let reviewers leave comments pinned to elements, anchored to selected text, or attached to the whole page. It ships as a single static Go binary with pure-Go SQLite and no CGO.
 
-Documentation: https://andras-tkcs.github.io/peek/ (sources in [docs/src/content/docs](docs/src/content/docs)).
+Documentation: https://privacyfence.github.io/peek/ (sources in [docs/src/content/docs](docs/src/content/docs)).
 
 ![Peek demo: upload from the CLI, comment in context, and view visits](assets/demo.gif)
 
@@ -55,18 +55,18 @@ peek export mypage-k7m2xq
 
 ## Install
 
-**Prebuilt binaries** (recommended): grab a `peekd` + `peek` archive for your OS/arch from the [releases page](https://github.com/andras-tkcs/peek/releases).
+**Prebuilt binaries** (recommended): grab a `peekd` + `peek` archive for your OS/arch from the [releases page](https://github.com/privacyfence/peek/releases).
 
 **CLI one-liner:**
 ```sh
-curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/privacyfence/peek/main/install.sh | sh
 ```
-Override with `PEEK_VERSION` / `PEEK_INSTALL_DIR`. `install.sh` verifies the archive against the release's `checksums.txt` and refuses to install on mismatch; releases published before checksums were added (v0.9.2 and older) have no checksums file. Releases published after v0.14.0 also carry a GitHub build provenance attestation; check an archive with `gh attestation verify <archive> -R andras-tkcs/peek`.
+Override with `PEEK_VERSION` / `PEEK_INSTALL_DIR`. `install.sh` verifies the archive against the release's `checksums.txt` and refuses to install on mismatch; releases published before checksums were added (v0.9.2 and older) have no checksums file. Releases published after v0.14.0 also carry a GitHub build provenance attestation; check an archive with `gh attestation verify <archive> -R privacyfence/peek`.
 
 **Go install:**
 ```sh
-go install github.com/andras-tkcs/peek/cmd/peekd@latest   # server
-go install github.com/andras-tkcs/peek/cmd/peek@latest    # CLI
+go install github.com/privacyfence/peek/cmd/peekd@latest   # server
+go install github.com/privacyfence/peek/cmd/peek@latest    # CLI
 ```
 
 **Docker:**
@@ -74,9 +74,9 @@ go install github.com/andras-tkcs/peek/cmd/peek@latest    # CLI
 docker run -d --name peek -p 7700:7700 \
   -v peek-data:/data \
   -e PEEK_BASE_URL=https://peek.example.com \
-  ghcr.io/andras-tkcs/peek:latest
+  ghcr.io/privacyfence/peek:latest
 ```
-For production, pin a release tag (`ghcr.io/andras-tkcs/peek:<version>`) or an image digest (`ghcr.io/andras-tkcs/peek@sha256:…`). The `/data` volume holds the database, uploads, and signing key. On first run Peek prints a one-time setup URL. The image is `scratch`-based, multi-arch (`amd64`/`arm64`), runs as uid 65532.
+For production, pin a release tag (`ghcr.io/privacyfence/peek:<version>`) or an image digest (`ghcr.io/privacyfence/peek@sha256:…`). The `/data` volume holds the database, uploads, and signing key. On first run Peek prints a one-time setup URL. The image is `scratch`-based, multi-arch (`amd64`/`arm64`), runs as uid 65532.
 
 ```sh
 docker compose up -d
@@ -298,7 +298,7 @@ https://peek.example.com/oauth/oidc/callback
 Coding agents (Claude Code, opencode, etc.) can install skills to share HTML and return a link:
 
 ```sh
-npx skills add andras-tkcs/peek@peek -g -y
+npx skills add privacyfence/peek@peek -g -y
 ```
 
 Two skills ship in this repo:
@@ -314,9 +314,9 @@ Runtime CSS/JS lives in `internal/web/assets` and is embedded by Go. The root `a
 
 ## Credits
 
-Peek was originally created by [Shy Alter (puemos)](https://github.com/puemos) at [puemos/peek](https://github.com/puemos/peek). This repository is a fork, improved and maintained by [Andras Takacs](https://github.com/andras-tkcs).
+Peek was originally created by [Shy Alter (puemos)](https://github.com/puemos) at [puemos/peek](https://github.com/puemos/peek). This repository is a fork, improved and maintained by Andras Takacs at the [privacyfence](https://github.com/privacyfence) organization.
 
-This fork is not maintained or endorsed by the original author. Changes made here, and any bugs they introduce, are the responsibility of this repository, so please report issues and security problems [here](https://github.com/andras-tkcs/peek/issues), not upstream. The git history shows who wrote each change.
+This fork is not maintained or endorsed by the original author. Changes made here, and any bugs they introduce, are the responsibility of this repository, so please report issues and security problems [here](https://github.com/privacyfence/peek/issues), not upstream. The git history shows who wrote each change.
 
 The logo and UI theme follow the [PrivacyFence](https://github.com/privacyfence/privacyfence) design system.
 

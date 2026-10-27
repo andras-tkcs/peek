@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/mail"
+	"github.com/privacyfence/peek/internal/mail"
 )
 
 // fakeMailer records what it is asked to send and returns err.
