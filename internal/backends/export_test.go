@@ -35,3 +35,6 @@ func (m *Manager) TrackedForTest(uploadID int64, version int) (bool, string) {
 	}
 	return true, e.image
 }
+
+// SetOnWaitForTest registers a hook Ensure calls before waiting for a start in progress.
+func (m *Manager) SetOnWaitForTest(f func()) { m.onWait = f }

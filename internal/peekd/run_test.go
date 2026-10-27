@@ -3,6 +3,7 @@ package peekd
 import (
 	"context"
 	"flag"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -552,5 +553,49 @@ func TestParseServeConfigBackendFlagsAndEnv(t *testing.T) {
 	cfg, _, err = parseServeConfig([]string{"--data", t.TempDir(), "--backends", "off", "--backend-network", "n1"})
 	if err != nil || cfg.Backends != "off" || cfg.BackendNetwork != "n1" {
 		t.Fatalf("flag override = %+v, %v", cfg, err)
+	}
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev := os.Stderr
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = prev })
+	fn()
+	os.Stderr = prev
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = r.Close()
+	return string(out)
+}
+
+func TestRunHelpPrintsUsageAndExitsZero(t *testing.T) {
+	for _, flagName := range []string{"--help", "-h"} {
+		var code int
+		out := captureStderr(t, func() { code = Run([]string{flagName}) })
+		if code != 0 {
+			t.Fatalf("Run(%s) = %d, want 0", flagName, code)
+		}
+		for _, want := range []string{"peekd backup [--data <dir>] [path]", "peekd healthcheck", "PEEK_BASE_URL", "PEEK_LOG_LEVEL", "PEEK_HEALTHCHECK_ADDR", "-metrics-token"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("Run(%s) usage missing %q:\n%s", flagName, want, out)
+			}
+		}
+	}
+	for _, sub := range []string{"backup", "healthcheck"} {
+		var code int
+		captureStderr(t, func() { code = Run([]string{sub, "-h"}) })
+		if code != 0 {
+			t.Errorf("Run(%s -h) = %d, want 0", sub, code)
+		}
 	}
 }

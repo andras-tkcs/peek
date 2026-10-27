@@ -15,6 +15,9 @@ import (
 func runBackup(args []string) int {
 	dataDir, backupPath, err := backupArgs(args)
 	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "backup: %v\n", err)
 		return 2
 	}

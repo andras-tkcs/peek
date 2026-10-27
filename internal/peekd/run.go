@@ -2,9 +2,12 @@ package peekd
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -27,7 +30,7 @@ type serveConfig struct {
 	BaseURL   string
 	Secret    string
 	MaxUpload int64
-	// MetricsToken is the bearer token required on /metrics (empty = open).
+	// MetricsToken is a bearer token accepted on /metrics; when empty, an admin API token is required.
 	MetricsToken string
 
 	Storage                string
@@ -51,6 +54,8 @@ type serveConfig struct {
 	Backends       string
 	DockerHost     string
 	BackendNetwork string
+
+	Listener net.Listener // when set, runServe serves on it instead of listening on Addr (tests)
 }
 
 func Run(args []string) int {
@@ -65,6 +70,9 @@ func Run(args []string) int {
 
 	cfg, showVersion, err := parseServeConfig(args)
 	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintf(os.Stderr, "peekd: %v\n", err)
 		return 2
 	}
@@ -75,9 +83,28 @@ func Run(args []string) int {
 	return runServe(cfg)
 }
 
+func writeServeUsage(w io.Writer, fs *flag.FlagSet) {
+	fmt.Fprint(w, `Usage:
+  peekd [flags]                                run the server
+  peekd backup [--data <dir>] [path]           write a consistent SQLite snapshot (default <data>/peek-backup.db)
+  peekd healthcheck [--addr <host:port|url>]   exit 0 when /healthz answers 200
+  peekd --version                              print the version
+
+Every flag except --version can also be set through an environment variable:
+PEEK_ plus the flag name in upper case with dashes as underscores (--base-url
+is PEEK_BASE_URL). PEEK_SECRET, PEEK_S3_SECRET_KEY and PEEK_METRICS_TOKEN also
+accept a _FILE variant holding a file path. PEEK_LOG_LEVEL (debug, info, warn)
+sets the log level and PEEK_HEALTHCHECK_ADDR the healthcheck address.
+
+Flags:
+`)
+	fs.PrintDefaults()
+}
+
 func parseServeConfig(args []string) (serveConfig, bool, error) {
 	fs := flag.NewFlagSet("peekd", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	fs.Usage = func() { writeServeUsage(fs.Output(), fs) }
 
 	secretDefault, err := getenvSecret("PEEK_SECRET")
 	if err != nil {
@@ -126,7 +153,7 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	maxUpload := fs.Int64("max-upload", maxUploadDefault, "max upload size in bytes (per file)")
 	secret := fs.String("secret", secretDefault, "server secret for HMAC signing and encryption (auto-generated if empty)")
 
-	metricsToken := fs.String("metrics-token", metricsTokenDefault, "bearer token required on /metrics (empty = unauthenticated)")
+	metricsToken := fs.String("metrics-token", metricsTokenDefault, "bearer token (at least 16 characters) accepted on /metrics; when empty, an admin API token is required (prefer PEEK_METRICS_TOKEN_FILE)")
 
 	storageFlag := fs.String("storage", getenv("PEEK_STORAGE", "file"), "storage backend: file or s3")
 	s3Endpoint := fs.String("s3-endpoint", getenv("PEEK_S3_ENDPOINT", ""), "S3-compatible endpoint URL")
@@ -334,7 +361,7 @@ func runServe(cfg serveConfig) int {
 		return 1
 	}
 
-	slog.Info("peek starting", "addr", cfg.Addr, "data", cfg.DataDir, "base_url", cfg.BaseURL, "metrics_auth", cfg.MetricsToken != "")
+	slog.Info("peek starting", "addr", cfg.Addr, "data", cfg.DataDir, "base_url", cfg.BaseURL, "metrics_token_set", cfg.MetricsToken != "")
 	hs := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      srv.Handler(),
@@ -345,7 +372,13 @@ func runServe(cfg serveConfig) int {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		if err := hs.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if cfg.Listener != nil {
+			err = hs.Serve(cfg.Listener)
+		} else {
+			err = hs.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 			return
 		}

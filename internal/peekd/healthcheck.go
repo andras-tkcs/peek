@@ -1,6 +1,7 @@
 package peekd
 
 import (
+	"errors"
 	"flag"
 	"net/http"
 	"os"
@@ -13,6 +14,9 @@ func runHealthcheck(args []string) int {
 	fs.SetOutput(os.Stderr)
 	addr := fs.String("addr", getenv("PEEK_HEALTHCHECK_ADDR", getenv("PEEK_ADDR", ":7700")), "healthcheck address")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 	client := &http.Client{Timeout: 3 * time.Second}
