@@ -2,9 +2,11 @@ package objectstore
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type FileStorage struct {
@@ -16,7 +18,11 @@ func (fs *FileStorage) objectPath(slug string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(fs.Dir, name), nil
+	path := filepath.Join(fs.Dir, name)
+	if !strings.HasPrefix(path, filepath.Clean(fs.Dir)+string(filepath.Separator)) {
+		return "", fmt.Errorf("%w: %q", ErrInvalidSlug, slug)
+	}
+	return path, nil
 }
 
 func (fs *FileStorage) Save(_ context.Context, slug string, data []byte) error {

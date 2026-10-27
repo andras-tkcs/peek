@@ -28,9 +28,11 @@ func isLocalBaseURL(u string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// setCookie applies the deployment-wide Secure flag, then writes the cookie.
+// setCookie applies the deployment-wide Secure flag and forces HttpOnly (no
+// cookie is read by page scripts), then writes the cookie.
 func (s *Server) setCookie(w http.ResponseWriter, c *http.Cookie) {
 	c.Secure = s.secure
+	c.HttpOnly = true
 	http.SetCookie(w, c)
 }
 
