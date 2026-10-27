@@ -1,0 +1,208 @@
+<title>Peek Review Settings</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow reading column, a terminal-style header like Peek's docs site, one card per settings task with a checklist inside. */
+:root {
+  --bg: #fbfbfa;
+  --fg: #16171a;
+  --muted: #5b5f66;
+  --line: #d9dadd;
+  --surface: #f1f2f3;
+  --accent: #1f6f43;
+  --accent-soft: #e3f1e8;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d9;
+  --display: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121315; --fg: #e8e9eb; --muted: #a3a7ae; --line: #33363b; --surface: #1b1d20;
+    --accent: #6fcf97; --accent-soft: #17301f; --warn: #f0c060; --warn-soft: #2e2510;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121315; --fg: #e8e9eb; --muted: #a3a7ae; --line: #33363b; --surface: #1b1d20;
+  --accent: #6fcf97; --accent-soft: #17301f; --warn: #f0c060; --warn-soft: #2e2510;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+main { max-width: 760px; margin: 0 auto; display: grid; gap: 28px; }
+header { display: grid; gap: 10px; }
+.prompt { font-family: var(--mono); font-size: 13px; color: var(--muted); letter-spacing: 0.02em; }
+.prompt b { color: var(--accent); font-weight: 600; }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(24px, 4.5vw, 32px); line-height: 1.2; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 20px; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--display); font-weight: 600; font-size: 16px; margin: 0; line-height: 1.35; text-wrap: balance; }
+p { margin: 0; max-width: 65ch; }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: 0.9em; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+.lede { color: var(--muted); }
+.progress { font-family: var(--mono); font-size: 13px; color: var(--muted); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.bar { flex: 1 1 160px; height: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; min-width: 0; }
+.bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+@media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+.part { display: grid; gap: 16px; }
+.part-head { display: grid; gap: 6px; border-top: 2px solid var(--fg); padding-top: 12px; }
+.empty { background: var(--accent-soft); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+.task { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); display: grid; gap: 12px; padding: 16px; min-width: 0; }
+.task-head { display: flex; gap: 12px; justify-content: space-between; align-items: baseline; flex-wrap: wrap; }
+.meta { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.id { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.why { color: var(--muted); font-size: 15px; }
+.when { background: var(--warn-soft); color: var(--fg); border-left: 3px solid var(--warn); padding: 8px 12px; border-radius: 0 4px 4px 0; font-size: 15px; }
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: step; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+ol.steps input { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); }
+ol.steps label { display: grid; gap: 3px; min-width: 0; cursor: pointer; }
+ol.steps label::before { content: counter(step) "."; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+ol.steps .see { color: var(--muted); font-size: 14px; }
+ol.steps li.done label > span:first-of-type { text-decoration: line-through; text-decoration-color: var(--muted); }
+.report { font-size: 14px; display: grid; gap: 6px; }
+.report pre { margin: 0; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow-x: auto; white-space: pre; }
+footer { color: var(--muted); font-size: 14px; }
+</style>
+
+<main>
+  <header>
+    <div class="prompt"><b>$</b> peek · plan/repo-2026-10-27-fixes · GitHub settings</div>
+    <h1>GitHub settings for the review fixes</h1>
+    <p class="lede">The fixes from the 2026-10-27 repository review are code changes that Claude makes, plus a few GitHub settings that only the repository owner can change. This page lists those settings in order. Tick each step as you go; the ticks are saved in this browser only.</p>
+    <div class="progress" aria-live="polite"><span id="progress-text">0 of 0 steps done</span><div class="bar" aria-hidden="true"><span id="progress-bar"></span></div></div>
+  </header>
+
+  <section class="part" aria-labelledby="before-h">
+    <div class="part-head">
+      <h2 id="before-h">Before implementation</h2>
+    </div>
+    <p class="empty">Nothing to do. No phase needs a setting changed first, so you can start <code>/implement</code> on the plan right away. The plan is at <a href="https://github.com/andras-tkcs/peek/blob/plan/repo-2026-10-27-fixes/docs/plans/repo-2026-10-27-fixes-plan.md">docs/plans/repo-2026-10-27-fixes-plan.md</a>.</p>
+  </section>
+
+  <section class="part" aria-labelledby="after-h">
+    <div class="part-head">
+      <h2 id="after-h">After implementation</h2>
+      <p class="lede">Do items 1 to 5 while the feature PR is open, before you merge it. Do item 6 right after the merge. Each item ends with a line to paste into the PR.</p>
+    </div>
+
+    <article class="task" data-task="ma1">
+      <div class="task-head"><h3>1. Allow only merge commits</h3><span class="meta">about 3 min</span></div>
+      <div class="id">ma1-merge-commits-only · SEC-9</div>
+      <p class="why">The project now says PRs land as merge commits only (CONTRIBUTING and the devflow profile). GitHub still offers squash and rebase, so the settings have to match.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma1-1"><label for="ma1-1"><span>Open <a href="https://github.com/andras-tkcs/peek/settings">Settings → General</a> and scroll to <strong>Pull Requests</strong>.</span><span class="see">You see three checkboxes: Allow merge commits, Allow squash merging, Allow rebase merging.</span></label></li>
+        <li><input type="checkbox" id="ma1-2"><label for="ma1-2"><span>Keep <strong>Allow merge commits</strong> ticked. Untick <strong>Allow squash merging</strong> and <strong>Allow rebase merging</strong>.</span><span class="see">GitHub saves each checkbox as you click it and shows a short "Saved" note.</span></label></li>
+        <li><input type="checkbox" id="ma1-3"><label for="ma1-3"><span>Open the <a href="https://github.com/andras-tkcs/peek/settings/rules/24841195">"main" ruleset</a> (Settings → Rules → Rulesets → main).</span><span class="see">The ruleset editor opens with Enforcement status Active.</span></label></li>
+        <li><input type="checkbox" id="ma1-4"><label for="ma1-4"><span>Under <strong>Require a pull request before merging</strong>, open <strong>Additional settings</strong> and set <strong>Allowed merge methods</strong> to <strong>Merge</strong> only. Click <strong>Save changes</strong>.</span><span class="see">The banner says the ruleset was updated. The merge button on an open PR now offers only "Create a merge commit".</span></label></li>
+      </ol>
+      <div class="report"><span>Paste into the PR:</span><pre>ma1 merge commits only: done</pre></div>
+    </article>
+
+    <article class="task" data-task="ma2">
+      <div class="task-head"><h3>2. Turn on private reporting, Dependabot and CodeQL</h3><span class="meta">about 5 min</span></div>
+      <div class="id">ma2-security-features · SEC-3, SEC-4, SEC-8</div>
+      <p class="why">The new SECURITY.md sends reporters to GitHub's private reporting form, which only works once it is enabled. Dependabot alerts and security updates, and CodeQL scanning, are settings rather than code.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma2-1"><label for="ma2-1"><span>Open <a href="https://github.com/andras-tkcs/peek/settings/security_analysis">Settings → Advanced Security</a> (called "Code security" on some accounts).</span><span class="see">You see sections for Private vulnerability reporting, Dependabot and Code scanning.</span></label></li>
+        <li><input type="checkbox" id="ma2-2"><label for="ma2-2"><span>Next to <strong>Private vulnerability reporting</strong>, click <strong>Enable</strong>.</span><span class="see">The row shows "Enabled". <a href="https://github.com/andras-tkcs/peek/security/advisories/new">This link</a> now opens a report form instead of a 404.</span></label></li>
+        <li><input type="checkbox" id="ma2-3"><label for="ma2-3"><span>Under <strong>Dependabot</strong>, enable <strong>Dependabot alerts</strong>, then <strong>Dependabot security updates</strong>.</span><span class="see">Both rows show "Disable" buttons, meaning they are on. Version updates are driven by the new <code>.github/dependabot.yml</code> once the PR merges.</span></label></li>
+        <li><input type="checkbox" id="ma2-4"><label for="ma2-4"><span>Under <strong>Code scanning → CodeQL analysis</strong>, click <strong>Set up → Default</strong>. Make sure the languages are <strong>Go</strong> and <strong>GitHub Actions</strong>, then click <strong>Enable CodeQL</strong>.</span><span class="see">A first CodeQL run starts under the Actions tab. Do not make CodeQL a required check yet; wait until it has been stable for a few PRs.</span></label></li>
+      </ol>
+      <div class="report"><span>Paste into the PR:</span><pre>ma2 private reporting, Dependabot alerts + security updates, CodeQL default setup: done</pre></div>
+    </article>
+
+    <article class="task" data-task="ma3">
+      <div class="task-head"><h3>3. Protect release tags</h3><span class="meta">about 4 min</span></div>
+      <div class="id">ma3-release-tag-ruleset · SEC-2</div>
+      <p class="why">The release workflow now refuses a tag whose commit is not on main or fails tests, but anyone with write access could still push, move or delete a <code>v*</code> tag. A tag ruleset stops that.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma3-1"><label for="ma3-1"><span>Open <a href="https://github.com/andras-tkcs/peek/settings/rules">Settings → Rules → Rulesets</a>, click <strong>New ruleset</strong>, then <strong>New tag ruleset</strong>.</span><span class="see">An empty ruleset form opens, with "Tag" as the target type.</span></label></li>
+        <li><input type="checkbox" id="ma3-2"><label for="ma3-2"><span>Ruleset name: <code>release tags</code>. Enforcement status: <strong>Active</strong>.</span></label></li>
+        <li><input type="checkbox" id="ma3-3"><label for="ma3-3"><span>Under <strong>Target tags</strong>, click <strong>Add target → Include by pattern</strong> and enter <code>v*</code>.</span><span class="see">The target list shows <code>v*</code>.</span></label></li>
+        <li><input type="checkbox" id="ma3-4"><label for="ma3-4"><span>Under <strong>Rules</strong>, tick <strong>Restrict creations</strong>, <strong>Restrict updates</strong> and <strong>Restrict deletions</strong>.</span></label></li>
+        <li><input type="checkbox" id="ma3-5"><label for="ma3-5"><span>Under <strong>Bypass list</strong>, click <strong>Add bypass</strong> and choose <strong>Repository admin</strong>. Click <strong>Create</strong>.</span><span class="see">The Rulesets list now shows "main" (branch) and "release tags" (tag). You can still push release tags as an admin.</span></label></li>
+      </ol>
+      <div class="report"><span>Paste into the PR:</span><pre>ma3 tag ruleset "release tags" (v*, admin bypass): done</pre></div>
+    </article>
+
+    <article class="task" data-task="ma4">
+      <div class="task-head"><h3>4. Check the Actions defaults</h3><span class="meta">about 2 min</span></div>
+      <div class="id">ma4-actions-settings · review, GitHub settings step 5</div>
+      <p class="why">The review could not read these two settings through the API. They limit what a workflow from a malicious PR could do.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma4-1"><label for="ma4-1"><span>Open <a href="https://github.com/andras-tkcs/peek/settings/actions">Settings → Actions → General</a> and scroll to <strong>Workflow permissions</strong>.</span><span class="see">It should say <strong>Read repository contents and packages permissions</strong>. If it says "Read and write", switch it and click <strong>Save</strong>. The workflows ask for write access per job where they need it.</span></label></li>
+        <li><input type="checkbox" id="ma4-2"><label for="ma4-2"><span>On the same page, under <strong>Approval for running fork pull request workflows from contributors</strong>, choose <strong>Require approval for all external contributors</strong> (or the stricter "all outside collaborators") and click <strong>Save</strong>.</span></label></li>
+      </ol>
+      <div class="report"><span>Paste into the PR (fill in what you found):</span><pre>ma4 workflow permissions: read-only (was: ___); fork PR approval: all external contributors</pre></div>
+    </article>
+
+    <article class="task" data-task="ma5">
+      <div class="task-head"><h3>5. Look at the screenshots and pull the MinIO images</h3><span class="meta">about 5 min</span></div>
+      <div class="id">ma5-visual-and-compose-check · WEB-1, SEC-10</div>
+      <p class="why">Only a person can judge the regenerated screenshots. The pinned MinIO image tags in <code>docker-compose.yml</code> could not be checked from Claude's container.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma5-1"><label for="ma5-1"><span>In the PR, open the <strong>Files changed</strong> tab and find <code>docs/public/assets/screenshots/05-dashboard-uploads.png</code>.</span><span class="see">The upload form shows <strong>Restricted</strong> as the default, there is no <strong>Password</strong> option, and page links end in a random suffix such as <code>/p/demo-k7m2xq</code>.</span></label></li>
+        <li><input type="checkbox" id="ma5-2"><label for="ma5-2"><span>Skim the other ten PNGs in the same folder, especially <code>08-admin-auth.png</code>, and compare its caption on the <a href="https://github.com/andras-tkcs/peek/blob/main/docs/src/content/docs/auth-access.md">Auth and access page</a> source in the PR.</span><span class="see">Each image shows today's UI and the caption names only what the image shows.</span></label></li>
+        <li><input type="checkbox" id="ma5-3"><label for="ma5-3"><span>On a machine with Docker, in a checkout of the PR branch, run <code>docker compose --profile s3 pull minio minio-init</code>.</span><span class="see">Both images download. If a tag is not found, say so in the PR; Claude will replace it.</span></label></li>
+      </ol>
+      <div class="report"><span>Paste into the PR:</span><pre>ma5 screenshots: OK / not OK (which: ___); MinIO pull: pass / fail</pre></div>
+    </article>
+
+    <article class="task" data-task="ma6">
+      <div class="task-head"><h3>6. Make the new CI jobs required</h3><span class="meta">about 5 min</span></div>
+      <div class="id">ma6-required-checks · SEC-1</div>
+      <p class="when">Do this right after you merge the PR. A required check that has never run on main would block every other open PR until it rebases.</p>
+      <p class="why">Today only <code>build</code> is required, so the Docker integration test and the new jobs can fail and the PR still merges.</p>
+      <ol class="steps">
+        <li><input type="checkbox" id="ma6-1"><label for="ma6-1"><span>Open the <a href="https://github.com/andras-tkcs/peek/settings/rules/24841195">"main" ruleset</a>.</span></label></li>
+        <li><input type="checkbox" id="ma6-2"><label for="ma6-2"><span>Under <strong>Require status checks to pass</strong>, click <strong>Add checks</strong> and add <code>backend-integration</code>, <code>docs</code>, <code>docker</code>, <code>cross-build</code>, <code>e2e</code> and <code>browser</code>. Keep <code>build</code>.</span><span class="see">Seven checks are listed. Each one suggests itself as you type, because it has already run on the merged PR.</span></label></li>
+        <li><input type="checkbox" id="ma6-3"><label for="ma6-3"><span>In the same section, tick <strong>Require branches to be up to date before merging</strong>.</span></label></li>
+        <li><input type="checkbox" id="ma6-4"><label for="ma6-4"><span>Under <strong>Require a pull request before merging</strong>, tick <strong>Require conversation resolution before merging</strong>. Click <strong>Save changes</strong>.</span></label></li>
+        <li><input type="checkbox" id="ma6-5"><label for="ma6-5"><span>Check from a terminal: <code>curl -sS https://api.github.com/repos/andras-tkcs/peek/rulesets/24841195 | grep -E '"context"|strict|thread_resolution|allowed_merge'</code></span><span class="see">Seven <code>"context"</code> lines, <code>"strict_required_status_checks_policy": true</code>, <code>"required_review_thread_resolution": true</code> and <code>"allowed_merge_methods": ["merge"]</code>.</span></label></li>
+        <li><input type="checkbox" id="ma6-6"><label for="ma6-6"><span>Open <a href="https://github.com/andras-tkcs/peek/actions/workflows/pages.yml">Deploy Docs to GitHub Pages</a> and <a href="https://github.com/andras-tkcs/peek/actions/workflows/docker-main.yml">Docker (main)</a>.</span><span class="see">Both have a run triggered by the merge: Pages by the push to main, Docker (main) by the CI workflow finishing on main. Both are green, and <a href="https://andras-tkcs.github.io/peek/">the docs site</a> shows the new screenshots.</span></label></li>
+      </ol>
+      <div class="report"><span>Paste as a comment on the merged PR:</span><pre>ma6 required checks (7), strict, conversation resolution: done; Pages + Docker (main) ran after merge: pass / fail</pre></div>
+    </article>
+  </section>
+
+  <footer>
+    <p>Nothing on this page involves a secret. Source of this page: <a href="https://github.com/andras-tkcs/peek/blob/plan/repo-2026-10-27-fixes/docs/plans/repo-2026-10-27-fixes-plan-manual-steps.html">docs/plans/repo-2026-10-27-fixes-plan-manual-steps.html</a> on the plan branch. Review it came from: <a href="https://github.com/andras-tkcs/peek/blob/review/repo-2026-10-27/docs/plans/repo-2026-10-27-review.md">repo-2026-10-27</a>.</p>
+  </footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var KEY = "peek-review-settings-v1";
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('ol.steps input[type="checkbox"]'));
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { saved = {}; }
+  function render() {
+    var done = 0;
+    boxes.forEach(function (b) {
+      b.closest("li").classList.toggle("done", b.checked);
+      if (b.checked) done += 1;
+    });
+    document.getElementById("progress-text").textContent = done + " of " + boxes.length + " steps done";
+    document.getElementById("progress-bar").style.width = (boxes.length ? (100 * done / boxes.length) : 0) + "%";
+  }
+  boxes.forEach(function (b) {
+    b.checked = saved[b.id] === true;
+    b.addEventListener("change", function () {
+      saved[b.id] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) { /* ticks stay for this visit only */ }
+      render();
+    });
+  });
+  render();
+})();
+</script>
