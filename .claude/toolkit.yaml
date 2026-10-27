@@ -8,12 +8,15 @@ docs:
     - docs/architecture.md
     - docs/operations.md
   plan_dir: docs/plans/
+  changelog:
+    file: CHANGELOG.md
+    section: "## [Unreleased]"
 
 git:
   main_branch: main
   branch_pattern: "<type>/<slug>"
   branch_types: [feat, fix, docs, refactor, test, chore, style]
-  merge_style: squash
+  merge_style: merge-commit
 
 verify:
   fast:
@@ -23,7 +26,7 @@ verify:
   dod:
     - mise run check
   dod_conditional:
-    - when: ["internal/server/**", "internal/db/**", "internal/objectstore/**", "internal/uploads/**"]
+    - when: ["internal/server/**", "internal/db/**", "internal/objectstore/**", "internal/uploads/**", "internal/backends/**"]
       do: mise run check-full
   dod_manual:
     - Smoke test with `mise run run` and `mise run smoke` when upload, view or auth behaviour changed.

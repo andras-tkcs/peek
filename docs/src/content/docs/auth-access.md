@@ -1,7 +1,7 @@
 ---
 title: Auth And Access
 description: Configure local login, OAuth, invites, CLI login, tokens, and upload visibility.
-kicker: Settings / Auth
+kicker: Admin / Auth
 ---
 
 ## Auth Model
@@ -26,8 +26,8 @@ First-run setup creates the initial admin. Admins can invite users, disable user
 Peek supports Google, GitHub, and one generic OpenID Connect provider for SSO systems such as Okta, Entra ID, Auth0, or Keycloak. A provider is active only when it is enabled and its required credentials are configured.
 
 <figure>
-  <img src="/peek/assets/screenshots/08-admin-auth.png" alt="Peek Settings Auth tab showing access-token login, allowed email domain, and OAuth provider configuration">
-  <figcaption>The Auth tab controls token login, allowed email domain, and provider credentials.</figcaption>
+  <img src="/peek/assets/screenshots/08-admin-auth.png" alt="Peek Admin page, Auth tab: Google client ID and secret, GitHub login toggle with client ID and secret, SSO login toggle with issuer URL, client ID and secret, and the Save settings button">
+  <figcaption>The Auth tab holds the Google, GitHub and SSO provider settings: enable toggles, client IDs, client secrets and the SSO issuer URL. Token login and the allowed email domain are on the same tab, above what the screenshot shows.</figcaption>
 </figure>
 
 Use these callback URLs in the provider console:
@@ -182,6 +182,10 @@ peek revoke <slug> alice@example.com
 ```
 
 Grants apply to page views, comments, and view stats. Revoking a grant takes effect the next time the page or its frame loads. Group grants need the Google service account described in [Server setup](/peek/docs/server-setup/), and membership changes take up to the cache TTL (5 minutes by default) to apply.
+
+## Audit Log
+
+Peek records security-relevant events in an audit log stored in SQLite: sign-ins, token and provisioning key changes, grants and visibility changes, access denials on restricted pages, backend actions, settings changes and email test sends. Admins read it with `GET /api/audit` and an admin token. Details are space-separated key=value fields; a value containing a space, `=`, a quote, a backslash or a control character is written as a Go-quoted string. Log IP fields come from `X-Forwarded-For` only with `--trusted-proxy`. See the [operator guide](https://github.com/andras-tkcs/peek/blob/main/docs/operations.md#observability).
 
 ## Parameters
 

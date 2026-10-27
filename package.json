@@ -4,6 +4,7 @@
   "scripts": {
     "gen-assets": "scripts/gen-assets.sh",
     "gen-screenshots": "scripts/gen-screenshots.sh",
+    "e2e-browser": "scripts/e2e-browser.sh",
     "docs:dev": "pnpm --dir docs dev",
     "docs:build": "pnpm --dir docs build",
     "docs:preview": "pnpm --dir docs preview"

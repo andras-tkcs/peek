@@ -305,13 +305,15 @@ func TestManagerEnsureConcurrentWaitsForInflightStart(t *testing.T) {
 		ep, err := m.Ensure(context.Background(), spec(1, 1, port))
 		results <- result{ep, err}
 	}
+	waiting := make(chan struct{}, 1)
+	m.SetOnWaitForTest(func() { waiting <- struct{}{} })
 	go call()
 	<-entered
 	if m.Running(1, 1) {
 		t.Error("Running is true while starting")
 	}
 	go call()
-	time.Sleep(20 * time.Millisecond) // let the second call reach its wait
+	<-waiting
 	close(release)
 
 	a, b := <-results, <-results

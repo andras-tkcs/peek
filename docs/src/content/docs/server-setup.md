@@ -89,6 +89,12 @@ The image is scratch-based, runs as uid `65532`, exposes port `7700`, and stores
 
 On managed cloud platforms, the `/data` path must be backed by that platform's persistent disk or volume feature. If the service uses only the container filesystem, restarts and redeploys can remove `peek.db`, `secret.key`, and uploaded files. See [Deployment platforms](/peek/docs/deployment-platforms/) before deploying to Render, Fly.io, Railway, Kubernetes, or a stateless app platform.
 
+## Email
+
+Peek can email people when a restricted page is shared with them. An admin configures SMTP on the **Email** tab of the **Admin** page; email is on only when both the SMTP host and the sender address are set, and with either blank sharing works as before and no mail is sent. The **Send test email** button sends a message to your own address using the saved settings, so save first.
+
+Peek sends a plain-text email with the page link when a grant is added to a restricted page and, to everyone who already has a grant, when a page is switched to restricted. Invites are sent by email too. A failed send never fails the share; it is logged and audited. The `smtp_*` settings are listed in the [reference](/peek/docs/reference/#runtime-settings), and the full behavior is in the [operator guide](https://github.com/andras-tkcs/peek/blob/main/docs/operations.md#email).
+
 ## Page Backends
 
 Page backends let a page version come with a Docker image that Peek runs as a container; the page calls it with `peek.fetch`. They are off by default. To turn them on:

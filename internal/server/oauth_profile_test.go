@@ -277,3 +277,10 @@ func TestOAuthCovFetchOAuthJSON(t *testing.T) {
 		t.Fatal("transport error not reported")
 	}
 }
+
+func TestVerifyIDTokenNonceRejectsEmptyExpected(t *testing.T) {
+	err := verifyIDTokenNonce(&oidc.IDToken{Nonce: ""}, "")
+	if !errors.Is(err, errOIDCNonceMismatch) {
+		t.Fatalf("err = %v, want errOIDCNonceMismatch", err)
+	}
+}

@@ -32,7 +32,7 @@ mise run test
 mise run check
 ```
 
-Before opening a PR or after touching shared server, database, storage, auth, or concurrency behavior:
+Before opening a PR, and after the changes CONTRIBUTING.md → Quality Gates lists:
 
 ```sh
 mise run check-full

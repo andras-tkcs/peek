@@ -16,13 +16,18 @@ The image has to be on a registry prefix an admin allowed: on the Admin page, Ba
 ## Upload and configure
 
 ```sh
-peek upload examples/contact-form/index.html --visibility public --slug contact --backend ghcr.io/acme/contact-form:1.0
-peek backend env set contact SMTP_HOST --value smtp.example.com
-peek backend env set contact SMTP_PORT --value 587
-peek backend env set contact MAIL_FROM --value forms@example.com
-peek backend env set contact MAIL_TO --value team@example.com
-printf '%s' "$SMTP_PASSWORD" | peek backend env set contact SMTP_PASSWORD --value-stdin
-peek backend restart contact
+peek upload examples/contact-form/index.html --visibility public --name contact --backend ghcr.io/acme/contact-form:1.0
+```
+
+Note the slug: line of the output (for example contact-k7m2xq) and use it as <slug> below.
+
+```sh
+peek backend env set <slug> SMTP_HOST --value smtp.example.com
+peek backend env set <slug> SMTP_PORT --value 587
+peek backend env set <slug> MAIL_FROM --value forms@example.com
+peek backend env set <slug> MAIL_TO --value team@example.com
+printf '%s' "$SMTP_PASSWORD" | peek backend env set <slug> SMTP_PASSWORD --value-stdin
+peek backend restart <slug>
 ```
 
 Variables: `SMTP_HOST`, `SMTP_PORT` (default 25), `SMTP_USERNAME` and `SMTP_PASSWORD` (optional, enables auth), `MAIL_FROM`, `MAIL_TO`. The backend also reads `PORT` (default 8080), `PEEK_BACKEND_TOKEN` (set by Peek) and `DATA_DIR` (default `/data`).
@@ -40,8 +45,8 @@ Then:
 
 1. Build the image locally: `docker build -t contact-form:dev examples/contact-form`.
 2. Log in at `http://localhost:7722` and allow the image: on the Admin page, Backends tab, set the allowed backend images to `contact-form`.
-3. Upload the page: `peek login --host http://localhost:7722`, then `peek upload examples/contact-form/index.html --visibility public --slug contact --backend contact-form:dev`.
-4. Point the backend at Mailpit: `peek backend env set contact SMTP_HOST --value mailpit`, `SMTP_PORT` `1025`, `MAIL_FROM` `forms@example.com`, `MAIL_TO` `team@example.com`, then `peek backend restart contact`.
-5. Open `http://localhost:7722/p/contact`, send the form, and read the email at `http://localhost:8025`.
+3. Upload the page: `peek login --host http://localhost:7722`, then `peek upload examples/contact-form/index.html --visibility public --name contact --backend contact-form:dev`, and note the `slug:` line of the output.
+4. Point the backend at Mailpit: `peek backend env set <slug> SMTP_HOST --value mailpit`, `SMTP_PORT` `1025`, `MAIL_FROM` `forms@example.com`, `MAIL_TO` `team@example.com`, then `peek backend restart <slug>`.
+5. Open `http://localhost:7722/p/<slug>`, send the form, and read the email at `http://localhost:8025`.
 
 The backend container stops after the idle timeout (15 minutes by default) and starts again on the next submission.
