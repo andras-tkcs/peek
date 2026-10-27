@@ -22,6 +22,7 @@ Peek is an internal company tool, not a SaaS product. Architecture choices shoul
 - `internal/objectstore` owns upload byte storage. The server depends only on its `Storage` interface, while file and S3 implementation details stay outside the HTTP package.
 - `internal/web` owns server-rendered templates, template view models, static asset embedding, and HTML rendering configuration.
 - `internal/models` holds shared data shapes passed between packages. Keep it boring: no persistence or HTTP behavior belongs there.
+- `internal/e2e` holds the end-to-end test of the built binaries (test-only).
 - `internal/version` owns build metadata injected by release builds.
 
 ## Dependency Direction
@@ -38,7 +39,7 @@ Uploads are created through `internal/uploads.Service`, which coordinates HTML v
 
 ## Quality Gates
 
-Before committing behavior changes, run `mise run check`. For concurrency-sensitive changes, also run `mise run race`. Before opening a PR or after touching shared boundaries, run `mise run check-full`; it mirrors the CI quality gate with formatting, vet, build, tests, race tests, coverage, govulncheck, and staticcheck.
+Before committing behavior changes, run `mise run check`. For concurrency-sensitive changes, also run `mise run race`. See CONTRIBUTING.md → Quality Gates for when to run `mise run check-full`; it matches CI's `build` job (formatting, vet, build, race tests, coverage, govulncheck, staticcheck); CI also runs the Docker backend integration, docker image, cross-build, docs, e2e and browser jobs (see CONTRIBUTING.md → Tests).
 
 ## Review Rules
 
