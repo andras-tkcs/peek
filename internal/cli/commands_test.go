@@ -89,6 +89,12 @@ func TestRunHelpVersionAndUnknown(t *testing.T) {
 			t.Fatalf("Run(%q) = %d, stderr %q", arg, code, stderr)
 		}
 	}
+	_, _, full := runCaptured(t, "help")
+	for _, want := range []string{"peek version", "peek login --oauth"} {
+		if !strings.Contains(full, want) {
+			t.Errorf("usage lacks %q", want)
+		}
+	}
 	for _, arg := range []string{"version", "-v", "--version"} {
 		code, stdout, _ := runCaptured(t, arg)
 		if code != 0 || !strings.HasPrefix(stdout, "peek ") {
@@ -102,6 +108,37 @@ func TestRunHelpVersionAndUnknown(t *testing.T) {
 	code, _, stderr = runCaptured(t, "frobnicate")
 	if code != 1 || !strings.Contains(stderr, "unknown command: frobnicate") {
 		t.Fatalf("Run(unknown) = %d, stderr %q", code, stderr)
+	}
+}
+
+func TestRunCommandHelpExitsZero(t *testing.T) {
+	for _, name := range commandNames {
+		for _, flag := range []string{"--help", "-h"} {
+			code, _, stderr := runCaptured(t, name, flag)
+			if code != 0 || !strings.HasPrefix(stderr, "Usage:") || !strings.Contains(stderr, "peek "+name) {
+				t.Errorf("Run(%q, %q) = %d, stderr %q", name, flag, code, stderr)
+			}
+		}
+	}
+	cases := []struct {
+		cmd  string
+		want []string
+		not  string
+	}{
+		{"token", []string{"peek token create"}, ""},
+		{"login", []string{"peek login --oauth", "peek login --token-file"}, ""},
+		{"upload", nil, "peek login"},
+	}
+	for _, c := range cases {
+		_, _, stderr := runCaptured(t, c.cmd, "--help")
+		for _, w := range c.want {
+			if !strings.Contains(stderr, w) {
+				t.Errorf("peek %s --help lacks %q: %q", c.cmd, w, stderr)
+			}
+		}
+		if c.not != "" && strings.Contains(stderr, c.not) {
+			t.Errorf("peek %s --help contains %q: %q", c.cmd, c.not, stderr)
+		}
 	}
 }
 
