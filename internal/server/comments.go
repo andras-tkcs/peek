@@ -318,7 +318,7 @@ func (s *Server) uploadAccessStatus(r *http.Request, u *models.Upload) int {
 	return http.StatusUnauthorized
 }
 
-// setNameCookie sets a long-lived, JS-readable cookie so the name is remembered.
+// setNameCookie sets a long-lived cookie so the server remembers the commenter name.
 func (s *Server) setNameCookie(w http.ResponseWriter, name string) {
 	s.setCookie(w, &http.Cookie{
 		Name:     nameCookie,
@@ -326,6 +326,5 @@ func (s *Server) setNameCookie(w http.ResponseWriter, name string) {
 		Path:     "/",
 		MaxAge:   int((365 * 24 * time.Hour).Seconds()),
 		SameSite: http.SameSiteLaxMode,
-		HttpOnly: false,
 	})
 }

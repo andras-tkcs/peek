@@ -25,6 +25,7 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ### Fixed
 
+- Login redirects now reject `/\` as well as `//`, so a crafted `next` value cannot send a user off-site; every cookie is now HttpOnly, including the remembered commenter name; object storage paths are additionally checked to stay inside the storage directory.
 - The contact-form example and the README backend commands.
 - Slug examples in the README and the agent skills.
 - The `--metrics-token` help text.
