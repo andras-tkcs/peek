@@ -3,7 +3,7 @@ package uploads
 import (
 	"strings"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 // PrepareVisibility validates and normalizes a visibility. The legacy "private"

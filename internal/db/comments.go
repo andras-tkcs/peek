@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func (s *Store) AddComment(ctx context.Context, uploadID int64, version int, selector, text, anchorKind, author, cookie, body string, accountID int64) (models.Comment, error) {

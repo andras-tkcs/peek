@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/version"
+	"github.com/privacyfence/peek/internal/version"
 )
 
 func TestLoginOAuthPollsUntilApproved(t *testing.T) {

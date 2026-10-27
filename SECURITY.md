@@ -6,7 +6,7 @@ Security fixes go into the latest release. Older releases do not get backports; 
 
 ## Reporting a vulnerability
 
-Report vulnerabilities privately at https://github.com/andras-tkcs/peek/security/advisories/new. Please do not open a public issue or pull request for a security problem.
+Report vulnerabilities privately at https://github.com/privacyfence/peek/security/advisories/new. Please do not open a public issue or pull request for a security problem.
 
 Include the affected version (from `peekd --version`), the deployment shape (storage, sign-in providers, page backends on or off), reproduction steps and the impact you expect.
 

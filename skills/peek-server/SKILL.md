@@ -22,9 +22,9 @@ The server binary is `peekd`. Get it from a release or build from source.
 
 ```sh
 # Download a release archive (contains both peekd and peek), then:
-VERSION=vX.Y.Z   # pick from https://github.com/andras-tkcs/peek/releases
-curl -fsSLO "https://github.com/andras-tkcs/peek/releases/download/${VERSION}/peek_${VERSION}_linux_amd64.tar.gz"
-curl -fsSLO "https://github.com/andras-tkcs/peek/releases/download/${VERSION}/checksums.txt"
+VERSION=vX.Y.Z   # pick from https://github.com/privacyfence/peek/releases
+curl -fsSLO "https://github.com/privacyfence/peek/releases/download/${VERSION}/peek_${VERSION}_linux_amd64.tar.gz"
+curl -fsSLO "https://github.com/privacyfence/peek/releases/download/${VERSION}/checksums.txt"
 sha256sum --ignore-missing -c checksums.txt
 tar xzf "peek_${VERSION}_linux_amd64.tar.gz"
 sudo mv peek_*/peekd peek_*/peek /usr/local/bin/
@@ -33,7 +33,7 @@ sudo mv peek_*/peekd peek_*/peek /usr/local/bin/
 Or build from source (needs Go):
 
 ```sh
-git clone https://github.com/andras-tkcs/peek && cd peek
+git clone https://github.com/privacyfence/peek && cd peek
 go build -o bin/peekd ./cmd/peekd
 go build -o bin/peek  ./cmd/peek
 ```
@@ -52,10 +52,10 @@ On first run, `peekd` prints a one-time setup URL. Open it to create the first l
 docker run -d --name peek -p 7700:7700 \
   -v peek-data:/data \
   -e PEEK_BASE_URL=https://peek.example.com \
-  ghcr.io/andras-tkcs/peek:latest
+  ghcr.io/privacyfence/peek:latest
 ```
 
-For production, pin a release tag (`ghcr.io/andras-tkcs/peek:<version>`) or an image digest (`ghcr.io/andras-tkcs/peek@sha256:…`).
+For production, pin a release tag (`ghcr.io/privacyfence/peek:<version>`) or an image digest (`ghcr.io/privacyfence/peek@sha256:…`).
 
 The image runs as uid `65532` and stores the SQLite DB, uploads, and generated secret under `/data`. If bind-mounting a host directory, make it writable by uid `65532`.
 

@@ -10,8 +10,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/andras-tkcs/peek/internal/models"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/models"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {

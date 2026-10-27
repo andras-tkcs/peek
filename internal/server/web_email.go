@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/mail"
+	"github.com/privacyfence/peek/internal/mail"
 )
 
 // emailTestTimeout bounds one test email send.

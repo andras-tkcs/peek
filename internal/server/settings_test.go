@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	webui "github.com/privacyfence/peek/internal/web"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/db"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func TestSettingKeysAreSorted(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/uploads"
+	"github.com/privacyfence/peek/internal/uploads"
 )
 
 func TestDashboardUploadedRedirectCarriesSlug(t *testing.T) {

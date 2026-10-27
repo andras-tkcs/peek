@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/db"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 var apiKeyPattern = regexp.MustCompile("peek_[A-Za-z0-9_-]{32}")

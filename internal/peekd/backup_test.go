@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/privacyfence/peek/internal/db"
 )
 
 func seedBackupSource(t *testing.T) string {

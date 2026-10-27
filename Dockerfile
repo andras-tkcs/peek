@@ -18,9 +18,9 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags "-s -w \
-    -X github.com/andras-tkcs/peek/internal/version.Version=${VERSION} \
-    -X github.com/andras-tkcs/peek/internal/version.Commit=${COMMIT} \
-    -X github.com/andras-tkcs/peek/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -X github.com/privacyfence/peek/internal/version.Version=${VERSION} \
+    -X github.com/privacyfence/peek/internal/version.Commit=${COMMIT} \
+    -X github.com/privacyfence/peek/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     -o /out/peekd ./cmd/peekd
 
 # Prepare a nonroot passwd entry and a writable data dir owned by it.

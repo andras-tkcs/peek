@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/backends"
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/backends"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 // backendInstanceSetting holds the id that scopes this peekd's containers. It

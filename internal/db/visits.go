@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func (s *Store) RecordVisit(ctx context.Context, uploadID int64, version int, cookie, name, ip, ua string) error {

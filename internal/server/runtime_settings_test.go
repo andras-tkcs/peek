@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/db"
+	"github.com/privacyfence/peek/internal/db"
 )
 
 func TestDecryptedStoreSettingDecryptsSecretValues(t *testing.T) {

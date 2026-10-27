@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	"github.com/andras-tkcs/peek/internal/models"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/db"
+	"github.com/privacyfence/peek/internal/models"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 const googleOrgTestOIDCIssuer = "https://8.8.8.8/oidc"

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
-	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/privacyfence/peek/internal/models"
+	"github.com/privacyfence/peek/internal/uploadquota"
 )
 
 func TestAddCommentLogsVisitorUpsertFailure(t *testing.T) {

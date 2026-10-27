@@ -9,7 +9,7 @@ kicker: peekd --addr :7700
 Install release binaries when you want the normal deployment path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/privacyfence/peek/main/install.sh | sh
 ```
 
 The release ships two binaries:
@@ -22,8 +22,8 @@ The release ships two binaries:
 Go installs are also supported:
 
 ```sh
-go install github.com/andras-tkcs/peek/cmd/peekd@latest
-go install github.com/andras-tkcs/peek/cmd/peek@latest
+go install github.com/privacyfence/peek/cmd/peekd@latest
+go install github.com/privacyfence/peek/cmd/peek@latest
 ```
 
 ## First Run
@@ -80,10 +80,10 @@ docker run -d --name peek --restart unless-stopped \
   -p 7700:7700 \
   -v peek-data:/data \
   -e PEEK_BASE_URL=https://peek.example.com \
-  ghcr.io/andras-tkcs/peek:latest
+  ghcr.io/privacyfence/peek:latest
 ```
 
-For production, pin a release tag (`ghcr.io/andras-tkcs/peek:<version>`) or an image digest (`ghcr.io/andras-tkcs/peek@sha256:…`).
+For production, pin a release tag (`ghcr.io/privacyfence/peek:<version>`) or an image digest (`ghcr.io/privacyfence/peek@sha256:…`).
 
 The image is scratch-based, runs as uid `65532`, exposes port `7700`, and stores server state under `/data`.
 
@@ -93,7 +93,7 @@ On managed cloud platforms, the `/data` path must be backed by that platform's p
 
 Peek can email people when a restricted page is shared with them. An admin configures SMTP on the **Email** tab of the **Admin** page; email is on only when both the SMTP host and the sender address are set, and with either blank sharing works as before and no mail is sent. The **Send test email** button sends a message to your own address using the saved settings, so save first.
 
-Peek sends a plain-text email with the page link when a grant is added to a restricted page and, to everyone who already has a grant, when a page is switched to restricted. Invites are sent by email too. A failed send never fails the share; it is logged and audited. The `smtp_*` settings are listed in the [reference](/peek/docs/reference/#runtime-settings), and the full behavior is in the [operator guide](https://github.com/andras-tkcs/peek/blob/main/docs/operations.md#email).
+Peek sends a plain-text email with the page link when a grant is added to a restricted page and, to everyone who already has a grant, when a page is switched to restricted. Invites are sent by email too. A failed send never fails the share; it is logged and audited. The `smtp_*` settings are listed in the [reference](/peek/docs/reference/#runtime-settings), and the full behavior is in the [operator guide](https://github.com/privacyfence/peek/blob/main/docs/operations.md#email).
 
 ## Page Backends
 

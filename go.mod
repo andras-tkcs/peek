@@ -1,4 +1,4 @@
-module github.com/andras-tkcs/peek
+module github.com/privacyfence/peek
 
 go 1.26.10
 

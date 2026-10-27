@@ -7,9 +7,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/andras-tkcs/peek/internal/models"
-	"github.com/andras-tkcs/peek/internal/objectstore"
-	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/privacyfence/peek/internal/models"
+	"github.com/privacyfence/peek/internal/objectstore"
+	"github.com/privacyfence/peek/internal/uploadquota"
 )
 
 type Service struct {

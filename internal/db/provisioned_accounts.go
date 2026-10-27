@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 const provisionedAccountSelect = `SELECT pa.provisioner_id,pa.external_id,pa.account_id,pa.created_account,COALESCE(pa.token_id,0),COALESCE(tk.expires_at,0),pa.created_at,pa.updated_at

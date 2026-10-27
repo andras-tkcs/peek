@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/andras-tkcs/peek/internal/version"
+	"github.com/privacyfence/peek/internal/version"
 )
 
 // commandNames are the commands Run dispatches to a cmdXxx function; each one

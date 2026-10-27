@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/privacyfence/peek/internal/uploadquota"
 )
 
 // seedLink creates a provisioner, a linked account and a token for it.

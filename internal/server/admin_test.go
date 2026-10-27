@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/db"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 func TestInviteLinkMissingTokenRendersWebError(t *testing.T) {

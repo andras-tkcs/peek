@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func normalizeGrantEmail(email string) string {

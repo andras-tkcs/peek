@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/mail"
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/mail"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 // shareNotifyTimeout bounds one notification send.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func (s *Store) CreateAccount(ctx context.Context, email, name string, isAdmin bool) (*models.Account, error) {

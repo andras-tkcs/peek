@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	"github.com/andras-tkcs/peek/internal/models"
-	"github.com/andras-tkcs/peek/internal/uploadquota"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/db"
+	"github.com/privacyfence/peek/internal/models"
+	"github.com/privacyfence/peek/internal/uploadquota"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 type dashboardDeleteStorage struct {

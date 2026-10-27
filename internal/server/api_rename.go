@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	"github.com/andras-tkcs/peek/internal/uploads"
+	"github.com/privacyfence/peek/internal/uploads"
 )
 
 func renameAuditDetail(oldSlug string, res *uploads.RenameResult) string {

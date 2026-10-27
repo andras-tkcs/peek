@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
-	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/privacyfence/peek/internal/models"
+	"github.com/privacyfence/peek/internal/uploadquota"
 )
 
 // CreateVersionChecked appends a new version to an existing upload and returns

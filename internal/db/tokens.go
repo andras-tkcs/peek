@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func HashToken(token string) string {

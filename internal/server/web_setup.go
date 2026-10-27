@@ -6,8 +6,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/andras-tkcs/peek/internal/uploads"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/uploads"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {

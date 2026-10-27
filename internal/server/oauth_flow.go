@@ -8,7 +8,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	webui "github.com/andras-tkcs/peek/internal/web"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {

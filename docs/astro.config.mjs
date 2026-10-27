@@ -1,7 +1,7 @@
 import { defineConfig } from 'astro/config';
 
 export default defineConfig({
-  site: 'https://andras-tkcs.github.io',
+  site: 'https://privacyfence.github.io',
   base: '/peek/',
   markdown: {
     shikiConfig: {

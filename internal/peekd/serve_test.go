@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/backends"
-	"github.com/andras-tkcs/peek/internal/backends/backendstest"
+	"github.com/privacyfence/peek/internal/backends"
+	"github.com/privacyfence/peek/internal/backends/backendstest"
 )
 
 // restoreSlogDefault undoes configureLogging, which replaces slog.Default().

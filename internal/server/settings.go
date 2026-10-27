@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/andras-tkcs/peek/internal/mail"
-	"github.com/andras-tkcs/peek/internal/objectstore"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/mail"
+	"github.com/privacyfence/peek/internal/objectstore"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 type settingsRow = webui.SettingRow

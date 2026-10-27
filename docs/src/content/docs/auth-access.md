@@ -185,7 +185,7 @@ Grants apply to page views, comments, and view stats. Revoking a grant takes eff
 
 ## Audit Log
 
-Peek records security-relevant events in an audit log stored in SQLite: sign-ins, token and provisioning key changes, grants and visibility changes, access denials on restricted pages, backend actions, settings changes and email test sends. Admins read it with `GET /api/audit` and an admin token. Details are space-separated key=value fields; a value containing a space, `=`, a quote, a backslash or a control character is written as a Go-quoted string. Log IP fields come from `X-Forwarded-For` only with `--trusted-proxy`. See the [operator guide](https://github.com/andras-tkcs/peek/blob/main/docs/operations.md#observability).
+Peek records security-relevant events in an audit log stored in SQLite: sign-ins, token and provisioning key changes, grants and visibility changes, access denials on restricted pages, backend actions, settings changes and email test sends. Admins read it with `GET /api/audit` and an admin token. Details are space-separated key=value fields; a value containing a space, `=`, a quote, a backslash or a control character is written as a Go-quoted string. Log IP fields come from `X-Forwarded-For` only with `--trusted-proxy`. See the [operator guide](https://github.com/privacyfence/peek/blob/main/docs/operations.md#observability).
 
 ## Parameters
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func (s *Store) GetOAuthIdentity(ctx context.Context, provider, providerUserID string) (*models.OAuthIdentity, error) {

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/backends"
-	"github.com/andras-tkcs/peek/internal/backends/backendstest"
-	"github.com/andras-tkcs/peek/internal/models"
-	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/privacyfence/peek/internal/backends"
+	"github.com/privacyfence/peek/internal/backends/backendstest"
+	"github.com/privacyfence/peek/internal/models"
+	"github.com/privacyfence/peek/internal/uploadquota"
 )
 
 func TestBackendSettingsDefaults(t *testing.T) {

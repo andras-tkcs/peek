@@ -1,6 +1,6 @@
 package server
 
-import webui "github.com/andras-tkcs/peek/internal/web"
+import webui "github.com/privacyfence/peek/internal/web"
 
 type setupData = webui.SetupData
 type loginData = webui.LoginData

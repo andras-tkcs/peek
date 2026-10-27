@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/db"
-	"github.com/andras-tkcs/peek/internal/uploadquota"
+	"github.com/privacyfence/peek/internal/db"
+	"github.com/privacyfence/peek/internal/uploadquota"
 )
 
 func TestHealthcheckURL(t *testing.T) {

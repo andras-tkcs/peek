@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 // SetUploadBackend upserts the backend of one page version. The version must

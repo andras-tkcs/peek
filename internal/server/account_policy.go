@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 var (

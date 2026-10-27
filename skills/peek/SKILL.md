@@ -21,7 +21,7 @@ Do NOT use this skill for deploying production apps, hosting static sites long-t
 ## Install the CLI
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/andras-tkcs/peek/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/privacyfence/peek/main/install.sh | sh
 ```
 
 This downloads a prebuilt `peek` binary for your OS/arch and installs it (`/usr/local/bin`, falling back to `~/.local/bin`). Overrides:

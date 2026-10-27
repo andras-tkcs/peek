@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/models"
+	"github.com/privacyfence/peek/internal/models"
 )
 
 // grantsFixture returns a server, a restricted page, and the owner's bearer token.

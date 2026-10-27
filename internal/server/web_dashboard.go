@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andras-tkcs/peek/internal/models"
-	"github.com/andras-tkcs/peek/internal/uploads"
-	webui "github.com/andras-tkcs/peek/internal/web"
+	"github.com/privacyfence/peek/internal/models"
+	"github.com/privacyfence/peek/internal/uploads"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 // Roles of a dashboard row, shown as an icon.

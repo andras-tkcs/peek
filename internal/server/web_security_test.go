@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	webui "github.com/andras-tkcs/peek/internal/web"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 func TestDashboardTemplateHasNoInlineScriptExecution(t *testing.T) {

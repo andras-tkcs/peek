@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	webui "github.com/andras-tkcs/peek/internal/web"
+	webui "github.com/privacyfence/peek/internal/web"
 )
 
 func TestNormalizeUserCode(t *testing.T) {

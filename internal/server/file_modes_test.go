@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/andras-tkcs/peek/internal/server"
+	"github.com/privacyfence/peek/internal/server"
 )
 
 func TestNewCreatesOwnerOnlyDataFiles(t *testing.T) {

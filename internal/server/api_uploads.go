@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/andras-tkcs/peek/internal/models"
-	"github.com/andras-tkcs/peek/internal/uploads"
+	"github.com/privacyfence/peek/internal/models"
+	"github.com/privacyfence/peek/internal/uploads"
 )
 
 type uploadResp struct {
