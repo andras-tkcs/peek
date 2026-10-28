@@ -4,13 +4,30 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-28
+
+### Added
+
+- Live reload: an open `/p/<slug>` page reloads by itself when a new version is uploaded, through a Server-Sent Events stream at `/api/uploads/<slug>/events`. It waits while the tab is hidden or a comment is being written; `/p/<slug>/v/<n>` links stay on their version. Reverse proxies must not buffer `text/event-stream` responses (see docs/operations.md).
+
+## [0.15.2] - 2026-10-27
+
+### Changed
+
+- Releases are cut by the **Cut release tag** workflow, and the GitHub Release is created once with all its files after the build succeeds; publishing a release in the GitHub UI no longer works with immutable releases.
+
+### Fixed
+
+- Login redirects now reject `/\` as well as `//`, so a crafted `next` value cannot send a user off-site; every cookie is now HttpOnly, including the remembered commenter name; object storage paths are additionally checked to stay inside the storage directory.
+
+## [0.15.1] - 2026-10-27
+
 ### Added
 
 - Build provenance attestations for release archives and container images; check an archive with `gh attestation verify <archive> -R privacyfence/peek`.
 - `SECURITY.md` with the security policy and private vulnerability reporting.
 - Documentation for `peek.params` / `peek.setParams`, which keep a page's filters in the viewer's address bar.
 - `peek <command> --help` and `peekd --help`, which list the subcommands and the `PEEK_*` environment variables.
-- Live reload: an open `/p/<slug>` page reloads by itself when a new version is uploaded, through a Server-Sent Events stream at `/api/uploads/<slug>/events`. It waits while the tab is hidden or a comment is being written; `/p/<slug>/v/<n>` links stay on their version. Reverse proxies must not buffer `text/event-stream` responses (see docs/operations.md).
 
 ### Changed
 
@@ -21,12 +38,10 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 - The startup log field `metrics_auth` is now `metrics_token_set`.
 - A release tag must point at a commit on `main` and pass vet, race tests and govulncheck before anything is published, and pre-release tags no longer move the `:latest` image.
 - The `:main` image is published only after CI passes on `main`.
-- Releases are cut by the **Cut release tag** workflow, and the GitHub Release is created once with all its files after the build succeeds; publishing a release in the GitHub UI no longer works with immutable releases.
 - Popups opened by uploaded pages are no longer sandboxed (`allow-popups-to-escape-sandbox`).
 
 ### Fixed
 
-- Login redirects now reject `/\` as well as `//`, so a crafted `next` value cannot send a user off-site; every cookie is now HttpOnly, including the remembered commenter name; object storage paths are additionally checked to stay inside the storage directory.
 - The contact-form example and the README backend commands.
 - Slug examples in the README and the agent skills.
 - The `--metrics-token` help text.

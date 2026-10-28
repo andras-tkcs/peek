@@ -152,7 +152,11 @@ Peek logs structured JSON to stderr. Set `PEEK_LOG_LEVEL=debug`, `info`, or `war
 
 Before upgrading, take a SQLite backup and confirm you know where uploaded object bytes live. Run the new binary against a staging copy of the data directory when changing storage, auth, retention, or database-related code. Security fixes and how to report a vulnerability: [SECURITY.md](../SECURITY.md).
 
-### Unreleased
+### v0.16.0
+
+Viewer pages keep a Server-Sent Events connection open to `/api/uploads/<slug>/events` and reload when a new version is uploaded. No migration; a rollback only turns live reload off. A reverse proxy that buffers responses delays the events until its buffer fills, so make sure it does not buffer `text/event-stream` (nginx honours the `X-Accel-Buffering: no` header Peek sends) and allows idle reads of at least 30 seconds.
+
+### v0.15.1
 
 The container image moved to `ghcr.io/privacyfence/peek`; `ghcr.io/andras-tkcs/peek` receives no new tags. Change the image in your compose file or unit before pulling, and verify attestations with `gh attestation verify ... -R privacyfence/peek`. The data volume and its layout are unchanged.
 
