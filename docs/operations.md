@@ -152,6 +152,10 @@ Peek logs structured JSON to stderr. Set `PEEK_LOG_LEVEL=debug`, `info`, or `war
 
 Before upgrading, take a SQLite backup and confirm you know where uploaded object bytes live. Run the new binary against a staging copy of the data directory when changing storage, auth, retention, or database-related code. Security fixes and how to report a vulnerability: [SECURITY.md](../SECURITY.md).
 
+### v0.16.1
+
+Hotfix for first-time OAuth sign-in, which bounced new users back to `/login`. No migration and no configuration change; a rollback to v0.16.0 brings the bounce back.
+
 ### v0.16.0
 
 Viewer pages keep a Server-Sent Events connection open to `/api/uploads/<slug>/events` and reload when a new version is uploaded. No migration; a rollback only turns live reload off. A reverse proxy that buffers responses delays the events until its buffer fills, so make sure it does not buffer `text/event-stream` (nginx honours the `X-Accel-Buffering: no` header Peek sends) and allows idle reads of at least 30 seconds.
