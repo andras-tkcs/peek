@@ -116,6 +116,8 @@ peek.example.com {
 }
 ```
 
+Viewer pages keep a long-lived Server-Sent Events connection to `/api/uploads/<slug>/events` so they reload when a new version is uploaded. Caddy needs no changes. Peek sends `X-Accel-Buffering: no`, which turns off nginx response buffering for it; other proxies must not buffer `text/event-stream` responses and must allow idle reads of at least 30 seconds (Peek sends a keep-alive every 20 seconds). Without that, pages still work but do not reload by themselves.
+
 Set `--trusted-proxy` only when the proxy is controlled by you and overwrites or controls `X-Forwarded-For`. When it is not set, Peek ignores forwarded IP headers for analytics and audit fields. Peek accepts the header only from `--trusted-proxy-cidrs` (default loopback); set it to your proxy's address range when the proxy is not on the same host.
 
 Set `--base-url` / `PEEK_BASE_URL` before users create durable links. If you do not have a custom domain yet, use the stable default hostname your platform assigns from the service name, then update it before configuring OAuth or inviting users if the platform assigns a different URL.

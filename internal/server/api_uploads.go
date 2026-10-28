@@ -210,6 +210,7 @@ func (s *Server) handleUploadVersion(w http.ResponseWriter, r *http.Request, own
 		jsonError(w, status, msg)
 		return
 	}
+	s.pageEvents.publish(u.ID, res.Version)
 	s.auditRequest(r, owner.Name, "upload.version.create", auditDetail("slug", slug, "version", strconv.Itoa(res.Version), "size", strconv.Itoa(res.Size)))
 	resp := uploadResp{Slug: slug, URL: res.URL, Visibility: u.Visibility, Version: res.Version, VersionURL: res.VersionURL}
 	if backend == nil {

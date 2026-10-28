@@ -47,6 +47,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/uploads/{slug}/comments", s.handleListComments)
 	mux.HandleFunc("POST /api/uploads/{slug}/comments", s.handleAddComment)
 	mux.HandleFunc("GET /api/uploads/{slug}/views", s.handleViews)
+	mux.HandleFunc("GET /api/uploads/{slug}/events", s.handlePageEvents)
 	mux.HandleFunc("GET /svc/{slug}/v/{n}/{path...}", s.handleBackendProxy)
 	mux.HandleFunc("POST /svc/{slug}/v/{n}/{path...}", s.handleBackendProxy)
 	mux.HandleFunc("PUT /svc/{slug}/v/{n}/{path...}", s.handleBackendProxy)

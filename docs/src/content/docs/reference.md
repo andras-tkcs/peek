@@ -189,6 +189,7 @@ Environment overrides:
 | `GET /api/uploads/<slug>/stats` | token | View statistics for a page. |
 | `GET /api/uploads/<slug>/export` | token | Export all data for a page. |
 | `GET /api/uploads/<slug>/views` | page access | Total and unique view counts and a 7-day view histogram for a page. |
+| `GET /api/uploads/<slug>/events` | page access | Server-Sent Events stream of `version` events carrying the page's latest version number; the viewer uses it to reload when a new version is uploaded. |
 | `DELETE /api/uploads-by-owner` | token | Delete all of the caller's pages (`peek delete-all`). |
 | `GET /raw/<slug>/v/<n>` | page access | Raw HTML of version `n`, served with a sandboxing CSP. |
 | `GET /api/auth/providers` | none | Enabled login providers. |

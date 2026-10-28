@@ -15,6 +15,7 @@ const retentionCleanupInterval = 1 * time.Hour
 
 // Close releases server resources (database connections, etc.).
 func (s *Server) Close() error {
+	s.CloseEventStreams()
 	if s.cancel != nil {
 		s.cancel()
 	}

@@ -10,6 +10,7 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 - `SECURITY.md` with the security policy and private vulnerability reporting.
 - Documentation for `peek.params` / `peek.setParams`, which keep a page's filters in the viewer's address bar.
 - `peek <command> --help` and `peekd --help`, which list the subcommands and the `PEEK_*` environment variables.
+- Live reload: an open `/p/<slug>` page reloads by itself when a new version is uploaded, through a Server-Sent Events stream at `/api/uploads/<slug>/events`. It waits while the tab is hidden or a comment is being written; `/p/<slug>/v/<n>` links stay on their version. Reverse proxies must not buffer `text/event-stream` responses (see docs/operations.md).
 
 ### Changed
 
