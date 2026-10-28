@@ -4,6 +4,8 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-10-28
+
 ### Fixed
 
 - Signing in with Google or another OAuth provider for the first time no longer lands back on the login page: the account is created and signed in in one step, with a short "account ready" page. Visiting /login while signed in now goes to the dashboard.
