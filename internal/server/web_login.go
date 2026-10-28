@@ -22,6 +22,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == "GET" {
+		if _, ok := s.webAuth(r); ok {
+			http.Redirect(w, r, s.consumeNextPath(w, r), http.StatusSeeOther)
+			return
+		}
 		s.renderLoginForm(w, http.StatusOK, "", r)
 		return
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
+	"github.com/privacyfence/peek/internal/models"
 	webui "github.com/privacyfence/peek/internal/web"
 )
 
@@ -89,7 +90,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		s.renderOAuthError(w, r, http.StatusBadGateway, "OAuth profile lookup failed.")
 		return
 	}
-	account, err := s.resolveOAuthAccount(r, profile)
+	account, created, err := s.resolveOAuthAccountCreated(r, profile)
 	if err != nil {
 		slog.Warn("oauth account resolution failed", "provider", p.Key, "err", err)
 		s.clearCookie(w, oauthCookieName(p.Key), "/oauth/"+p.Key)
@@ -105,8 +106,22 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	s.clearCookie(w, oauthCookieName(p.Key), "/oauth/"+p.Key)
 	s.clearCookie(w, inviteCookie, "/")
 	s.setWebSession(w, account)
-	s.audit("oauth login provider=%s account=%d email=%q", p.Key, account.ID, account.Email)
-	http.Redirect(w, r, s.consumeNextPath(w, r), http.StatusSeeOther)
+	s.audit("oauth login provider=%s account=%d email=%q created=%t", p.Key, account.ID, account.Email, created)
+	s.renderSignedIn(w, r, account, created)
+}
+
+// renderSignedIn answers a successful OAuth callback with a same-origin page
+// instead of a redirect: the callback is reached from the provider's site, and
+// browsers do not send the SameSite=Strict session cookie on a redirect in that
+// chain, so a 303 to the dashboard would arrive signed out.
+func (s *Server) renderSignedIn(w http.ResponseWriter, r *http.Request, account *models.Account, created bool) {
+	noCache(w)
+	w.Header().Set("Content-Security-Policy", webui.DashboardCSP)
+	s.renderHTML(w, http.StatusOK, webui.TemplateSignedIn, webui.SignedInData{
+		Next:    s.consumeNextPath(w, r),
+		Email:   account.Email,
+		Created: created,
+	})
 }
 
 func (s *Server) renderOAuthError(w http.ResponseWriter, r *http.Request, status int, msg string) {

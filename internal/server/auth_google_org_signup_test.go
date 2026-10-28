@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -200,8 +201,11 @@ func TestGoogleOrgCallbackProvisionsAndSignsIn(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: oauthCookieName("google"), Value: s.makeOAuthFlowCookie("google", "state-1", "verifier", "nonce-123")})
 	rec := httptest.NewRecorder()
 	s.handleOAuthCallback(rec, req)
-	if rec.Code != http.StatusSeeOther {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "Your Peek account is ready") || strings.Contains(body, `http-equiv="refresh"`) {
+		t.Fatalf("unexpected body: %s", body)
 	}
 	if findOAuthTestCookie(rec.Result().Cookies(), sessionCookie) == nil {
 		t.Fatal("session cookie not set")
@@ -263,5 +267,20 @@ func TestGoogleOrgInviteLinkRedirects(t *testing.T) {
 	assertDashboardRedirect(t, rec, "/login")
 	if findOAuthTestCookie(rec.Result().Cookies(), inviteCookie) != nil {
 		t.Fatal("invite cookie set while mode is on")
+	}
+}
+
+func TestResolveOAuthAccountCreatedReportsProvisioning(t *testing.T) {
+	s := newTestServer(t)
+	googleOrgOn(t, s, "example.com")
+	p := googleOrgProfile("new@example.com", "example.com")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	first, created, err := s.resolveOAuthAccountCreated(req, p)
+	if err != nil || first == nil || !created {
+		t.Fatalf("first: account=%v created=%v err=%v", first, created, err)
+	}
+	second, created, err := s.resolveOAuthAccountCreated(req, p)
+	if err != nil || second == nil || created || second.ID != first.ID {
+		t.Fatalf("second: account=%v created=%v err=%v", second, created, err)
 	}
 }

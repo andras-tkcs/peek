@@ -101,7 +101,7 @@ The key starts with `peekprov_` and is shown once; store it in the key holder's 
 
 ## Google Org Sign-In
 
-The `auth_google_org_signup` setting turns Peek into a "Google sign-in for the whole organization" server. While it is on, anyone who signs in with a Google Workspace account whose verified email is in the allowed email domain gets a Peek account on their first sign-in. No invite link is needed and nothing is emailed.
+The `auth_google_org_signup` setting turns Peek into a "Google sign-in for the whole organization" server. While it is on, anyone who signs in with a Google Workspace account whose verified email is in the allowed email domain gets a Peek account on their first sign-in. No invite link is needed and nothing is emailed. The first sign-in shows a short "Your Peek account is ready" page; Continue opens the dashboard.
 
 Requirements: Google login must be enabled with a client ID and secret, and `auth_allowed_email_domain` must be set. Peek refuses to save the mode otherwise, and it refuses `gmail.com` and `googlemail.com` as the allowed domain. While the mode is on you also cannot clear the domain, disable Google, or blank the Google client ID.
 

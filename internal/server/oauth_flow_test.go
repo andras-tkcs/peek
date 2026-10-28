@@ -190,8 +190,8 @@ func TestOAuthCovCallbackSuccessHonoursNextCookie(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec := oauthCovCallback(s, "github", "state=st&code=c", &http.Cookie{Name: nextCookie, Value: "/dashboard/keys"})
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/dashboard/keys" {
-		t.Fatalf("status=%d location=%q", rec.Code, rec.Header().Get("Location"))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `content="0;url=/dashboard/keys"`) {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if findOAuthTestCookie(rec.Result().Cookies(), sessionCookie) == nil {
 		t.Fatal("no session cookie")
