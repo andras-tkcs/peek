@@ -21,6 +21,7 @@ const (
 	TemplateCLILoginDone  = "cli-login-done"
 	TemplateCLILoginEntry = "cli-login-entry"
 	TemplateAPIKeyShown   = "api-key-shown"
+	TemplateSignedIn      = "signed-in"
 )
 
 // DashboardCSP is the Content-Security-Policy for the management UI.
@@ -309,6 +310,13 @@ type IndexData struct {
 type ErrorData struct {
 	Title   string
 	Message string
+}
+
+// SignedInData is the page the OAuth callback shows after a successful sign-in.
+type SignedInData struct {
+	Next    string // same-origin path, already checked by safeNextPath
+	Email   string
+	Created bool // the account was created by this sign-in
 }
 
 type CLILoginData struct {

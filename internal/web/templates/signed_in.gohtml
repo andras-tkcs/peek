@@ -1,0 +1,30 @@
+{{define "signed-in"}}<!doctype html>
+<html lang="en" class="bg-background text-foreground antialiased">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{{if not .Created}}<meta http-equiv="refresh" content="0;url={{.Next}}">{{end}}
+<title>Signed in &mdash; Peek</title>
+{{template "brand-head" .}}
+<link rel="stylesheet" href="{{asset "pines.css"}}">
+</head>
+<body class="min-h-screen">
+<header class="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+  <div class="mx-auto flex h-14 max-w-5xl items-center px-6">
+    {{template "brand-link" .}}
+  </div>
+</header>
+<main class="mx-auto max-w-5xl px-6 py-12">
+  <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+    {{if .Created}}
+    <h2 class="mb-4 text-lg font-semibold tracking-tight text-card-foreground">Your Peek account is ready</h2>
+    <p class="mb-6 text-sm text-muted-foreground">Your account for {{.Email}} was created and you are signed in.</p>
+    {{else}}
+    <h2 class="mb-4 text-lg font-semibold tracking-tight text-card-foreground">Signed in</h2>
+    <p class="mb-6 text-sm text-muted-foreground">Opening Peek…</p>
+    {{end}}
+    <p><a href="{{.Next}}" class="text-sm font-medium text-primary no-underline hover:underline">Continue</a></p>
+  </div>
+</main>
+</body>
+</html>{{end}}

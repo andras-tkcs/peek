@@ -29,57 +29,64 @@ func (s *Server) checkGoogleOrgProfile(ctx context.Context, profile *oauthProfil
 }
 
 // provisionGoogleOrgAccount creates the non-admin account for a first Google org sign-in.
-func (s *Server) provisionGoogleOrgAccount(ctx context.Context, profile *oauthProfile) (*models.Account, error) {
+// The bool is true only when this call created the account, false for the race fallback.
+func (s *Server) provisionGoogleOrgAccount(ctx context.Context, profile *oauthProfile) (*models.Account, bool, error) {
 	account, err := s.store.CreateAccount(ctx, profile.Email, profile.Name, false)
 	if err != nil {
 		// Two first sign-ins can race on the unique email.
 		if existing, lookupErr := s.store.GetAccountByEmail(ctx, profile.Email); lookupErr == nil && !existing.Disabled {
-			return existing, nil
+			return existing, false, nil
 		}
-		return nil, errors.New("account creation failed")
+		return nil, false, errors.New("account creation failed")
 	}
 	s.audit("account provisioned %s", auditDetail("provider", "google", "email", account.Email))
-	return account, nil
+	return account, true, nil
 }
 
+// resolveOAuthAccount is the form tests and older callers use; it drops the created flag.
 func (s *Server) resolveOAuthAccount(r *http.Request, profile *oauthProfile) (*models.Account, error) {
+	account, _, err := s.resolveOAuthAccountCreated(r, profile)
+	return account, err
+}
+
+func (s *Server) resolveOAuthAccountCreated(r *http.Request, profile *oauthProfile) (*models.Account, bool, error) {
 	if profile.ProviderUserID == "" || profile.Email == "" || !profile.EmailVerified {
-		return nil, errors.New("OAuth account must have a verified email")
+		return nil, false, errors.New("OAuth account must have a verified email")
 	}
 	if !s.accountAllowedByEmailDomain(r.Context(), profile.Email) {
-		return nil, errAccountNotEligible
+		return nil, false, errAccountNotEligible
 	}
 	if s.googleOrgSignupEnabled(r.Context()) {
 		if err := s.checkGoogleOrgProfile(r.Context(), profile); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	if oi, err := s.store.GetOAuthIdentity(r.Context(), profile.Provider, profile.ProviderUserID); err == nil {
 		account, err := s.store.GetAccountByID(r.Context(), oi.AccountID)
 		if err != nil {
-			return nil, errors.New("linked account not found")
+			return nil, false, errors.New("linked account not found")
 		}
 		if account.Disabled {
-			return nil, errors.New("account disabled")
+			return nil, false, errors.New("account disabled")
 		}
 		if !s.accountAllowedByEmailDomain(r.Context(), account.Email) {
-			return nil, errAccountNotEligible
+			return nil, false, errAccountNotEligible
 		}
-		return account, nil
+		return account, false, nil
 	} else if err != sql.ErrNoRows {
-		return nil, errors.New("OAuth lookup failed")
+		return nil, false, errors.New("OAuth lookup failed")
 	}
 
 	if account, err := s.store.GetAccountByEmail(r.Context(), profile.Email); err == nil {
 		if account.Disabled {
-			return nil, errors.New("account disabled")
+			return nil, false, errors.New("account disabled")
 		}
 		if !s.accountAllowedByEmailDomain(r.Context(), account.Email) {
-			return nil, errAccountNotEligible
+			return nil, false, errAccountNotEligible
 		}
-		return account, nil
+		return account, false, nil
 	} else if err != sql.ErrNoRows {
-		return nil, errors.New("account lookup failed")
+		return nil, false, errors.New("account lookup failed")
 	}
 
 	if s.googleOrgSignupEnabled(r.Context()) {
@@ -91,23 +98,23 @@ func (s *Server) resolveOAuthAccount(r *http.Request, profile *oauthProfile) (*m
 		inviteToken = c.Value
 	}
 	if inviteToken == "" {
-		return nil, errors.New("invite required")
+		return nil, false, errors.New("invite required")
 	}
 	inv, err := s.store.GetInviteByToken(r.Context(), inviteToken)
 	if err != nil {
-		return nil, errors.New("invite not found")
+		return nil, false, errors.New("invite not found")
 	}
 	if !invitePending(inv) || normalizeOAuthEmail(inv.Email) != profile.Email {
-		return nil, errors.New("invite does not match this account")
+		return nil, false, errors.New("invite does not match this account")
 	}
 	account, err := s.store.CreateAccount(r.Context(), profile.Email, profile.Name, false)
 	if err != nil {
-		return nil, errors.New("account creation failed")
+		return nil, false, errors.New("account creation failed")
 	}
 	if err := s.store.ConsumeInvite(r.Context(), inv.ID); err != nil {
-		return nil, errors.New("invite consumption failed")
+		return nil, false, errors.New("invite consumption failed")
 	}
-	return account, nil
+	return account, true, nil
 }
 
 func invitePending(inv *models.Invite) bool {

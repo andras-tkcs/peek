@@ -19,6 +19,7 @@ func TestRendererExecutesAllTemplates(t *testing.T) {
 		data any
 		want string
 	}{
+		{name: TemplateSignedIn, data: SignedInData{Next: "/dashboard"}, want: "Opening Peek"},
 		{
 			name: TemplateSetup,
 			data: SetupData{CSRF: "csrf", Code: "code"},
@@ -825,5 +826,57 @@ func TestAdminProvisionersCardRenders(t *testing.T) {
 	empty, err := renderer.Execute(TemplateAdmin, AdminData{CSRF: "csrf", User: "Admin"})
 	if err != nil || !strings.Contains(string(empty), "No provisioning keys.") {
 		t.Fatalf("empty state missing: %v", err)
+	}
+}
+
+func TestSignedInTemplate(t *testing.T) {
+	renderer, err := newRenderer(func(name string) string {
+		return "/" + name + "?v=test"
+	})
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	tests := []struct {
+		name    string
+		data    SignedInData
+		want    []string
+		notWant []string
+	}{
+		{
+			name: "existing",
+			data: SignedInData{Created: false, Next: "/p/abc?x=1&y=2"},
+			want: []string{`<meta http-equiv="refresh" content="0;url=/p/abc?x=1&amp;y=2">`, "Opening Peek"},
+		},
+		{
+			name:    "created",
+			data:    SignedInData{Created: true, Next: "/dashboard", Email: "new@example.com"},
+			want:    []string{"Your Peek account is ready", "new@example.com"},
+			notWant: []string{`http-equiv="refresh"`},
+		},
+		{
+			name:    "unsafe next",
+			data:    SignedInData{Created: false, Next: "javascript:alert(1)"},
+			want:    []string{`content="0;url=#ZgotmplZ"`, `href="#ZgotmplZ"`},
+			notWant: []string{"javascript:"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := renderer.Execute(TemplateSignedIn, tt.data)
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			body := string(out)
+			for _, w := range tt.want {
+				if !strings.Contains(body, w) {
+					t.Errorf("body missing %q:\n%s", w, body)
+				}
+			}
+			for _, w := range tt.notWant {
+				if strings.Contains(body, w) {
+					t.Errorf("body contains %q", w)
+				}
+			}
+		})
 	}
 }

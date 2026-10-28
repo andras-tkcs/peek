@@ -448,3 +448,34 @@ func TestLoginWithTokenRefusesProvisionedToken(t *testing.T) {
 		t.Fatalf("ordinary token: %v, %v", a, err)
 	}
 }
+
+func TestLoginGETWithSessionRedirects(t *testing.T) {
+	s, _, id := newWebLoginTestServer(t)
+	session := &http.Cookie{Name: sessionCookie, Value: makeWebSession(s.secret, sessionSubject(id, 0), sessionTTL)}
+	tests := []struct {
+		name    string
+		cookies []*http.Cookie
+		want    string
+	}{
+		{"session", []*http.Cookie{session}, "/dashboard"},
+		{"session and next", []*http.Cookie{session, {Name: nextCookie, Value: "/cli-login"}}, "/cli-login"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/login", nil)
+			for _, c := range tt.cookies {
+				req.AddCookie(c)
+			}
+			rec := httptest.NewRecorder()
+			s.handleLogin(rec, req)
+			assertDashboardRedirect(t, rec, tt.want)
+		})
+	}
+	t.Run("no session", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		s.handleLogin(rec, httptest.NewRequest(http.MethodGet, "/login", nil))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `name="csrf"`) {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+}

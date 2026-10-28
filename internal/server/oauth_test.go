@@ -350,8 +350,8 @@ func TestOIDCCallbackWithFakeSSOServerCreatesSessionAndConsumesInvite(t *testing
 
 	s.handleOAuthCallback(rec, req)
 
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/dashboard" {
-		t.Fatalf("callback status=%d location=%q body=%s", rec.Code, rec.Header().Get("Location"), rec.Body.String())
+	if body := rec.Body.String(); rec.Code != http.StatusOK || !strings.Contains(body, "Your Peek account is ready") || !strings.Contains(body, `href="/dashboard"`) {
+		t.Fatalf("callback status=%d body=%s", rec.Code, body)
 	}
 	if !fake.sawToken.Load() {
 		t.Fatal("fake SSO token endpoint was not called")
