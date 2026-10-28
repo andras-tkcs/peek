@@ -165,6 +165,7 @@
       allowAnonymousComment: false,
       frameLoads: 0,
       fetchInFlight: 0,
+      reloadPending: false,
 
       init() {
         const dataset = document.body ? document.body.dataset : {};
@@ -184,6 +185,36 @@
         this.bindKeyboard();
         this.loadComments();
         this.loadViews();
+        if (dataset.live === "1") this.watchVersions();
+      },
+
+      // watchVersions reloads the page when a newer version is uploaded. Only the
+      // latest-version link (/p/{slug}) is live; a /v/{n} link stays put.
+      watchVersions() {
+        if (!this.slug || typeof EventSource !== "function") return;
+        const source = new EventSource("/api/uploads/" + this.slug + "/events");
+        source.addEventListener("version", (ev) => {
+          if ((Number(ev.data) || 0) <= this.version) return;
+          source.close();
+          this.reloadPending = true;
+          this.reloadWhenIdle();
+        });
+        const retry = () => this.reloadWhenIdle();
+        document.addEventListener("visibilitychange", retry);
+        this.$watch("composerOpen", retry);
+        this.$watch("nameModalOpen", retry);
+        this.$watch("nameInput", retry);
+        this.$watch("commentMode", retry);
+      },
+
+      // reloadWhenIdle waits while the tab is hidden or the viewer is writing a
+      // comment, so a reload never throws away unsent text.
+      reloadWhenIdle() {
+        if (!this.reloadPending) return;
+        const typingName = this.nameModalOpen && this.nameInput.trim() !== "";
+        if (document.hidden || this.composerOpen || typingName || this.commentMode) return;
+        this.reloadPending = false;
+        window.location.reload();
       },
 
       loadComments() {

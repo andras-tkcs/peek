@@ -6,6 +6,8 @@ Peek is intended to be run by one company or trusted team as internal infrastruc
 
 Run `peekd` behind a TLS-terminating reverse proxy such as Caddy, nginx, Traefik, or your platform ingress. Set `--base-url` / `PEEK_BASE_URL` to the externally visible `https://...` URL so generated links, secure cookies, and HSTS are correct.
 
+Viewer pages hold an open Server-Sent Events connection (`/api/uploads/<slug>/events`, keep-alive every 20 seconds) and reload when a new version is uploaded. The proxy must not buffer `text/event-stream` responses and must allow idle reads of at least 30 seconds; nginx honours the `X-Accel-Buffering: no` header Peek sends. Peek caps open streams at 1000 per process; viewers over the cap get the page without live reload. Shutdown closes the streams at once, and browsers reconnect when Peek is back.
+
 Use one primary `peekd` process per data directory. Peek stores mutable state in SQLite plus uploaded objects. Horizontal scaling is not the default operating model; if the project ever needs that, the storage, session, and migration model should be revisited deliberately instead of hidden behind ad hoc process replication.
 
 ## Persistent State
@@ -150,7 +152,11 @@ Peek logs structured JSON to stderr. Set `PEEK_LOG_LEVEL=debug`, `info`, or `war
 
 Before upgrading, take a SQLite backup and confirm you know where uploaded object bytes live. Run the new binary against a staging copy of the data directory when changing storage, auth, retention, or database-related code. Security fixes and how to report a vulnerability: [SECURITY.md](../SECURITY.md).
 
-### Unreleased
+### v0.16.0
+
+Viewer pages keep a Server-Sent Events connection open to `/api/uploads/<slug>/events` and reload when a new version is uploaded. No migration; a rollback only turns live reload off. A reverse proxy that buffers responses delays the events until its buffer fills, so make sure it does not buffer `text/event-stream` (nginx honours the `X-Accel-Buffering: no` header Peek sends) and allows idle reads of at least 30 seconds.
+
+### v0.15.1
 
 The container image moved to `ghcr.io/privacyfence/peek`; `ghcr.io/andras-tkcs/peek` receives no new tags. Change the image in your compose file or unit before pulling, and verify attestations with `gh attestation verify ... -R privacyfence/peek`. The data volume and its layout are unchanged.
 

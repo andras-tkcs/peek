@@ -57,6 +57,8 @@ peek versions <slug>
 
 `/p/<slug>` always serves the latest version and `/p/<slug>/v/<n>` serves a specific one, with a banner linking to the latest. Visibility and name stay as they were. Comments belong to the version they were written on.
 
+Anyone who has `/p/<slug>` open sees a new version as soon as it is uploaded: the page reloads by itself. It waits while the tab is in the background or the viewer is writing a comment, so unsent text is never lost. `/p/<slug>/v/<n>` links never reload.
+
 ## Add A Backend
 
 A page is one HTML file in a sandboxed iframe, so it cannot send email, keep data or use a secret by itself. If your admin has turned on page backends, you can attach a Docker image to a page version and call it from the page:

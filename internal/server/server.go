@@ -99,6 +99,8 @@ type Server struct {
 	backends       *backends.Manager // nil = page backends are off
 	backendLimiter *limiter
 	backendClient  *http.Client
+
+	pageEvents pageEventHub
 }
 
 func New(cfg Config) (*Server, error) {

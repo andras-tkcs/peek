@@ -298,6 +298,8 @@ type PageData struct {
 	Visibility    string
 	Version       int
 	LatestVersion int
+	// Live makes the page reload itself when a new version is uploaded.
+	Live bool
 }
 
 type IndexData struct {

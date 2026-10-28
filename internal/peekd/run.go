@@ -369,6 +369,9 @@ func runServe(cfg serveConfig) int {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+	// Live-reload streams stay open while a viewer has a page open; end them so
+	// Shutdown does not wait for viewers to leave.
+	hs.RegisterOnShutdown(srv.CloseEventStreams)
 
 	serverErr := make(chan error, 1)
 	go func() {

@@ -25,7 +25,7 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 		s.renderWebError(w, http.StatusNotFound, "Page not found", "This shared page does not exist or is no longer available.")
 		return
 	}
-	s.servePage(w, r, u, u.LatestVersion, "/p/"+slug)
+	s.servePage(w, r, u, u.LatestVersion, "/p/"+slug, true)
 }
 
 // redirectRenamedPage sends an old link to the page's current link. 302, not 301:
@@ -58,7 +58,7 @@ func (s *Server) handlePageVersion(w http.ResponseWriter, r *http.Request) {
 		s.renderVersionNotFound(w)
 		return
 	}
-	s.servePage(w, r, u, n, "/p/"+slug+"/v/"+strconv.Itoa(n))
+	s.servePage(w, r, u, n, "/p/"+slug+"/v/"+strconv.Itoa(n), false)
 }
 
 func (s *Server) renderVersionNotFound(w http.ResponseWriter) {
@@ -77,7 +77,9 @@ func (s *Server) parseExistingVersion(r *http.Request, u *models.Upload) (int, b
 	return n, true
 }
 
-func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upload, version int, pagePath string) {
+// servePage renders the viewer page. live is true for the latest-version link,
+// which reloads itself when a new version is uploaded; a /v/{n} link stays put.
+func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upload, version int, pagePath string, live bool) {
 	slug := u.Slug
 	pageQuery := pagePath
 	if r.URL.RawQuery != "" {
@@ -123,7 +125,7 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 	d := pageData{
 		Name: u.Name, Slug: slug,
 		RawURL: rawURL, FrameURL: frameURL(rawURL, r.URL.RawQuery), Visibility: u.Visibility,
-		Version: version, LatestVersion: u.LatestVersion,
+		Version: version, LatestVersion: u.LatestVersion, Live: live,
 	}
 	w.Header().Set("Content-Security-Policy", webui.PageCSP)
 	s.renderHTML(w, http.StatusOK, webui.TemplatePage, d)
