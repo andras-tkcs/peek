@@ -301,6 +301,14 @@ type PageData struct {
 	LatestVersion int
 	// Live makes the page reload itself when a new version is uploaded.
 	Live bool
+	// IconURL is the page's own favicon route; empty when the page declares none.
+	IconURL string
+	// AppleIconURL is IconURL when iOS can use it as a home-screen icon (not SVG).
+	AppleIconURL string
+	// ThemeColor is the page's theme-color meta value, a validated hex color.
+	ThemeColor string
+	// ManifestURL is the web app manifest route; empty on pinned-version links.
+	ManifestURL string
 }
 
 type IndexData struct {

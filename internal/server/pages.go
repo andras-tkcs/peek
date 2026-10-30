@@ -127,6 +127,7 @@ func (s *Server) servePage(w http.ResponseWriter, r *http.Request, u *models.Upl
 		RawURL: rawURL, FrameURL: frameURL(rawURL, r.URL.RawQuery), Visibility: u.Visibility,
 		Version: version, LatestVersion: u.LatestVersion, Live: live,
 	}
+	s.applyPageMeta(r, &d, u, version, live)
 	w.Header().Set("Content-Security-Policy", webui.PageCSP)
 	s.renderHTML(w, http.StatusOK, webui.TemplatePage, d)
 }
