@@ -57,6 +57,8 @@ func (s *Server) Handler() http.Handler {
 	// Pages & assets.
 	mux.HandleFunc("GET /p/{slug}", s.handlePage)
 	mux.HandleFunc("GET /p/{slug}/v/{n}", s.handlePageVersion)
+	mux.HandleFunc("GET /p/{slug}/icon", s.handlePageIcon)
+	mux.HandleFunc("GET /p/{slug}/manifest.webmanifest", s.handlePageManifest)
 	mux.HandleFunc("GET /raw/{slug}/v/{n}", s.handleRawVersion)
 	mux.HandleFunc("GET /bridge.js", s.handleBridge)
 	mux.HandleFunc("GET /app.js", s.handleApp)

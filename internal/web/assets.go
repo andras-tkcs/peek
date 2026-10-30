@@ -27,6 +27,8 @@ var assetManifest = map[string]embeddedAsset{
 	"favicon.svg":         {path: "assets/favicon.svg", contentType: "image/svg+xml"},
 	"favicon.png":         {path: "assets/favicon.png", contentType: "image/png"},
 	"favicon.ico":         {path: "assets/favicon.ico", contentType: "image/x-icon"},
+	"icon-192.png":        {path: "assets/icon-192.png", contentType: "image/png"},
+	"icon-512.png":        {path: "assets/icon-512.png", contentType: "image/png"},
 	"logo.svg":            {path: "assets/logo.svg", contentType: "image/svg+xml"},
 	"logo.png":            {path: "assets/logo.png", contentType: "image/png"},
 }

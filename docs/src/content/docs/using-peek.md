@@ -100,6 +100,19 @@ peek.setParams("region=eu&q=sales");       // a string replaces all params
 
 Peek mirrors the params into the query string of `/p/<slug>` and hands them back to the page on load, so `peek.params` is ready before the page's own scripts run. Assigning `location.hash` inside the page works too. The query string is limited to 2048 characters; `setParams` returns `false` and changes nothing when it is longer.
 
+## Install A Page As An App
+
+Every page link can be added to a phone's home screen. Peek serves a web app manifest for the latest-version link `/p/<slug>`, so Chrome on Android offers **Install app** and Safari on iOS (Share, then **Add to Home Screen**) opens it full screen. Chrome on iOS cannot install web apps; use Safari. Peek must be served over HTTPS, and viewers of non-public pages sign in again inside the installed app on some iOS versions.
+
+A page chooses its own icon and color from its `<head>`:
+
+```html
+<link rel="icon" href="data:image/png;base64,iVBORw0KGgo...">
+<meta name="theme-color" content="#0b2f63">
+```
+
+The icon must be a `data:` URI (PNG, SVG, JPEG, GIF or WebP), up to 256 KB decoded, because an upload is a single file and Peek does not load remote icon URLs. Use an SVG or a PNG of at least 512x512 for Android installs, and a PNG of at least 180x180 for the iOS home screen, which ignores SVG. A `rel="apple-touch-icon"` data URI is used when there is no `rel="icon"`. Pages without an icon use Peek's. The app name is the page name, and the theme color must be a hex color. The icon also becomes the browser tab favicon.
+
 ## Review In Context
 
 Open `/p/<slug>`. Peek keeps the uploaded page full-screen and adds a small toolbar for comments, view count, and the comments panel. Use the chevron button at the end of the toolbar to hide it while reading; press Shift+H to bring it back (or hide it again). Reloading the page always shows the toolbar.

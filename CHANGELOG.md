@@ -4,6 +4,10 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ## [Unreleased]
 
+### Added
+
+- Pages can be installed as apps from a phone's home screen (Chrome on Android, Safari on iOS): each page link serves a web app manifest. A page sets its own favicon and theme color with a `data:` URI `<link rel="icon">` and `<meta name="theme-color">` in its head; the icon also becomes the tab favicon.
+
 ## [0.16.1] - 2026-10-28
 
 ### Fixed

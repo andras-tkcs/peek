@@ -5,7 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <title>{{.Name}} &mdash; Peek</title>
-{{template "brand-head" .}}
+{{if .IconURL}}<link rel="icon" href="{{.IconURL}}">
+{{if .AppleIconURL}}<link rel="apple-touch-icon" href="{{.AppleIconURL}}">{{end}}
+{{else}}{{template "brand-head" .}}{{end}}
+{{if .ThemeColor}}<meta name="theme-color" content="{{.ThemeColor}}">{{end}}
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="{{.Name}}">
+{{if .ManifestURL}}<link rel="manifest" href="{{.ManifestURL}}" crossorigin="use-credentials">{{end}}
 <link rel="stylesheet" href="{{asset "pines.css"}}">
 <script src="{{asset "toast.js"}}" defer></script>
 <script src="{{asset "app.js"}}" defer></script>
