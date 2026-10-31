@@ -92,6 +92,9 @@ func (s *Server) resolveOAuthAccountCreated(r *http.Request, profile *oauthProfi
 	if s.googleOrgSignupEnabled(r.Context()) {
 		return s.provisionGoogleOrgAccount(r.Context(), profile)
 	}
+	if profile.Provider == "oidc" && s.oidcSignupEnabled(r.Context()) {
+		return s.provisionOIDCSignupAccount(r.Context(), profile)
+	}
 
 	inviteToken := ""
 	if c, err := r.Cookie(inviteCookie); err == nil {

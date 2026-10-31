@@ -184,13 +184,14 @@ type EmailSettings struct {
 }
 
 type AuthSettings struct {
-	Token     SettingRow
-	Domain    SettingRow
-	GoogleOrg SettingRow
-	Google    OAuthProviderSettings
-	GitHub    OAuthProviderSettings
-	OIDC      OAuthProviderSettings
-	Providers []OAuthProviderSettings
+	Token      SettingRow
+	Domain     SettingRow
+	GoogleOrg  SettingRow
+	OIDCSignup SettingRow
+	Google     OAuthProviderSettings
+	GitHub     OAuthProviderSettings
+	OIDC       OAuthProviderSettings
+	Providers  []OAuthProviderSettings
 }
 
 type OAuthProviderSettings struct {

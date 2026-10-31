@@ -179,6 +179,17 @@
           </span>
         </label>
 
+        <label class="peek-setting-switch">
+          <span class="peek-switch-control">
+            <input type="checkbox" role="switch" name="{{.SettingsPanel.Auth.OIDCSignup.Key}}" value="true" {{if .SettingsPanel.Auth.OIDCSignup.Value}}checked{{end}} class="peek-switch-input">
+            <span class="peek-switch-track" aria-hidden="true"><span class="peek-switch-thumb"></span></span>
+          </span>
+          <span class="flex min-w-0 flex-col gap-1">
+            <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Auth.OIDCSignup.Label}}</span>
+            <span class="text-xs text-muted-foreground">{{.SettingsPanel.Auth.OIDCSignup.Description}}</span>
+          </span>
+        </label>
+
         {{range .SettingsPanel.Auth.Providers}}
         {{$providerKey := .Key}}
         <div class="peek-provider-settings">

@@ -880,3 +880,26 @@ func TestSignedInTemplate(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminOIDCSignupSwitchRenders(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("new renderer: %v", err)
+	}
+	body, err := renderer.Execute(TemplateAdmin, AdminData{
+		CSRF: "csrf",
+		User: "Admin",
+		SettingsPanel: DashboardSettings{Auth: AuthSettings{
+			OIDCSignup: SettingRow{Key: "auth_oidc_signup", Label: "SSO sign-up", Description: "Creates the account", Value: "true"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("execute admin: %v", err)
+	}
+	html := string(body)
+	for _, want := range []string{`name="auth_oidc_signup" value="true" checked`, "SSO sign-up", "Creates the account"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("admin page missing %q: %s", want, html)
+		}
+	}
+}
