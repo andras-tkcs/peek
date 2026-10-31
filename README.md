@@ -76,7 +76,7 @@ docker run -d --name peek -p 7700:7700 \
   -e PEEK_BASE_URL=https://peek.example.com \
   ghcr.io/privacyfence/peek:latest
 ```
-For production, pin a release tag (`ghcr.io/privacyfence/peek:<version>`) or an image digest (`ghcr.io/privacyfence/peek@sha256:…`). The `/data` volume holds the database, uploads, and signing key. On first run Peek prints a one-time setup URL. The image is `scratch`-based, multi-arch (`amd64`/`arm64`), runs as uid 65532.
+For production, pin a release tag (`ghcr.io/privacyfence/peek:<version>`) or an image digest (`ghcr.io/privacyfence/peek@sha256:…`). The `/data` volume holds the database, uploads, and signing key. On first run Peek prints a one-time setup URL, or starts fully configured from environment variables (see [First Run](docs/operations.md#first-run-and-access)). The image is `scratch`-based, multi-arch (`amd64`/`arm64`), runs as uid 65532.
 
 ```sh
 docker compose up -d

@@ -79,6 +79,20 @@ The same rule applies to API tokens of accounts with an email: while OAuth is en
 
 Organizations that only use Google Workspace can skip invites entirely with [Google org sign-in](#google-org-sign-in).
 
+## Configure sign-in from the environment
+
+A server can start already set up, with no `/setup` code and no clicks on the Admin page, by setting variables (or the matching flags, see the [reference](/peek/docs/reference/#server-parameters)). A minimal example is in [First Run](/peek/docs/server-setup/#first-run).
+
+**Locked settings.** Setting `PEEK_GOOGLE_CLIENT_ID`, `PEEK_GOOGLE_CLIENT_SECRET`, `PEEK_OIDC_ISSUER_URL`, `PEEK_OIDC_CLIENT_ID`, `PEEK_OIDC_CLIENT_SECRET` or `PEEK_ALLOWED_EMAIL_DOMAIN` locks the matching setting; `PEEK_GOOGLE_ORG_SIGNUP` and `PEEK_OIDC_SIGNUP` lock theirs only when true. A client ID or issuer also turns that provider on. Client and issuer variables come in pairs: Google needs its ID and secret, SSO needs issuer, ID and secret, and Peek refuses to start otherwise. Secrets can come from `PEEK_GOOGLE_CLIENT_SECRET_FILE` and `PEEK_OIDC_CLIENT_SECRET_FILE`. Peek writes the values to its settings at every start, so the environment always wins, and the settings are validated like Admin-page edits (for example, a sign-up needs an allowed domain). A locked setting is shown disabled on the Admin page with "Set by <variable> on the server", `GET /api/settings` reports `locked_by`, and `PUT /api/settings` refuses it with 400 `<key> is set by <variable> on the server`. The dashboard form ignores locked keys. Removing a variable does not clear anything: the last value stays in the database and becomes editable on the Admin page. For example, Google login stays enabled.
+
+**SSO sign-up.** With `PEEK_OIDC_SIGNUP=true` (the `auth_oidc_signup` setting), the first SSO sign-in of anyone whose email is in the allowed domain creates a non-admin account, without an invite. It needs SSO login with issuer and client credentials and an allowed email domain. It cannot be combined with Google org sign-in: setting both fails at start with `PEEK_OIDC_SIGNUP: auth_oidc_signup cannot be used with auth_google_org_signup`.
+
+**Admins by email.** `PEEK_ADMIN_EMAILS` is a comma-separated list. Peek refuses to start on an invalid entry, on an entry outside a locked allowed domain, or without a Google or SSO sign-in set in the environment for the admins to use. At every Google or SSO sign-in with a verified email that is on the list, the account becomes an admin (and is created first if it does not exist); GitHub sign-in is never promoted. Because this runs at every sign-in, demoting someone on the Admin page does not last while they stay listed: remove them from the list first. A provisioned account that is promoted this way loses its provisioned token at once, and later provisioning of it answers 409. Promotion trusts the identity provider's `email_verified` claim, so list only addresses your provider verifies. An issuer over plain `http` sends the token exchange unencrypted and is acceptable only on `localhost`.
+
+**When `/setup` is skipped.** Peek skips the first-run `/setup` page when `PEEK_ADMIN_EMAILS` is set, or when Google or SSO sign-in is set in the environment and accounts can come from a sign-up or from `PEEK_PROVISIONING_KEY_FILE`. It prints `Peek first-run setup is skipped: <reason>.` and writes no setup code. When Google or SSO sign-in is set in the environment but none of those is, Peek refuses to start with `with sign-in from the environment, set PEEK_ADMIN_EMAILS, a sign-up (PEEK_GOOGLE_ORG_SIGNUP or PEEK_OIDC_SIGNUP) or PEEK_PROVISIONING_KEY_FILE, or nobody can get in`. With neither, `/setup` works as before.
+
+**Issuer on localhost.** Peek fetches `<issuer>/.well-known/openid-configuration` from its own process at every login, and the issuer in the tokens must match exactly. An issuer at `http://localhost:...` therefore works only when Peek shares the issuer's network namespace; the failure shows at login, not at start. A plain-http or private issuer also needs `PEEK_OIDC_ALLOW_PRIVATE_ISSUER=true`.
+
 ## Provisioning Keys
 
 A provisioner is a named key holder, such as PrivacyFence running in organization mode, that may create accounts, adopt existing ones and mint one API token per account it manages, without each person doing a device sign-in. An admin creates its provisioning key on the command line:
@@ -96,6 +110,8 @@ The key starts with `peekprov_` and is shown once; store it in the key holder's 
 **Created and adopted accounts.** If no account has the asserted email, Peek creates a normal non-admin account. If one exists, Peek adopts it and leaves its name, pages and own API keys alone. A disabled account is adopted too, but no token is minted for it. Either way the person signs in to Peek through OAuth like anyone else and keeps their pages when the key is revoked.
 
 **Tokens.** The key holder mints one token per account (90 days by default, up to 365); minting again replaces the previous one. The token appears in the person's own API key list under the provisioner's name. Only the provisioner's own token is exempt from "must sign in with OAuth": the person's other keys follow the normal rule, and the disabled and allowed-domain checks still apply to the provisioned token. Provisioned tokens cannot open a dashboard session.
+
+**Key from a file.** `PEEK_PROVISIONING_KEY_FILE` holds a key (starting with `peekprov_`, at least 40 characters) that Peek registers at every start under `PEEK_PROVISIONING_KEY_NAME` (default `PrivacyFence`), so nobody runs `peek provisioner create`; it works with no admin account. To rotate, replace the file's content and restart: Peek updates the key of that provisioner in place, and its tokens and links are kept. The Admin page shows no Revoke button for this provisioner, and its revoke action is refused; replace the file instead. If the name matches more than one provisioner, Peek refuses to start until the extra ones are revoked on the Admin page.
 
 **Revoking and releasing.** Revoking a key deletes every token it minted and removes its links; the accounts and their pages stay. Releasing a single account does the same for that account alone. Peek never connects to the key holder: it only answers requests, so it keeps working when the key holder is down.
 
@@ -194,6 +210,7 @@ Peek records security-relevant events in an audit log stored in SQLite: sign-ins
 | `auth_token_login_enabled` | Runtime setting | Allows dashboard login with access tokens when OAuth is not required. |
 | `auth_allowed_email_domain` | Runtime setting | Optional exact email domain for human sign-in, invites, and CLI browser approval. |
 | `auth_google_org_signup` | Runtime setting | Google-only sign-in that creates accounts on first sign-in for Google Workspace users in the allowed domain; invites are inactive. Requires Google login and an allowed domain. |
+| `auth_oidc_signup` | Runtime setting | SSO sign-up: creates accounts on the first SSO sign-in of anyone in the allowed domain. Requires SSO login and an allowed domain; cannot be combined with Google org sign-in. |
 | `oauth_google_enabled` | Runtime setting | Enables Google login when credentials are present. |
 | `oauth_google_client_id` | Runtime setting | Google OAuth web client ID. |
 | `oauth_google_client_secret` | Runtime setting | Google OAuth web client secret; leave blank in the dashboard to keep the current secret. |
