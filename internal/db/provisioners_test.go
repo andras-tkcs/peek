@@ -198,3 +198,39 @@ func TestProvisionerWriteMethodsReportFaults(t *testing.T) {
 		wantErr(t, "Delete", s.DeleteProvisioner(ctx, 1), errClosed)
 	})
 }
+
+func TestRotateProvisionerKeyKeepsLinksAndTokens(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	provID, acctID, tokenID := seedLink(t, s, "PF", "peekprov_old-key-0001", "e1", "a@x.test")
+	newKey := "peekprov_new-key-9999"
+	if err := s.RotateProvisionerKey(ctx, provID, newKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetProvisionerByKey(ctx, "peekprov_old-key-0001"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("old key still resolves: %v", err)
+	}
+	p, err := s.GetProvisionerByKey(ctx, newKey)
+	if err != nil || p.ID != provID || p.Hint != "9999" {
+		t.Fatalf("new key = %+v, %v", p, err)
+	}
+	list, err := s.ListProvisioners(ctx)
+	if err != nil || len(list) != 1 || list[0].Accounts != 1 {
+		t.Fatalf("links lost: %+v, %v", list, err)
+	}
+	var gotAcct, gotToken int64
+	if err := s.QueryRow(`SELECT account_id, token_id FROM provisioned_accounts WHERE provisioner_id=?`, provID).Scan(&gotAcct, &gotToken); err != nil {
+		t.Fatal(err)
+	}
+	if gotAcct != acctID || gotToken != tokenID {
+		t.Fatalf("link = account %d token %d, want %d / %d", gotAcct, gotToken, acctID, tokenID)
+	}
+	var n int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM tokens WHERE id=?`, tokenID).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("token gone: %d, %v", n, err)
+	}
+	if err := s.RotateProvisionerKey(ctx, 9999, "peekprov_x"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("unknown id err = %v", err)
+	}
+}

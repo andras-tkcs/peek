@@ -62,6 +62,16 @@ func (s *Store) ListProvisioners(ctx context.Context) ([]models.Provisioner, err
 	return out, rows.Err()
 }
 
+// RotateProvisionerKey replaces a provisioner's key in place. Its links, tokens
+// and accounts are kept. sql.ErrNoRows when unknown.
+func (s *Store) RotateProvisionerKey(ctx context.Context, id int64, key string) error {
+	res, err := s.ExecContext(ctx, `UPDATE provisioners SET key_hash=?, hint=? WHERE id=?`, HashToken(key), nullableHint(key), id)
+	if err != nil {
+		return err
+	}
+	return requireRowsAffected(res)
+}
+
 // TouchProvisionerLastUsed records a use at now.
 func (s *Store) TouchProvisionerLastUsed(ctx context.Context, id int64, now time.Time) error {
 	_, err := s.ExecContext(ctx, `UPDATE provisioners SET last_used_at=? WHERE id=?`, now.Unix(), id)

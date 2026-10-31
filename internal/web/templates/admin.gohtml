@@ -119,12 +119,16 @@
           <td class="px-3 text-muted-foreground">{{.LastUsed}}</td>
           <td class="px-3 text-muted-foreground">{{.Accounts}}</td>
           <td class="px-3">
+            {{if .FromFile}}
+            <span class="text-xs text-muted-foreground">Registered from PEEK_PROVISIONING_KEY_FILE: replace the file and restart to rotate it.</span>
+            {{else}}
             <div class="peek-row-actions">
               <form method="POST" action="/dashboard/provisioners/{{.ID}}/revoke" class="m-0">
                 <input type="hidden" name="csrf" value="{{$.CSRF}}">
                 <button type="submit" class="peek-row-button peek-row-button-danger">Revoke</button>
               </form>
             </div>
+            {{end}}
           </td>
         </tr>
       {{end}}

@@ -62,6 +62,11 @@ type Config struct {
 	// every start and refused by the settings writers.
 	LockedSettings map[string]LockedSetting
 
+	// ProvisioningKey, when set, is registered as a provisioner called
+	// ProvisioningKeyName at every start (see seedProvisioner).
+	ProvisioningKey     string
+	ProvisioningKeyName string
+
 	// BackendRuntime is the container engine for page backends; nil turns the
 	// feature off. BackendNetwork is the network their containers join.
 	BackendRuntime backends.Runtime
@@ -69,14 +74,16 @@ type Config struct {
 }
 
 type Server struct {
-	locked   map[string]LockedSetting
-	store    *db.Store
-	secret   string
-	baseURL  string
-	dataDir  string
-	storage  objectstore.Storage
-	renderer *webui.Renderer
-	secure   bool
+	locked map[string]LockedSetting
+	// provisioningKeyName is the provisioner registered from the environment, or "".
+	provisioningKeyName string
+	store               *db.Store
+	secret              string
+	baseURL             string
+	dataDir             string
+	storage             objectstore.Storage
+	renderer            *webui.Renderer
+	secure              bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -239,6 +246,7 @@ func New(cfg Config) (*Server, error) {
 		s3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		oidcAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
 		locked:                 cfg.LockedSettings,
+		provisioningKeyName:    fileProvisionerName(cfg),
 		visitQueue:             make(chan visitEvent, 256),
 		backendLimiter:         newLimiter(240, time.Minute),
 		backendClient: &http.Client{
@@ -249,6 +257,10 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	if err := srv.applyLockedSettings(startupCtx); err != nil {
+		cancel()
+		return nil, err
+	}
+	if err := srv.seedProvisioner(startupCtx, cfg.ProvisioningKeyName, cfg.ProvisioningKey); err != nil {
 		cancel()
 		return nil, err
 	}
