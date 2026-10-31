@@ -36,6 +36,22 @@ peekd --addr :7700 --data ./data --base-url http://localhost:7700
 
 On a new data directory, `peekd` prints a one-time setup URL. Open it and create the first admin account. After that account exists, setup closes.
 
+To start fully configured from the environment, with no setup code and no clicks on the Admin page, set the sign-in and the admins instead. Secrets come from files:
+
+```sh
+PEEK_BASE_URL=https://peek.example.com \
+PEEK_OIDC_ISSUER_URL=https://sso.example.com/oidc \
+PEEK_OIDC_CLIENT_ID=peek \
+PEEK_OIDC_CLIENT_SECRET_FILE=/run/secrets/peek_oidc_secret \
+PEEK_ALLOWED_EMAIL_DOMAIN=example.com \
+PEEK_OIDC_SIGNUP=true \
+PEEK_ADMIN_EMAILS=alice@example.com \
+PEEK_PROVISIONING_KEY_FILE=/run/secrets/peek_provisioning_key \
+peekd --data ./data
+```
+
+Those sign-in settings are then locked on the Admin page, `/setup` is skipped, and `alice@example.com` becomes admin at the first SSO sign-in. See [Configure sign-in from the environment](/peek/docs/auth-access/#configure-sign-in-from-the-environment).
+
 The data directory stores the SQLite database, signing/encryption secret, and file-backed uploads when file storage is selected. Do not treat it as disposable.
 
 ## Production Shape

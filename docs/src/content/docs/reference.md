@@ -29,6 +29,17 @@ kicker: peekd reference
 | `--google-admin-email` | `PEEK_GOOGLE_ADMIN_EMAIL` | empty | Workspace admin user the service account impersonates. Requires `--google-sa-key-file`. |
 | `--google-group-cache-ttl` | `PEEK_GOOGLE_GROUP_CACHE_TTL` | `5m` | How long group membership answers are cached. Between `1s` and `1h`. |
 | `--oidc-allow-private-issuer` | `PEEK_OIDC_ALLOW_PRIVATE_ISSUER` | `false` | Allows HTTP/private OIDC issuers for local SSO testing. |
+| `--google-client-id` | `PEEK_GOOGLE_CLIENT_ID` | empty | Google OAuth client ID. Turns Google login on and locks the Google settings on the Admin page. Needs the secret too. |
+| `--google-client-secret` | `PEEK_GOOGLE_CLIENT_SECRET` | empty | Google OAuth client secret. Or `PEEK_GOOGLE_CLIENT_SECRET_FILE` with the path to a file; setting both is an error. |
+| `--oidc-issuer-url` | `PEEK_OIDC_ISSUER_URL` | empty | OpenID Connect issuer URL. Turns SSO login on and locks the SSO settings on the Admin page. Needs the client ID and secret too. |
+| `--oidc-client-id` | `PEEK_OIDC_CLIENT_ID` | empty | OpenID Connect client ID. |
+| `--oidc-client-secret` | `PEEK_OIDC_CLIENT_SECRET` | empty | OpenID Connect client secret. Or `PEEK_OIDC_CLIENT_SECRET_FILE` with the path to a file; setting both is an error. |
+| `--allowed-email-domain` | `PEEK_ALLOWED_EMAIL_DOMAIN` | empty | Restricts human sign-in to this email domain and locks `auth_allowed_email_domain`. |
+| `--google-org-signup` | `PEEK_GOOGLE_ORG_SIGNUP` | `false` | Google org sign-in. Locks `auth_google_org_signup` when true. |
+| `--oidc-signup` | `PEEK_OIDC_SIGNUP` | `false` | SSO sign-up: the first SSO sign-in in the allowed domain creates the account. Locks `auth_oidc_signup` when true. |
+| `--provisioning-key-file` | `PEEK_PROVISIONING_KEY_FILE` | empty | Path to a file holding a provisioning key (`peekprov_`, at least 40 characters), registered or rotated at every start. |
+| `--provisioning-key-name` | `PEEK_PROVISIONING_KEY_NAME` | `PrivacyFence` | Name of the provisioner registered from the key file, 1 to 100 characters. |
+| `--admin-emails` | `PEEK_ADMIN_EMAILS` | empty | Comma-separated emails that become admins at their Google or SSO sign-in. Also skips first-run `/setup`. |
 | `--backends` | `PEEK_BACKENDS` | `off` | Page backends: `off` or `docker`. With `docker`, peekd must reach the engine at startup. |
 | `--docker-host` | `PEEK_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker or Podman API address, `unix://` or `tcp://`. |
 | `--backend-network` | `PEEK_BACKEND_NETWORK` | `peek-backends` | Docker network backend containers join. peekd must be able to reach it. |
@@ -52,7 +63,7 @@ Two settings have no flag:
 
 ## Runtime Settings
 
-Admins can change these from the **Admin** page (the **Admin** button next to **Sign out**) or the settings API:
+Admins can change these from the **Admin** page (the **Admin** button next to **Sign out**) or the settings API. A setting that a server flag or variable sets is locked: see [Configure sign-in from the environment](/peek/docs/auth-access/#configure-sign-in-from-the-environment).
 
 | Key | Type | Notes |
 | --- | --- | --- |
@@ -62,6 +73,7 @@ Admins can change these from the **Admin** page (the **Admin** button next to **
 | `oauth_google_enabled` | boolean | Enables Google login if credentials are configured. |
 | `oauth_google_client_id` | string | Google OAuth web client ID. |
 | `oauth_google_client_secret` | secret string | Google OAuth web client secret. |
+| `auth_oidc_signup` | boolean | SSO sign-up: the first SSO sign-in of anyone in the allowed email domain creates the account. Requires SSO login and `auth_allowed_email_domain`, and cannot be combined with `auth_google_org_signup`. |
 | `oauth_github_enabled` | boolean | Enables GitHub login if credentials are configured. |
 | `oauth_github_client_id` | string | GitHub OAuth app client ID. |
 | `oauth_github_client_secret` | secret string | GitHub OAuth app client secret. |
