@@ -7,6 +7,7 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 ### Added
 
 - SSO sign-up: the first SSO sign-in of anyone in the allowed email domain creates the account, like Google org sign-in.
+- Sign-in from the environment: `PEEK_GOOGLE_CLIENT_ID`/`_SECRET`, `PEEK_OIDC_ISSUER_URL`/`_CLIENT_ID`/`_SECRET`, `PEEK_ALLOWED_EMAIL_DOMAIN`, `PEEK_GOOGLE_ORG_SIGNUP` and `PEEK_OIDC_SIGNUP` set the sign-in settings at every start and lock them on the Admin page.
 
 ## [0.17.0] - 2026-10-30
 

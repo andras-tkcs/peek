@@ -670,7 +670,7 @@ func TestSetCovDashboardSettingsHelpers(t *testing.T) {
 	if maxInt64(5, 3) != 5 || maxInt64(3, 5) != 5 {
 		t.Fatal("maxInt64 mismatch")
 	}
-	panel := dashboardSettingsPanel(map[string]string{"oauth_github_client_secret": "stored"})
+	panel := dashboardSettingsPanel(map[string]string{"oauth_github_client_secret": "stored"}, nil)
 	if secret := panel.Auth.GitHub.ClientSecret; secret.Value != "" || !strings.Contains(secret.Description, "leave blank") {
 		t.Fatalf("panel secret row = %+v", secret)
 	}
@@ -792,7 +792,7 @@ func TestDashboardSavesOIDCSignup(t *testing.T) {
 	if !s.oidcSignupEnabled(ctx) {
 		t.Fatal("auth_oidc_signup not saved")
 	}
-	panel := dashboardSettingsPanel(map[string]string{authOIDCSignupSetting: "true"})
+	panel := dashboardSettingsPanel(map[string]string{authOIDCSignupSetting: "true"}, nil)
 	if panel.Auth.OIDCSignup.Key != authOIDCSignupSetting || !panel.Auth.OIDCSignup.IsBool || panel.Auth.OIDCSignup.Label != "SSO sign-up" {
 		t.Fatalf("panel row = %+v", panel.Auth.OIDCSignup)
 	}
@@ -821,5 +821,89 @@ func TestAPIRejectsInvalidOIDCSignup(t *testing.T) {
 	}
 	if got, err := store.GetSetting(context.Background(), authOIDCSignupSetting); err == nil {
 		t.Fatalf("setting was written: %q", got)
+	}
+}
+
+func TestAPIRejectsLockedKey(t *testing.T) {
+	s := newTestServer(t)
+	s.locked = map[string]LockedSetting{authAllowedEmailDomainSetting: {Value: "corp.test", Env: "PEEK_ALLOWED_EMAIL_DOMAIN"}}
+	req := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"retention_days":"5","auth_allowed_email_domain":"other.test"}`))
+	req = withAPIToken(req, &models.Token{Name: "admin", IsAdmin: true})
+	rec := httptest.NewRecorder()
+	s.handleUpdateSettings(rec, req)
+	want := "auth_allowed_email_domain is set by PEEK_ALLOWED_EMAIL_DOMAIN on the server"
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	// Nothing in the body was written.
+	if v, err := s.store.GetSetting(context.Background(), "retention_days"); err == nil {
+		t.Fatalf("retention_days written: %q", v)
+	}
+}
+
+func TestDashboardKeepsLockedBool(t *testing.T) {
+	s := newTestServer(t)
+	ctx := context.Background()
+	admin, err := s.store.CreateAccount(ctx, "admin@corp.test", "Admin", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.locked = map[string]LockedSetting{
+		authAllowedEmailDomainSetting: {Value: "corp.test", Env: "PEEK_ALLOWED_EMAIL_DOMAIN"},
+		"oauth_oidc_enabled":          {Value: "true", Env: "PEEK_OIDC_ISSUER_URL"},
+		"oauth_oidc_issuer_url":       {Value: "https://sso.example.test", Env: "PEEK_OIDC_ISSUER_URL"},
+		"oauth_oidc_client_id":        {Value: "cid", Env: "PEEK_OIDC_CLIENT_ID"},
+		"oauth_oidc_client_secret":    {Value: "sec", Env: "PEEK_OIDC_CLIENT_SECRET"},
+		authOIDCSignupSetting:         {Value: "true", Env: "PEEK_OIDC_SIGNUP"},
+	}
+	if err := s.applyLockedSettings(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// The form posts no locked bool (its switches are disabled) and a stale domain.
+	rec := googleOrgDashboardPost(t, s, admin.ID, url.Values{
+		authAllowedEmailDomainSetting: {"other.test"},
+		"retention_days":              {"9"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !s.oidcSignupEnabled(ctx) || !s.settingBool(ctx, "oauth_oidc_enabled") {
+		t.Fatal("a locked bool was reset by the dashboard save")
+	}
+	if v, _ := s.store.GetSetting(ctx, authAllowedEmailDomainSetting); v != "corp.test" {
+		t.Fatalf("locked domain = %q", v)
+	}
+	if v, _ := s.store.GetSetting(ctx, "retention_days"); v != "9" {
+		t.Fatalf("unlocked setting not saved: %q", v)
+	}
+}
+
+func TestGetSettingsShowsLockedBy(t *testing.T) {
+	s := newTestServer(t)
+	s.locked = map[string]LockedSetting{
+		"oauth_google_enabled":   {Value: "true", Env: "PEEK_GOOGLE_CLIENT_ID"},
+		"oauth_google_client_id": {Value: "gid", Env: "PEEK_GOOGLE_CLIENT_ID"},
+	}
+	if err := s.applyLockedSettings(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	s.handleGetSettings(rec, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
+	var rows []settingsRow
+	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.String(), err)
+	}
+	locked := map[string]string{}
+	for _, r := range rows {
+		if r.LockedBy != "" {
+			locked[r.Key] = r.LockedBy
+		}
+	}
+	if len(locked) != 2 || locked["oauth_google_enabled"] != "PEEK_GOOGLE_CLIENT_ID" || locked["oauth_google_client_id"] != "PEEK_GOOGLE_CLIENT_ID" {
+		t.Fatalf("locked_by = %v", locked)
+	}
+	panel := dashboardSettingsPanel(map[string]string{}, s.lockedEnvNames())
+	if panel.Auth.Google.Enabled.LockedBy != "PEEK_GOOGLE_CLIENT_ID" || panel.Auth.GitHub.Enabled.LockedBy != "" {
+		t.Fatalf("panel locks = %+v", panel.Auth.Google.Enabled)
 	}
 }

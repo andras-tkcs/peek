@@ -37,7 +37,7 @@ func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, owner *mode
 	if !ok {
 		return
 	}
-	panel := dashboardSettingsPanel(s.dashboardSettingsMap(r.Context()))
+	panel := dashboardSettingsPanel(s.dashboardSettingsMap(r.Context()), s.lockedEnvNames())
 	panel.Backends.Enabled = s.backends != nil
 	data := adminData{
 		CSRF:            csrf,
