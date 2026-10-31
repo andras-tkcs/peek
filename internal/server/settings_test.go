@@ -760,3 +760,66 @@ func TestSMTPPasswordStoredEncrypted(t *testing.T) {
 		t.Fatalf("decrypted = %q, %v", got, err)
 	}
 }
+
+func TestDashboardSavesOIDCSignup(t *testing.T) {
+	s := newTestServer(t)
+	renderer, err := webui.NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.renderer = renderer
+	ctx := context.Background()
+	admin, err := s.store.CreateAccount(ctx, "admin@example.test", "Admin", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oidcSignupOn(t, s, "example.test")
+	if err := s.store.SetSetting(ctx, authOIDCSignupSetting, ""); err != nil {
+		t.Fatal(err)
+	}
+	// The dashboard form always posts every bool, so it carries the SSO switch too.
+	form := url.Values{
+		authOIDCSignupSetting:         {"true"},
+		authAllowedEmailDomainSetting: {"example.test"},
+		"oauth_oidc_enabled":          {"true"},
+		"oauth_oidc_issuer_url":       {"https://sso.example.test"},
+		"oauth_oidc_client_id":        {"client-id"},
+	}
+	rec := googleOrgDashboardPost(t, s, admin.ID, form)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !s.oidcSignupEnabled(ctx) {
+		t.Fatal("auth_oidc_signup not saved")
+	}
+	panel := dashboardSettingsPanel(map[string]string{authOIDCSignupSetting: "true"})
+	if panel.Auth.OIDCSignup.Key != authOIDCSignupSetting || !panel.Auth.OIDCSignup.IsBool || panel.Auth.OIDCSignup.Label != "SSO sign-up" {
+		t.Fatalf("panel row = %+v", panel.Auth.OIDCSignup)
+	}
+	// An unchecked box on the next save turns it off again.
+	form.Del(authOIDCSignupSetting)
+	rec = googleOrgDashboardPost(t, s, admin.ID, form)
+	if rec.Code != http.StatusSeeOther || s.oidcSignupEnabled(ctx) {
+		t.Fatalf("status = %d enabled = %v", rec.Code, s.oidcSignupEnabled(ctx))
+	}
+}
+
+func TestAPIRejectsInvalidOIDCSignup(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "peek.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	s := &Server{store: store, secret: strings.Repeat("0", 64)}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(`{"auth_oidc_signup":"true"}`))
+	req = withAPIToken(req, &models.Token{Name: "admin", IsAdmin: true})
+	rec := httptest.NewRecorder()
+	s.handleUpdateSettings(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "auth_oidc_signup requires auth_allowed_email_domain") {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if got, err := store.GetSetting(context.Background(), authOIDCSignupSetting); err == nil {
+		t.Fatalf("setting was written: %q", got)
+	}
+}

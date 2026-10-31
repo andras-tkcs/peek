@@ -4,6 +4,10 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ## [Unreleased]
 
+### Added
+
+- SSO sign-up: the first SSO sign-in of anyone in the allowed email domain creates the account, like Google org sign-in.
+
 ## [0.17.0] - 2026-10-30
 
 ### Added
