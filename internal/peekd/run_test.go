@@ -724,3 +724,15 @@ func TestParseServeConfigProvisioningKeyFile(t *testing.T) {
 		}
 	}
 }
+
+func TestParseServeConfigAdminEmails(t *testing.T) {
+	cfg, _, err := parseServeConfig([]string{"--admin-emails", "A@x.test, b@x.test"})
+	if err != nil || cfg.AdminEmails != "A@x.test, b@x.test" {
+		t.Fatalf("cfg = %+v, %v", cfg, err)
+	}
+	t.Setenv("PEEK_ADMIN_EMAILS", "env@x.test")
+	cfg, _, err = parseServeConfig(nil)
+	if err != nil || cfg.AdminEmails != "env@x.test" {
+		t.Fatalf("env: cfg = %+v, %v", cfg, err)
+	}
+}

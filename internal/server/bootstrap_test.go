@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -214,7 +216,7 @@ func TestBootstrapSetup(t *testing.T) {
 		if err := os.WriteFile(setupCodePath(dir), []byte("kept-code\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		code, err := bootstrapSetup(ctx, store, dir, "http://localhost:7700")
+		code, err := bootstrapSetup(ctx, store, dir, "http://localhost:7700", "")
 		if err != nil || code != "kept-code" {
 			t.Fatalf("code = %q, err = %v", code, err)
 		}
@@ -225,7 +227,7 @@ func TestBootstrapSetup(t *testing.T) {
 			t.Fatal(err)
 		}
 		stubSecureRandomRead(t, func([]byte) (int, error) { return 0, errors.New("rand down") })
-		if _, err := bootstrapSetup(ctx, store, t.TempDir(), "http://localhost:7700"); err == nil {
+		if _, err := bootstrapSetup(ctx, store, t.TempDir(), "http://localhost:7700", ""); err == nil {
 			t.Fatal("expected rand error")
 		}
 	})
@@ -238,14 +240,14 @@ func TestBootstrapSetup(t *testing.T) {
 		if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := bootstrapSetup(ctx, store, file, "http://localhost:7700"); err == nil {
+		if _, err := bootstrapSetup(ctx, store, file, "http://localhost:7700", ""); err == nil {
 			t.Fatal("expected write error")
 		}
 	})
 	t.Run("count failure", func(t *testing.T) {
 		_, store, _, _ := newFaultServer(t)
 		dropTable(t, store, "accounts")
-		if _, err := bootstrapSetup(ctx, store, t.TempDir(), "http://localhost:7700"); err == nil {
+		if _, err := bootstrapSetup(ctx, store, t.TempDir(), "http://localhost:7700", ""); err == nil {
 			t.Fatal("expected count error")
 		}
 	})
@@ -255,7 +257,7 @@ func TestBootstrapSetup(t *testing.T) {
 		if err := os.WriteFile(setupCodePath(dir), []byte("stale\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		code, err := bootstrapSetup(ctx, store, dir, "http://localhost:7700")
+		code, err := bootstrapSetup(ctx, store, dir, "http://localhost:7700", "")
 		if err != nil || code != "" {
 			t.Fatalf("code = %q, err = %v", code, err)
 		}
@@ -298,5 +300,82 @@ func TestSetupCodeValidation(t *testing.T) {
 	dropTable(t, store, "accounts")
 	if s.setupRequired(ctx) {
 		t.Fatal("setupRequired should be false when the count fails")
+	}
+}
+
+func skippedSetupServer(t *testing.T) (*Server, string) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(setupCodePath(dir), []byte("stale\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(Config{
+		DataDir: dir, BaseURL: "http://localhost:7700", Secret: strings.Repeat("ab", 32), MaxUpload: 1 << 20,
+		AdminEmailsRaw: "boss@example.test",
+		LockedSettings: map[string]LockedSetting{
+			"oauth_google_enabled":       {Value: "true", Env: "PEEK_GOOGLE_CLIENT_ID"},
+			"oauth_google_client_id":     {Value: "id", Env: "PEEK_GOOGLE_CLIENT_ID"},
+			"oauth_google_client_secret": {Value: "secret", Env: "PEEK_GOOGLE_CLIENT_SECRET"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	return s, dir
+}
+
+func TestSetupSkippedPrintsReason(t *testing.T) {
+	_, store, _, _ := newFaultServer(t)
+	if _, err := store.Exec("DELETE FROM accounts"); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(setupCodePath(dir), []byte("stale\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldOut := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	code, err := bootstrapSetup(context.Background(), store, dir, "http://localhost:7700", "PEEK_ADMIN_EMAILS names the admins")
+	_ = w.Close()
+	os.Stdout = oldOut
+	out, _ := io.ReadAll(r)
+	if err != nil || code != "" {
+		t.Fatalf("code = %q, err = %v", code, err)
+	}
+	if !strings.Contains(string(out), "Peek first-run setup is skipped: PEEK_ADMIN_EMAILS names the admins.") {
+		t.Fatalf("output = %q", out)
+	}
+	if strings.Contains(string(out), "/setup?code=") {
+		t.Fatalf("printed a setup URL: %q", out)
+	}
+	if _, err := os.Stat(setupCodePath(dir)); !os.IsNotExist(err) {
+		t.Fatalf("setup.key still present: %v", err)
+	}
+}
+
+func TestSkippedSetupLoginDoesNotRedirect(t *testing.T) {
+	s, dir := skippedSetupServer(t)
+	if s.readSetupCode() != "" {
+		t.Fatal("setup code exists")
+	}
+	if _, err := os.Stat(setupCodePath(dir)); !os.IsNotExist(err) {
+		t.Fatalf("setup.key present: %v", err)
+	}
+	rec := doRequest(t, s, http.MethodGet, "/login", nil)
+	if rec.Code == http.StatusSeeOther && rec.Header().Get("Location") == "/setup" {
+		t.Fatal("login redirected to /setup")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login = %d", rec.Code)
+	}
+}
+
+func TestSkippedSetupCLILoginAllowed(t *testing.T) {
+	s, _ := skippedSetupServer(t)
+	rec := doRequest(t, s, http.MethodPost, "/api/cli/login/start", strings.NewReader(`{}`), withJSON())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("cli login start = %d: %s", rec.Code, rec.Body.String())
 	}
 }

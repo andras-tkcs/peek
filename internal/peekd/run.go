@@ -57,6 +57,9 @@ type serveConfig struct {
 	ProvisioningKey     string
 	ProvisioningKeyName string
 
+	// AdminEmails is the raw PEEK_ADMIN_EMAILS value; the server parses it.
+	AdminEmails string
+
 	MaxTotalSize      int64
 	RetentionDays     int
 	TrustedProxy      bool
@@ -207,6 +210,7 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	oidcSignup := fs.Bool("oidc-signup", oidcSignupDefault, "SSO sign-up: the first SSO sign-in in the allowed email domain creates the account")
 
 	provisioningKeyFile := fs.String("provisioning-key-file", getenv("PEEK_PROVISIONING_KEY_FILE", ""), "path to a file holding a provisioning key to register (or rotate to) at every start")
+	adminEmails := fs.String("admin-emails", getenv("PEEK_ADMIN_EMAILS", ""), "comma-separated emails that become admins at their Google or SSO sign-in; also skips first-run /setup")
 	provisioningKeyName := fs.String("provisioning-key-name", getenv("PEEK_PROVISIONING_KEY_NAME", "PrivacyFence"), "name of the provisioner registered from --provisioning-key-file")
 
 	maxTotalSize := fs.Int64("max-total-size", maxTotalSizeDefault, "max total storage bytes across all uploads (0 = unlimited)")
@@ -297,6 +301,8 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 
 		ProvisioningKey:     provisioningKey,
 		ProvisioningKeyName: provisioningName,
+
+		AdminEmails: *adminEmails,
 
 		MaxTotalSize:      *maxTotalSize,
 		RetentionDays:     *retentionDays,
@@ -476,6 +482,7 @@ func runServe(cfg serveConfig) int {
 		LockedSettings:         lockedSettings(cfg),
 		ProvisioningKey:        cfg.ProvisioningKey,
 		ProvisioningKeyName:    cfg.ProvisioningKeyName,
+		AdminEmailsRaw:         cfg.AdminEmails,
 
 		MaxTotalSize:      cfg.MaxTotalSize,
 		RetentionDays:     cfg.RetentionDays,

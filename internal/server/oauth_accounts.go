@@ -49,7 +49,16 @@ func (s *Server) resolveOAuthAccount(r *http.Request, profile *oauthProfile) (*m
 	return account, err
 }
 
+// resolveOAuthAccountCreated resolves the account and promotes a listed admin.
 func (s *Server) resolveOAuthAccountCreated(r *http.Request, profile *oauthProfile) (*models.Account, bool, error) {
+	account, created, err := s.resolveOAuthAccountBase(r, profile)
+	if err != nil {
+		return nil, created, err
+	}
+	return s.promoteListedAdmin(r.Context(), account, profile), created, nil
+}
+
+func (s *Server) resolveOAuthAccountBase(r *http.Request, profile *oauthProfile) (*models.Account, bool, error) {
 	if profile.ProviderUserID == "" || profile.Email == "" || !profile.EmailVerified {
 		return nil, false, errors.New("OAuth account must have a verified email")
 	}
@@ -89,6 +98,14 @@ func (s *Server) resolveOAuthAccountCreated(r *http.Request, profile *oauthProfi
 		return nil, false, errors.New("account lookup failed")
 	}
 
+	if s.isListedAdminEmail(profile.Email) && (profile.Provider == "google" || profile.Provider == "oidc") {
+		account, err := s.store.CreateAccount(r.Context(), profile.Email, profile.Name, true)
+		if err != nil {
+			return nil, false, errors.New("account creation failed")
+		}
+		s.audit("account provisioned %s", auditDetail("provider", profile.Provider, "email", account.Email, "reason", adminEmailsEnv))
+		return account, true, nil
+	}
 	if s.googleOrgSignupEnabled(r.Context()) {
 		return s.provisionGoogleOrgAccount(r.Context(), profile)
 	}
