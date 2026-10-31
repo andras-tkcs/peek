@@ -903,3 +903,55 @@ func TestAdminOIDCSignupSwitchRenders(t *testing.T) {
 		}
 	}
 }
+
+func TestLockedRowRendersDisabledWithoutAlpineBinding(t *testing.T) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	google := OAuthProviderSettings{
+		Key:          "google",
+		Name:         "Google",
+		Enabled:      SettingRow{Key: "oauth_google_enabled", Label: "Google login", LockedBy: "PEEK_GOOGLE_CLIENT_ID"},
+		EnabledValue: true,
+	}
+	google.Fields = []SettingRow{
+		{Key: "oauth_google_client_id", Label: "Google client ID", LockedBy: "PEEK_GOOGLE_CLIENT_ID"},
+		{Key: "oauth_google_client_secret", Label: "Google client secret", IsSecret: true},
+	}
+	body, err := renderer.Execute(TemplateAdmin, AdminData{
+		CSRF: "csrf",
+		User: "Admin",
+		SettingsPanel: DashboardSettings{Auth: AuthSettings{
+			Domain:    SettingRow{Key: "auth_allowed_email_domain", LockedBy: "PEEK_ALLOWED_EMAIL_DOMAIN"},
+			Providers: []OAuthProviderSettings{google},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(body)
+	tag := func(name string) string {
+		i := strings.Index(html, `name="`+name+`"`)
+		if i < 0 {
+			t.Fatalf("no input %s", name)
+		}
+		start := strings.LastIndex(html[:i], "<input")
+		return html[start : i+strings.Index(html[i:], ">")]
+	}
+	locked := tag("oauth_google_client_id")
+	if !strings.Contains(locked, " disabled") || strings.Contains(locked, ":disabled") {
+		t.Fatalf("locked field = %s", locked)
+	}
+	if open := tag("oauth_google_client_secret"); !strings.Contains(open, `:disabled="!oauth.google"`) {
+		t.Fatalf("unlocked field lost its binding: %s", open)
+	}
+	if !strings.Contains(tag("oauth_google_enabled"), " disabled") || !strings.Contains(tag("auth_allowed_email_domain"), " disabled") {
+		t.Fatal("locked switch or domain is not disabled")
+	}
+	for _, want := range []string{"Set by PEEK_GOOGLE_CLIENT_ID on the server", "Set by PEEK_ALLOWED_EMAIL_DOMAIN on the server"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q", want)
+		}
+	}
+}

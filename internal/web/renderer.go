@@ -159,6 +159,8 @@ type SettingRow struct {
 	IsSecret    bool   `json:"is_secret"`
 	IsStartup   bool   `json:"is_startup"`
 	IsBool      bool   `json:"is_bool"`
+	// LockedBy names the variable that sets this value; the Admin page and API refuse edits.
+	LockedBy string `json:"locked_by,omitempty"`
 }
 
 type DashboardSettings struct {

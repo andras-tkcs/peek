@@ -58,6 +58,10 @@ type Config struct {
 
 	Groups GroupChecker
 
+	// LockedSettings are runtime settings set by the environment: written at
+	// every start and refused by the settings writers.
+	LockedSettings map[string]LockedSetting
+
 	// BackendRuntime is the container engine for page backends; nil turns the
 	// feature off. BackendNetwork is the network their containers join.
 	BackendRuntime backends.Runtime
@@ -65,6 +69,7 @@ type Config struct {
 }
 
 type Server struct {
+	locked   map[string]LockedSetting
 	store    *db.Store
 	secret   string
 	baseURL  string
@@ -233,6 +238,7 @@ func New(cfg Config) (*Server, error) {
 		trustedProxyCIDRs:      cidrs,
 		s3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		oidcAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
+		locked:                 cfg.LockedSettings,
 		visitQueue:             make(chan visitEvent, 256),
 		backendLimiter:         newLimiter(240, time.Minute),
 		backendClient: &http.Client{
@@ -240,6 +246,11 @@ func New(cfg Config) (*Server, error) {
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 			Transport:     &http.Transport{Proxy: nil},
 		},
+	}
+
+	if err := srv.applyLockedSettings(startupCtx); err != nil {
+		cancel()
+		return nil, err
 	}
 
 	if cfg.Groups != nil {
