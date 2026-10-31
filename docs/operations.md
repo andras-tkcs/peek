@@ -168,6 +168,10 @@ Peek logs structured JSON to stderr. Set `PEEK_LOG_LEVEL=debug`, `info`, or `war
 
 Before upgrading, take a SQLite backup and confirm you know where uploaded object bytes live. Run the new binary against a staging copy of the data directory when changing storage, auth, retention, or database-related code. Security fixes and how to report a vulnerability: [SECURITY.md](../SECURITY.md).
 
+### v0.18.0
+
+Peek can now start fully configured from the environment: sign-in settings, admin emails and a provisioning key file. Settings set this way are locked on the Admin page, and SSO sign-in in the allowed email domain creates the account. No migration, and nothing changes unless you set the new variables; a rollback to v0.17.0 ignores them and unlocks the Admin page settings.
+
 ### v0.17.0
 
 Page links now serve a web app manifest and the page's own favicon, so pages can be installed from a phone's home screen. No migration and no configuration change; a rollback only removes the manifest and custom favicons. Installing needs Peek served over HTTPS.
