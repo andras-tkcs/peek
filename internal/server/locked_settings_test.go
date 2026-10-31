@@ -131,3 +131,23 @@ func TestLockedDomainWarnsWhenNoAdminMatches(t *testing.T) {
 		t.Fatalf("unexpected warning with a matching admin: %s", logs.String())
 	}
 }
+
+func TestLockedErrorNamesAdminPageSettingWhenNotLocked(t *testing.T) {
+	s := newTestServer(t)
+	ctx := context.Background()
+	if err := s.encryptedSetSetting(ctx, authOIDCSignupSetting, "true"); err != nil {
+		t.Fatal(err)
+	}
+	s.locked = map[string]LockedSetting{
+		authAllowedEmailDomainSetting: {Value: "example.test", Env: "PEEK_ALLOWED_EMAIL_DOMAIN"},
+		"oauth_google_enabled":        {Value: "true", Env: "PEEK_GOOGLE_CLIENT_ID"},
+		"oauth_google_client_id":      {Value: "id", Env: "PEEK_GOOGLE_CLIENT_ID"},
+		"oauth_google_client_secret":  {Value: "secret", Env: "PEEK_GOOGLE_CLIENT_SECRET"},
+		authGoogleOrgSignupSetting:    {Value: "true", Env: "PEEK_GOOGLE_ORG_SIGNUP"},
+	}
+	err := s.applyLockedSettings(ctx)
+	want := "auth_oidc_signup (set on the Admin page): auth_oidc_signup requires SSO login with an issuer and client credentials"
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v, want %s", err, want)
+	}
+}

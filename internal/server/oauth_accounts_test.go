@@ -297,3 +297,45 @@ func TestPromotionNeedsMatchingEmail(t *testing.T) {
 		t.Fatal("unverified email accepted")
 	}
 }
+
+func TestListedEmailWithOrgSignupIsProvisionedThenPromoted(t *testing.T) {
+	s := listedServer(t, "boss@example.test")
+	ctx := context.Background()
+	for k, v := range map[string]string{
+		authAllowedEmailDomainSetting: "example.test",
+		authGoogleOrgSignupSetting:    "true",
+	} {
+		if err := s.encryptedSetSetting(ctx, k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	profile := listedProfile("google", "boss@example.test")
+	profile.HostedDomain = "example.test"
+	acc, created, err := resolveListed(t, s, profile)
+	if err != nil || !created || !acc.IsAdmin {
+		t.Fatalf("acc = %+v, created = %v, err = %v", acc, created, err)
+	}
+	if !hasAudit(t, s, "account promoted") {
+		t.Fatal("no account promoted audit entry")
+	}
+}
+
+func TestListedEmailMatchesIgnoringCase(t *testing.T) {
+	s := listedServer(t, "boss@example.test")
+	acc, created, err := resolveListed(t, s, listedProfile("oidc", " Boss@Example.test "))
+	if err != nil || !created || !acc.IsAdmin {
+		t.Fatalf("acc = %+v, created = %v, err = %v", acc, created, err)
+	}
+}
+
+func TestProvisionListedAdminAccountRaceFallsBackToExisting(t *testing.T) {
+	s := listedServer(t, "boss@example.test")
+	ctx := context.Background()
+	if _, err := s.store.CreateAccount(ctx, "boss@example.test", "Boss", false); err != nil {
+		t.Fatal(err)
+	}
+	acc, created, err := s.provisionListedAdminAccount(ctx, listedProfile("oidc", "boss@example.test"))
+	if err != nil || created || acc == nil || acc.Email != "boss@example.test" {
+		t.Fatalf("acc = %+v, created = %v, err = %v", acc, created, err)
+	}
+}

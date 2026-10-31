@@ -28,7 +28,8 @@ func (s *Server) seedProvisioner(ctx context.Context, name, key string) error {
 		return nil
 	}
 	name = strings.TrimSpace(name)
-	if _, err := s.store.GetProvisionerByKey(ctx, key); err == nil {
+	if p, err := s.store.GetProvisionerByKey(ctx, key); err == nil {
+		s.fileProvisionerID = p.ID
 		return nil
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("%s: %w", provisioningKeyEnv, err)
@@ -49,16 +50,18 @@ func (s *Server) seedProvisioner(ctx context.Context, name, key string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", provisioningKeyEnv, err)
 		}
+		s.fileProvisionerID = p.ID
 		s.seedAudit(ctx, "provisioner registered", p.ID, name)
 		slog.Info(fmt.Sprintf("provisioning key %q registered from %s", name, provisioningKeyEnv))
 	case 1:
 		if err := s.store.RotateProvisionerKey(ctx, matches[0], key); err != nil {
 			return fmt.Errorf("%s: %w", provisioningKeyEnv, err)
 		}
+		s.fileProvisionerID = matches[0]
 		s.seedAudit(ctx, "provisioner rotated", matches[0], name)
 		slog.Info(fmt.Sprintf("provisioning key %q rotated from %s", name, provisioningKeyEnv))
 	default:
-		return errors.New("PEEK_PROVISIONING_KEY_NAME matches more than one provisioner; revoke the extra ones on the Admin page")
+		return errors.New("PEEK_PROVISIONING_KEY_NAME matches more than one provisioner; unset PEEK_PROVISIONING_KEY_FILE, revoke the extra ones on the Admin page, then set it again")
 	}
 	return nil
 }
@@ -67,4 +70,10 @@ func (s *Server) seedAudit(ctx context.Context, action string, id int64, name st
 	detail := auditDetail("id", fmt.Sprint(id), "name", name)
 	slog.Info("audit", "actor", provisioningKeyEnv, "action", action, "detail", detail)
 	s.persistAuditLog(ctx, provisioningKeyEnv, action, detail, "")
+}
+
+// isFileProvisioner reports whether id is the provisioner that
+// PEEK_PROVISIONING_KEY_FILE registered or rotated at this start.
+func (s *Server) isFileProvisioner(id int64) bool {
+	return s.fileProvisionerID != 0 && id == s.fileProvisionerID
 }

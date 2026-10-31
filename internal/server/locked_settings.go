@@ -37,15 +37,13 @@ func (s *Server) lockedEnvNames() map[string]string {
 }
 
 // lockedEnvFor names the variable to blame for a validator error that is not
-// tied to one key: the one of trigger when locked, else the first locked one.
+// tied to one key: the variable of trigger when it is locked, else the setting
+// itself, which then comes from the Admin page.
 func (s *Server) lockedEnvFor(trigger string) string {
 	if l, ok := s.locked[trigger]; ok {
 		return l.Env
 	}
-	for _, k := range s.lockedKeys() {
-		return s.locked[k].Env
-	}
-	return trigger
+	return trigger + " (set on the Admin page)"
 }
 
 // applyLockedSettings writes the environment's values over the database at

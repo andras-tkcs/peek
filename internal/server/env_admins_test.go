@@ -108,3 +108,15 @@ func TestNoSkipWithoutEnv(t *testing.T) {
 		t.Fatalf("r = %q, %v", r, err)
 	}
 }
+
+func TestAdminEmailsAcceptDomainWithLeadingAt(t *testing.T) {
+	cfg := Config{LockedSettings: lockedOn("oauth_google_enabled")}
+	cfg.LockedSettings[authAllowedEmailDomainSetting] = LockedSetting{Value: "@Example.test", Env: "PEEK_ALLOWED_EMAIL_DOMAIN"}
+	if err := checkAdminEmails(cfg, []string{"a@example.test"}); err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	err := checkAdminEmails(cfg, []string{"b@other.test"})
+	if err == nil || err.Error() != "PEEK_ADMIN_EMAILS has b@other.test, outside PEEK_ALLOWED_EMAIL_DOMAIN" {
+		t.Fatalf("err = %v", err)
+	}
+}
