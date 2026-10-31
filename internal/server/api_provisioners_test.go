@@ -126,3 +126,21 @@ func TestProvisionerAuditHasNoKey(t *testing.T) {
 		t.Fatalf("audit actions = %v", seen)
 	}
 }
+
+func TestAPIRevokeFileProvisionerRefused(t *testing.T) {
+	s, admin := newHandlerTestServer(t)
+	if err := s.seedProvisioner(context.Background(), "PrivacyFence", seedKeyA); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.store.GetProvisionerByKey(context.Background(), seedKeyA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := doRequest(t, s, http.MethodDelete, "/api/provisioners/"+jsonID(p.ID), nil, asBearer(admin))
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "replace the file and restart instead") {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if _, err := s.store.GetProvisionerByKey(context.Background(), seedKeyA); err != nil {
+		t.Fatalf("provisioner was deleted: %v", err)
+	}
+}

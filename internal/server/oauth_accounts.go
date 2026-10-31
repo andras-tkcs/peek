@@ -98,19 +98,14 @@ func (s *Server) resolveOAuthAccountBase(r *http.Request, profile *oauthProfile)
 		return nil, false, errors.New("account lookup failed")
 	}
 
-	if s.isListedAdminEmail(profile.Email) && (profile.Provider == "google" || profile.Provider == "oidc") {
-		account, err := s.store.CreateAccount(r.Context(), profile.Email, profile.Name, true)
-		if err != nil {
-			return nil, false, errors.New("account creation failed")
-		}
-		s.audit("account provisioned %s", auditDetail("provider", profile.Provider, "email", account.Email, "reason", adminEmailsEnv))
-		return account, true, nil
-	}
 	if s.googleOrgSignupEnabled(r.Context()) {
 		return s.provisionGoogleOrgAccount(r.Context(), profile)
 	}
 	if profile.Provider == "oidc" && s.oidcSignupEnabled(r.Context()) {
 		return s.provisionOIDCSignupAccount(r.Context(), profile)
+	}
+	if s.isListedAdminEmail(normalizeOAuthEmail(profile.Email)) && (profile.Provider == "google" || profile.Provider == "oidc") {
+		return s.provisionListedAdminAccount(r.Context(), profile)
 	}
 
 	inviteToken := ""

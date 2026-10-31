@@ -84,7 +84,7 @@ func TestSeedTwoSameNameFails(t *testing.T) {
 		}
 	}
 	err := s.seedProvisioner(ctx, "PF", seedKeyA)
-	want := "PEEK_PROVISIONING_KEY_NAME matches more than one provisioner; revoke the extra ones on the Admin page"
+	want := "PEEK_PROVISIONING_KEY_NAME matches more than one provisioner; unset PEEK_PROVISIONING_KEY_FILE, revoke the extra ones on the Admin page, then set it again"
 	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v", err)
 	}
@@ -109,5 +109,27 @@ func TestSeededKeyAnswersProvisioningSelf(t *testing.T) {
 	rec := doRequest(t, s, http.MethodGet, "/api/provisioning/self", nil, asBearer(seedKeyA))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"PrivacyFence"`) {
 		t.Fatalf("self = %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestFileProvisionerIsRecognisedByIDNotName(t *testing.T) {
+	s := newTestServer(t)
+	ctx := context.Background()
+	if err := s.seedProvisioner(ctx, "PF", seedKeyA); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.store.GetProvisionerByKey(ctx, seedKeyA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.isFileProvisioner(p.ID) {
+		t.Fatal("seeded provisioner not recognised")
+	}
+	other, err := s.store.CreateProvisioner(ctx, "PF", "peekprov_other-3333", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.isFileProvisioner(other.ID) {
+		t.Fatal("same-name provisioner recognised as the file one")
 	}
 }

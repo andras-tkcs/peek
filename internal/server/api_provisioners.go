@@ -69,6 +69,10 @@ func (s *Server) handleDeleteProvisioner(w http.ResponseWriter, r *http.Request)
 		jsonError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
+	if s.isFileProvisioner(id) {
+		jsonError(w, http.StatusConflict, flashMessages[flashProvisionerFromFile])
+		return
+	}
 	name, err := s.revokeProvisioner(r, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		jsonError(w, http.StatusNotFound, "not found")

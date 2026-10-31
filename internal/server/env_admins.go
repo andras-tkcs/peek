@@ -43,8 +43,13 @@ func checkAdminEmails(cfg Config, emails []string) error {
 		return nil
 	}
 	if d, ok := cfg.LockedSettings[authAllowedEmailDomainSetting]; ok && d.Value != "" {
+		// An invalid domain is reported by applyLockedSettings with the right variable.
+		domain, err := normalizeAllowedEmailDomain(d.Value)
+		if err != nil {
+			domain = d.Value
+		}
 		for _, e := range emails {
-			if !emailMatchesAllowedDomain(e, d.Value) {
+			if !emailMatchesAllowedDomain(e, domain) {
 				return fmt.Errorf("%s has %s, outside PEEK_ALLOWED_EMAIL_DOMAIN", adminEmailsEnv, e)
 			}
 		}
@@ -105,4 +110,21 @@ func (s *Server) promoteListedAdmin(ctx context.Context, account *models.Account
 	slog.Info("audit", "actor", adminEmailsEnv, "action", "account promoted", "detail", detail)
 	s.persistAuditLog(ctx, adminEmailsEnv, "account promoted", detail, "")
 	return account
+}
+
+// provisionListedAdminAccount creates the admin account for the first Google or
+// SSO sign-in of an email that PEEK_ADMIN_EMAILS lists, when no sign-up applies.
+// The bool is true only when this call created the account, false for the race
+// fallback, where promoteListedAdmin finishes the job.
+func (s *Server) provisionListedAdminAccount(ctx context.Context, profile *oauthProfile) (*models.Account, bool, error) {
+	account, err := s.store.CreateAccount(ctx, profile.Email, profile.Name, true)
+	if err != nil {
+		// Two first sign-ins can race on the unique email.
+		if existing, lookupErr := s.store.GetAccountByEmail(ctx, profile.Email); lookupErr == nil && !existing.Disabled {
+			return existing, false, nil
+		}
+		return nil, false, errors.New("account creation failed")
+	}
+	s.audit("account provisioned %s", auditDetail("provider", profile.Provider, "email", account.Email, "reason", adminEmailsEnv))
+	return account, true, nil
 }

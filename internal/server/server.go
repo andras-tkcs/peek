@@ -84,13 +84,15 @@ type Server struct {
 	setupSkipped bool     // first-run /setup is skipped (see setupSkipReason)
 	// provisioningKeyName is the provisioner registered from the environment, or "".
 	provisioningKeyName string
-	store               *db.Store
-	secret              string
-	baseURL             string
-	dataDir             string
-	storage             objectstore.Storage
-	renderer            *webui.Renderer
-	secure              bool
+	// fileProvisionerID is the id of that provisioner once seedProvisioner ran, or 0.
+	fileProvisionerID int64
+	store             *db.Store
+	secret            string
+	baseURL           string
+	dataDir           string
+	storage           objectstore.Storage
+	renderer          *webui.Renderer
+	secure            bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
