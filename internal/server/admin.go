@@ -244,6 +244,7 @@ func (s *Server) dashboardProvisionerRows(ctx context.Context) []provisionerDash
 			Created:  time.Unix(p.CreatedAt, 0).UTC().Format(time.RFC3339),
 			LastUsed: lastUsed,
 			Accounts: p.Accounts,
+			FromFile: s.provisioningKeyName != "" && p.Name == s.provisioningKeyName,
 		})
 	}
 	return out
@@ -262,6 +263,16 @@ func (s *Server) handleDashboardProvisionerRevoke(w http.ResponseWriter, r *http
 	if err != nil {
 		adminError(w, r, flashNotFound)
 		return
+	}
+	if s.provisioningKeyName != "" {
+		if list, err := s.store.ListProvisioners(r.Context()); err == nil {
+			for _, p := range list {
+				if p.ID == id && p.Name == s.provisioningKeyName {
+					adminError(w, r, flashProvisionerFromFile)
+					return
+				}
+			}
+		}
 	}
 	name, err := s.revokeProvisioner(r, id)
 	if err != nil {

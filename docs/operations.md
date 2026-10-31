@@ -64,6 +64,22 @@ Prefer `_FILE` variables or plain environment variables over `--secret`, `--s3-s
 
 On first run, Peek creates a one-time setup URL in the logs and stores the setup code in the data directory. Use it to create the first admin. After an account exists, the setup file is removed and the setup route is closed.
 
+To start fully configured from the environment, with no setup code and no clicks on the Admin page, set the sign-in and the admins instead. Secrets come from files:
+
+```sh
+PEEK_BASE_URL=https://peek.example.com \
+PEEK_OIDC_ISSUER_URL=https://sso.example.com/oidc \
+PEEK_OIDC_CLIENT_ID=peek \
+PEEK_OIDC_CLIENT_SECRET_FILE=/run/secrets/peek_oidc_secret \
+PEEK_ALLOWED_EMAIL_DOMAIN=example.com \
+PEEK_OIDC_SIGNUP=true \
+PEEK_ADMIN_EMAILS=alice@example.com \
+PEEK_PROVISIONING_KEY_FILE=/run/secrets/peek_provisioning_key \
+peekd --data ./data
+```
+
+Those sign-in settings are then locked on the Admin page, `/setup` is skipped, and `alice@example.com` becomes admin at the first SSO sign-in. See [Configure sign-in from the environment](src/content/docs/auth-access.md#configure-sign-in-from-the-environment).
+
 For company usage, prefer OAuth/SSO with invite-only signup. Google Workspace organizations can use `auth_google_org_signup` instead of invites. Admins can configure Google, GitHub, or generic OpenID Connect on the **Admin** page (the **Admin** button next to **Sign out**), create invite links, and promote or disable users later. Direct bearer tokens remain appropriate for internal automation, CI jobs, and agents. Users can create their own from **Dashboard → API keys**. API tokens follow the same account rules as dashboard sign-in: a token is refused with 403 when its account is disabled, when its email does not match the allowed email domain, or, while OAuth login is enabled, when a non-admin account has no linked OAuth identity (the token a provisioning key minted for an account is the one exception to the OAuth rule). Tokens from `peek token create` / `POST /api/tokens` belong to automation accounts without an email; only disabling applies to them. Tokens from `peek login` expire 90 days after approval; dashboard keys and admin tokens do not expire unless created with `expires_hours`.
 
 A directory such as PrivacyFence can create and connect accounts through a provisioning key: see [the Provisioning keys section](src/content/docs/auth-access.md#provisioning-keys) of the auth documentation. The key is shown once by `peek provisioner create`; keep it in the key holder's secret store, and revoke it with `peek provisioner revoke <id>` if it leaks.

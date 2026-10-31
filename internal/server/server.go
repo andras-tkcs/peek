@@ -58,6 +58,19 @@ type Config struct {
 
 	Groups GroupChecker
 
+	// LockedSettings are runtime settings set by the environment: written at
+	// every start and refused by the settings writers.
+	LockedSettings map[string]LockedSetting
+
+	// ProvisioningKey, when set, is registered as a provisioner called
+	// ProvisioningKeyName at every start (see seedProvisioner).
+	ProvisioningKey     string
+	ProvisioningKeyName string
+
+	// AdminEmailsRaw is the unparsed PEEK_ADMIN_EMAILS value: the emails that
+	// become admins at their Google or SSO sign-in.
+	AdminEmailsRaw string
+
 	// BackendRuntime is the container engine for page backends; nil turns the
 	// feature off. BackendNetwork is the network their containers join.
 	BackendRuntime backends.Runtime
@@ -65,13 +78,19 @@ type Config struct {
 }
 
 type Server struct {
-	store    *db.Store
-	secret   string
-	baseURL  string
-	dataDir  string
-	storage  objectstore.Storage
-	renderer *webui.Renderer
-	secure   bool
+	locked map[string]LockedSetting
+
+	adminEmails  []string // PEEK_ADMIN_EMAILS, parsed
+	setupSkipped bool     // first-run /setup is skipped (see setupSkipReason)
+	// provisioningKeyName is the provisioner registered from the environment, or "".
+	provisioningKeyName string
+	store               *db.Store
+	secret              string
+	baseURL             string
+	dataDir             string
+	storage             objectstore.Storage
+	renderer            *webui.Renderer
+	secure              bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -141,7 +160,18 @@ func New(cfg Config) (*Server, error) {
 
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	startupCtx := context.Background()
-	if _, err := bootstrapSetup(startupCtx, store, cfg.DataDir, baseURL); err != nil {
+	adminEmails, err := parseAdminEmails(cfg.AdminEmailsRaw)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkAdminEmails(cfg, adminEmails); err != nil {
+		return nil, err
+	}
+	skipReason, err := setupSkipReason(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := bootstrapSetup(startupCtx, store, cfg.DataDir, baseURL, skipReason); err != nil {
 		return nil, err
 	}
 
@@ -233,6 +263,10 @@ func New(cfg Config) (*Server, error) {
 		trustedProxyCIDRs:      cidrs,
 		s3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		oidcAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
+		locked:                 cfg.LockedSettings,
+		adminEmails:            adminEmails,
+		setupSkipped:           skipReason != "",
+		provisioningKeyName:    fileProvisionerName(cfg),
 		visitQueue:             make(chan visitEvent, 256),
 		backendLimiter:         newLimiter(240, time.Minute),
 		backendClient: &http.Client{
@@ -240,6 +274,15 @@ func New(cfg Config) (*Server, error) {
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 			Transport:     &http.Transport{Proxy: nil},
 		},
+	}
+
+	if err := srv.applyLockedSettings(startupCtx); err != nil {
+		cancel()
+		return nil, err
+	}
+	if err := srv.seedProvisioner(startupCtx, cfg.ProvisioningKeyName, cfg.ProvisioningKey); err != nil {
+		cancel()
+		return nil, err
 	}
 
 	if cfg.Groups != nil {

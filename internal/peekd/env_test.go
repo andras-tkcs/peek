@@ -111,3 +111,18 @@ func TestSecretFlagWarningsCoversAllSecretFlags(t *testing.T) {
 		t.Fatalf("unexpected --secret warning: %q", got)
 	}
 }
+
+func TestSecretFlagWarningsSignInSecrets(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	fs.String("google-client-secret", "", "")
+	fs.String("oidc-client-secret", "", "")
+	if err := fs.Parse([]string{"--google-client-secret", "a", "--oidc-client-secret", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(secretFlagWarnings(fs), "\n")
+	for _, want := range []string{"--google-client-secret", "PEEK_GOOGLE_CLIENT_SECRET_FILE", "--oidc-client-secret", "PEEK_OIDC_CLIENT_SECRET_FILE"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("warnings %q missing %s", got, want)
+		}
+	}
+}

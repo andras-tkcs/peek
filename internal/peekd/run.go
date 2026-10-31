@@ -15,8 +15,10 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/privacyfence/peek/internal/backends"
 	"github.com/privacyfence/peek/internal/groups"
@@ -41,6 +43,22 @@ type serveConfig struct {
 	S3SecretKey            string
 	S3AllowPrivateEndpoint bool
 	OIDCAllowPrivateIssuer bool
+
+	GoogleClientID     string
+	GoogleClientSecret string
+	OIDCIssuerURL      string
+	OIDCClientID       string
+	OIDCClientSecret   string
+	AllowedEmailDomain string
+	GoogleOrgSignup    bool
+	OIDCSignup         bool
+
+	// ProvisioningKey is the trimmed content of PEEK_PROVISIONING_KEY_FILE.
+	ProvisioningKey     string
+	ProvisioningKeyName string
+
+	// AdminEmails is the raw PEEK_ADMIN_EMAILS value; the server parses it.
+	AdminEmails string
 
 	MaxTotalSize      int64
 	RetentionDays     int
@@ -92,8 +110,10 @@ func writeServeUsage(w io.Writer, fs *flag.FlagSet) {
 
 Every flag except --version can also be set through an environment variable:
 PEEK_ plus the flag name in upper case with dashes as underscores (--base-url
-is PEEK_BASE_URL). PEEK_SECRET, PEEK_S3_SECRET_KEY and PEEK_METRICS_TOKEN also
-accept a _FILE variant holding a file path. PEEK_LOG_LEVEL (debug, info, warn)
+is PEEK_BASE_URL). PEEK_SECRET, PEEK_S3_SECRET_KEY, PEEK_METRICS_TOKEN, PEEK_GOOGLE_CLIENT_SECRET
+and PEEK_OIDC_CLIENT_SECRET also accept a _FILE variant holding a file path.
+Sign-in settings given by environment variable or flag are written at every
+start and locked on the Admin page. PEEK_LOG_LEVEL (debug, info, warn)
 sets the log level and PEEK_HEALTHCHECK_ADDR the healthcheck address.
 
 Flags:
@@ -115,6 +135,22 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		return serveConfig{}, false, err
 	}
 	metricsTokenDefault, err := getenvSecret("PEEK_METRICS_TOKEN")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
+	googleClientSecretDefault, err := getenvSecret("PEEK_GOOGLE_CLIENT_SECRET")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
+	oidcClientSecretDefault, err := getenvSecret("PEEK_OIDC_CLIENT_SECRET")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
+	googleOrgSignupDefault, err := getenvBool("PEEK_GOOGLE_ORG_SIGNUP")
+	if err != nil {
+		return serveConfig{}, false, err
+	}
+	oidcSignupDefault, err := getenvBool("PEEK_OIDC_SIGNUP")
 	if err != nil {
 		return serveConfig{}, false, err
 	}
@@ -164,6 +200,19 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	s3AllowPrivateEndpoint := fs.Bool("s3-allow-private-endpoint", s3AllowPrivateEndpointDefault, "allow private/link-local S3 endpoint addresses for explicit dev deployments")
 	oidcAllowPrivateIssuer := fs.Bool("oidc-allow-private-issuer", oidcAllowPrivateIssuerDefault, "allow http/private/link-local OIDC issuer URLs for explicit dev deployments")
 
+	googleClientID := fs.String("google-client-id", getenv("PEEK_GOOGLE_CLIENT_ID", ""), "Google OAuth client ID; turns Google login on and locks it on the Admin page")
+	googleClientSecret := fs.String("google-client-secret", googleClientSecretDefault, "Google OAuth client secret (prefer PEEK_GOOGLE_CLIENT_SECRET_FILE)")
+	oidcIssuerURL := fs.String("oidc-issuer-url", getenv("PEEK_OIDC_ISSUER_URL", ""), "OpenID Connect issuer URL; turns SSO login on and locks it on the Admin page")
+	oidcClientID := fs.String("oidc-client-id", getenv("PEEK_OIDC_CLIENT_ID", ""), "OpenID Connect client ID")
+	oidcClientSecret := fs.String("oidc-client-secret", oidcClientSecretDefault, "OpenID Connect client secret (prefer PEEK_OIDC_CLIENT_SECRET_FILE)")
+	allowedEmailDomain := fs.String("allowed-email-domain", getenv("PEEK_ALLOWED_EMAIL_DOMAIN", ""), "restrict human sign-in to this email domain; locks the setting on the Admin page")
+	googleOrgSignup := fs.Bool("google-org-signup", googleOrgSignupDefault, "Google org sign-in: the first Google sign-in in the allowed email domain creates the account")
+	oidcSignup := fs.Bool("oidc-signup", oidcSignupDefault, "SSO sign-up: the first SSO sign-in in the allowed email domain creates the account")
+
+	provisioningKeyFile := fs.String("provisioning-key-file", getenv("PEEK_PROVISIONING_KEY_FILE", ""), "path to a file holding a provisioning key to register (or rotate to) at every start")
+	adminEmails := fs.String("admin-emails", getenv("PEEK_ADMIN_EMAILS", ""), "comma-separated emails that become admins at their Google or SSO sign-in; also skips first-run /setup")
+	provisioningKeyName := fs.String("provisioning-key-name", getenv("PEEK_PROVISIONING_KEY_NAME", "PrivacyFence"), "name of the provisioner registered from --provisioning-key-file")
+
 	maxTotalSize := fs.Int64("max-total-size", maxTotalSizeDefault, "max total storage bytes across all uploads (0 = unlimited)")
 	retentionDays := fs.Int("retention-days", retentionDaysDefault, "auto-delete uploads older than N days (0 = off)")
 	trustedProxy := fs.Bool("trusted-proxy", trustedProxyDefault, "trust X-Forwarded-For header (set when behind a reverse proxy)")
@@ -203,6 +252,18 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	if (*googleSAKeyFile == "") != (*googleAdminEmail == "") {
 		return serveConfig{}, false, fmt.Errorf("PEEK_GOOGLE_SA_KEY_FILE and PEEK_GOOGLE_ADMIN_EMAIL must be set together")
 	}
+	if (*googleClientID == "") != (*googleClientSecret == "") {
+		return serveConfig{}, false, fmt.Errorf("set PEEK_GOOGLE_CLIENT_ID and PEEK_GOOGLE_CLIENT_SECRET (or PEEK_GOOGLE_CLIENT_SECRET_FILE) together")
+	}
+	if *oidcIssuerURL != "" || *oidcClientID != "" || *oidcClientSecret != "" {
+		if *oidcIssuerURL == "" || *oidcClientID == "" || *oidcClientSecret == "" {
+			return serveConfig{}, false, fmt.Errorf("set PEEK_OIDC_ISSUER_URL, PEEK_OIDC_CLIENT_ID and PEEK_OIDC_CLIENT_SECRET (or PEEK_OIDC_CLIENT_SECRET_FILE) together")
+		}
+	}
+	provisioningKey, provisioningName, err := readProvisioningKey(*provisioningKeyFile, *provisioningKeyName)
+	if err != nil {
+		return serveConfig{}, false, err
+	}
 	if *googleGroupCacheTTL < time.Second || *googleGroupCacheTTL > time.Hour {
 		return serveConfig{}, false, fmt.Errorf("google group cache ttl must be between 1s and 1h")
 	}
@@ -229,6 +290,20 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		S3AllowPrivateEndpoint: *s3AllowPrivateEndpoint,
 		OIDCAllowPrivateIssuer: *oidcAllowPrivateIssuer,
 
+		GoogleClientID:     *googleClientID,
+		GoogleClientSecret: *googleClientSecret,
+		OIDCIssuerURL:      *oidcIssuerURL,
+		OIDCClientID:       *oidcClientID,
+		OIDCClientSecret:   *oidcClientSecret,
+		AllowedEmailDomain: *allowedEmailDomain,
+		GoogleOrgSignup:    *googleOrgSignup,
+		OIDCSignup:         *oidcSignup,
+
+		ProvisioningKey:     provisioningKey,
+		ProvisioningKeyName: provisioningName,
+
+		AdminEmails: *adminEmails,
+
 		MaxTotalSize:      *maxTotalSize,
 		RetentionDays:     *retentionDays,
 		TrustedProxy:      *trustedProxy,
@@ -242,6 +317,64 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		DockerHost:     *dockerHost,
 		BackendNetwork: *backendNetwork,
 	}, false, nil
+}
+
+// readProvisioningKey reads and checks PEEK_PROVISIONING_KEY_FILE. With no file
+// set it returns an empty key; the name is checked either way.
+func readProvisioningKey(file, name string) (key, trimmedName string, err error) {
+	trimmedName = strings.TrimSpace(name)
+	if n := utf8.RuneCountInString(trimmedName); n < 1 || n > 100 {
+		return "", "", fmt.Errorf("PEEK_PROVISIONING_KEY_NAME must be 1 to 100 characters")
+	}
+	if file == "" {
+		return "", trimmedName, nil
+	}
+	b, err := os.ReadFile(file)
+	if err != nil {
+		var pe *os.PathError
+		if errors.As(err, &pe) {
+			err = pe.Err
+		}
+		return "", "", fmt.Errorf("PEEK_PROVISIONING_KEY_FILE cannot be read: %v", err)
+	}
+	key = strings.TrimSpace(string(b))
+	if !strings.HasPrefix(key, "peekprov_") || len(key) < 40 {
+		return "", "", fmt.Errorf("PEEK_PROVISIONING_KEY_FILE must hold a key that starts with peekprov_ and is at least 40 characters")
+	}
+	return key, trimmedName, nil
+}
+
+// lockedSettings maps the sign-in settings given by the environment to the
+// variable that sets each. Empty values and false bools are not locked.
+func lockedSettings(cfg serveConfig) map[string]server.LockedSetting {
+	out := map[string]server.LockedSetting{}
+	add := func(key, value, env string) {
+		if value != "" {
+			out[key] = server.LockedSetting{Value: value, Env: env}
+		}
+	}
+	if cfg.GoogleClientID != "" {
+		add("oauth_google_enabled", "true", "PEEK_GOOGLE_CLIENT_ID")
+	}
+	add("oauth_google_client_id", cfg.GoogleClientID, "PEEK_GOOGLE_CLIENT_ID")
+	add("oauth_google_client_secret", cfg.GoogleClientSecret, "PEEK_GOOGLE_CLIENT_SECRET")
+	if cfg.OIDCIssuerURL != "" {
+		add("oauth_oidc_enabled", "true", "PEEK_OIDC_ISSUER_URL")
+	}
+	add("oauth_oidc_issuer_url", cfg.OIDCIssuerURL, "PEEK_OIDC_ISSUER_URL")
+	add("oauth_oidc_client_id", cfg.OIDCClientID, "PEEK_OIDC_CLIENT_ID")
+	add("oauth_oidc_client_secret", cfg.OIDCClientSecret, "PEEK_OIDC_CLIENT_SECRET")
+	add("auth_allowed_email_domain", cfg.AllowedEmailDomain, "PEEK_ALLOWED_EMAIL_DOMAIN")
+	if cfg.GoogleOrgSignup {
+		add("auth_google_org_signup", "true", "PEEK_GOOGLE_ORG_SIGNUP")
+	}
+	if cfg.OIDCSignup {
+		add("auth_oidc_signup", "true", "PEEK_OIDC_SIGNUP")
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func validateServeConfig(baseURL string, maxUpload int64, storage string, maxTotalSize int64, retentionDays int) error {
@@ -346,6 +479,10 @@ func runServe(cfg serveConfig) int {
 		S3SecretKey:            cfg.S3SecretKey,
 		S3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		OIDCAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
+		LockedSettings:         lockedSettings(cfg),
+		ProvisioningKey:        cfg.ProvisioningKey,
+		ProvisioningKeyName:    cfg.ProvisioningKeyName,
+		AdminEmailsRaw:         cfg.AdminEmails,
 
 		MaxTotalSize:      cfg.MaxTotalSize,
 		RetentionDays:     cfg.RetentionDays,

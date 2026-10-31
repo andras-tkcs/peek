@@ -119,12 +119,16 @@
           <td class="px-3 text-muted-foreground">{{.LastUsed}}</td>
           <td class="px-3 text-muted-foreground">{{.Accounts}}</td>
           <td class="px-3">
+            {{if .FromFile}}
+            <span class="text-xs text-muted-foreground">Registered from PEEK_PROVISIONING_KEY_FILE: replace the file and restart to rotate it.</span>
+            {{else}}
             <div class="peek-row-actions">
               <form method="POST" action="/dashboard/provisioners/{{.ID}}/revoke" class="m-0">
                 <input type="hidden" name="csrf" value="{{$.CSRF}}">
                 <button type="submit" class="peek-row-button peek-row-button-danger">Revoke</button>
               </form>
             </div>
+            {{end}}
           </td>
         </tr>
       {{end}}
@@ -164,18 +168,32 @@
 
         <label class="flex flex-col gap-1">
           <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Auth.Domain.Label}}</span>
-          <input type="text" name="{{.SettingsPanel.Auth.Domain.Key}}" value="{{.SettingsPanel.Auth.Domain.Value}}" placeholder="example.com" autocomplete="off" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20">
+          <input type="text" name="{{.SettingsPanel.Auth.Domain.Key}}" value="{{.SettingsPanel.Auth.Domain.Value}}" placeholder="example.com" autocomplete="off" {{if .SettingsPanel.Auth.Domain.LockedBy}}disabled {{end}}class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 disabled:opacity-60">
           <span class="text-xs text-muted-foreground">{{.SettingsPanel.Auth.Domain.Description}}</span>
+          {{if .SettingsPanel.Auth.Domain.LockedBy}}<span class="text-xs text-muted-foreground">Set by {{.SettingsPanel.Auth.Domain.LockedBy}} on the server</span>{{end}}
         </label>
 
         <label class="peek-setting-switch">
           <span class="peek-switch-control">
-            <input type="checkbox" role="switch" name="{{.SettingsPanel.Auth.GoogleOrg.Key}}" value="true" {{if .SettingsPanel.Auth.GoogleOrg.Value}}checked{{end}} class="peek-switch-input">
+            <input type="checkbox" role="switch" name="{{.SettingsPanel.Auth.GoogleOrg.Key}}" value="true" {{if .SettingsPanel.Auth.GoogleOrg.Value}}checked{{end}} {{if .SettingsPanel.Auth.GoogleOrg.LockedBy}}disabled {{end}}class="peek-switch-input">
             <span class="peek-switch-track" aria-hidden="true"><span class="peek-switch-thumb"></span></span>
           </span>
           <span class="flex min-w-0 flex-col gap-1">
             <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Auth.GoogleOrg.Label}}</span>
             <span class="text-xs text-muted-foreground">{{.SettingsPanel.Auth.GoogleOrg.Description}}</span>
+            {{if .SettingsPanel.Auth.GoogleOrg.LockedBy}}<span class="text-xs text-muted-foreground">Set by {{.SettingsPanel.Auth.GoogleOrg.LockedBy}} on the server</span>{{end}}
+          </span>
+        </label>
+
+        <label class="peek-setting-switch">
+          <span class="peek-switch-control">
+            <input type="checkbox" role="switch" name="{{.SettingsPanel.Auth.OIDCSignup.Key}}" value="true" {{if .SettingsPanel.Auth.OIDCSignup.Value}}checked{{end}} {{if .SettingsPanel.Auth.OIDCSignup.LockedBy}}disabled {{end}}class="peek-switch-input">
+            <span class="peek-switch-track" aria-hidden="true"><span class="peek-switch-thumb"></span></span>
+          </span>
+          <span class="flex min-w-0 flex-col gap-1">
+            <span class="text-sm text-secondary-foreground">{{.SettingsPanel.Auth.OIDCSignup.Label}}</span>
+            <span class="text-xs text-muted-foreground">{{.SettingsPanel.Auth.OIDCSignup.Description}}</span>
+            {{if .SettingsPanel.Auth.OIDCSignup.LockedBy}}<span class="text-xs text-muted-foreground">Set by {{.SettingsPanel.Auth.OIDCSignup.LockedBy}} on the server</span>{{end}}
           </span>
         </label>
 
@@ -184,20 +202,22 @@
         <div class="peek-provider-settings">
           <label class="peek-setting-switch">
             <span class="peek-switch-control">
-              <input type="checkbox" role="switch" name="{{.Enabled.Key}}" value="true" x-model="oauth.{{.Key}}" {{if .EnabledValue}}checked{{end}} class="peek-switch-input">
+              <input type="checkbox" role="switch" name="{{.Enabled.Key}}" value="true" x-model="oauth.{{.Key}}" {{if .EnabledValue}}checked{{end}} {{if .Enabled.LockedBy}}disabled {{end}}class="peek-switch-input">
               <span class="peek-switch-track" aria-hidden="true"><span class="peek-switch-thumb"></span></span>
             </span>
             <span class="flex min-w-0 flex-col gap-1">
               <span class="text-sm text-secondary-foreground">{{.Enabled.Label}}</span>
               <span class="text-xs text-muted-foreground">{{.Enabled.Description}}</span>
+              {{if .Enabled.LockedBy}}<span class="text-xs text-muted-foreground">Set by {{.Enabled.LockedBy}} on the server</span>{{end}}
             </span>
           </label>
           <div x-show="oauth.{{.Key}}" x-cloak class="grid gap-3 md:grid-cols-2">
             {{range .Fields}}
             <label class="flex flex-col gap-1">
               <span class="text-sm text-secondary-foreground">{{.Label}}</span>
-              <input type="{{if .IsSecret}}password{{else}}text{{end}}" name="{{.Key}}" value="{{.Value}}" placeholder="{{.Description}}" autocomplete="off" :disabled="!oauth.{{$providerKey}}" class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 disabled:opacity-60">
+              <input type="{{if .IsSecret}}password{{else}}text{{end}}" name="{{.Key}}" value="{{.Value}}" placeholder="{{.Description}}" autocomplete="off" {{if .LockedBy}}disabled{{else}}:disabled="!oauth.{{$providerKey}}"{{end}} class="h-11 rounded-lg border border-input bg-secondary px-4 text-sm text-foreground placeholder:text-muted-foreground transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 disabled:opacity-60">
               <span class="text-xs text-muted-foreground">{{.Description}}</span>
+              {{if .LockedBy}}<span class="text-xs text-muted-foreground">Set by {{.LockedBy}} on the server</span>{{end}}
             </label>
             {{end}}
           </div>

@@ -40,6 +40,7 @@ const (
 	flashBadInvite                = "bad_invite"
 	flashInviteRevokeFailed       = "invite_revoke_failed"
 	flashProvisionerRevokeFailed  = "provisioner_revoke_failed"
+	flashProvisionerFromFile      = "provisioner_from_file"
 	flashBadUser                  = "bad_user"
 	flashLastAdminRemove          = "last_admin_remove"
 	flashLastAdminDisable         = "last_admin_disable"
@@ -94,6 +95,7 @@ var flashMessages = map[string]string{
 	flashBadInvite:                "bad invite",
 	flashInviteRevokeFailed:       "invite revoke failed",
 	flashProvisionerRevokeFailed:  "provisioning key revoke failed",
+	flashProvisionerFromFile:      "This provisioning key is registered from PEEK_PROVISIONING_KEY_FILE; replace the file and restart instead.",
 	flashBadUser:                  "bad user",
 	flashLastAdminRemove:          "cannot remove last admin",
 	flashLastAdminDisable:         "cannot disable last admin",

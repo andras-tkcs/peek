@@ -23,6 +23,7 @@ var settingsMeta = map[string]settingsRow{
 	"auth_token_login_enabled":    {Label: "Access token login", Description: "Allow signing in to the web dashboard with an access token", IsBool: true},
 	authAllowedEmailDomainSetting: {Label: "Allowed email domain", Description: "Restrict human sign-in, CLI approval, and invites to this email domain (blank = any domain)"},
 	authGoogleOrgSignupSetting:    {Label: "Google org sign-in", Description: "Only Google sign-in for everyone in the allowed email domain. The first sign-in creates the account. Requires Google login and an allowed email domain.", IsBool: true},
+	authOIDCSignupSetting:         {Label: "SSO sign-up", Description: "The first SSO sign-in of anyone in the allowed email domain creates the account. Requires SSO login and an allowed email domain, and cannot be combined with Google org sign-in.", IsBool: true},
 	"max_upload":                  {Label: "Max upload size (bytes)", Description: "Maximum size per individual HTML file upload"},
 	"max_total_size":              {Label: "Max total storage (bytes)", Description: "Cumulative size limit across all uploads (0 = unlimited)"},
 	"retention_days":              {Label: "Retention (days)", Description: "Auto-delete uploads older than this many days (0 = off)"},
@@ -74,6 +75,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 			meta.Label = k
 		}
 		meta.Key = k
+		meta.LockedBy = s.locked[k].Env
 		if meta.IsSecret && v != "" {
 			meta.Value = "••••"
 		} else {
@@ -98,6 +100,12 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updates := make(map[string]string, len(body))
+	for k := range body {
+		if l, ok := s.locked[k]; ok {
+			jsonError(w, http.StatusBadRequest, fmt.Sprintf("%s is set by %s on the server", k, l.Env))
+			return
+		}
+	}
 	for k, v := range body {
 		normalized, err := s.normalizeSettingValue(k, v)
 		if err != nil {
@@ -111,6 +119,10 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.validateGoogleOrgSignupUpdate(r.Context(), updates); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.validateOIDCSignupUpdate(r.Context(), updates); err != nil {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -281,6 +293,9 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 	}
 	updates := map[string]string{}
 	for k, meta := range settingsMeta {
+		if _, locked := s.locked[k]; locked {
+			continue
+		}
 		if meta.IsBool {
 			normalized, err := s.normalizeSettingValue(k, r.FormValue(k))
 			if err != nil {
@@ -313,6 +328,10 @@ func (s *Server) handleDashboardSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := s.validateGoogleOrgSignupUpdate(r.Context(), updates); err != nil {
+		s.renderAdmin(w, r, owner, http.StatusBadRequest, nil, err.Error())
+		return
+	}
+	if err := s.validateOIDCSignupUpdate(r.Context(), updates); err != nil {
 		s.renderAdmin(w, r, owner, http.StatusBadRequest, nil, err.Error())
 		return
 	}
@@ -385,23 +404,24 @@ func (s *Server) dashboardSettingsMap(ctx context.Context) map[string]string {
 	return raw
 }
 
-func dashboardSettingsPanel(raw map[string]string) webui.DashboardSettings {
-	google := dashboardOAuthProviderSettings(raw, "google", "Google")
-	github := dashboardOAuthProviderSettings(raw, "github", "GitHub")
-	oidc := dashboardOAuthProviderSettings(raw, "oidc", "SSO")
-	domain := dashboardSettingRow(raw, authAllowedEmailDomainSetting)
+func dashboardSettingsPanel(raw map[string]string, locked map[string]string) webui.DashboardSettings {
+	google := dashboardOAuthProviderSettings(raw, locked, "google", "Google")
+	github := dashboardOAuthProviderSettings(raw, locked, "github", "GitHub")
+	oidc := dashboardOAuthProviderSettings(raw, locked, "oidc", "SSO")
+	domain := dashboardLockedRow(raw, locked, authAllowedEmailDomainSetting)
 	if settingValueBool(raw[authGoogleOrgSignupSetting]) {
 		domain.Description = "Restrict human sign-in and CLI approval to this email domain (blank = any domain)"
 	}
 	return webui.DashboardSettings{
 		Auth: webui.AuthSettings{
-			Token:     dashboardSettingRow(raw, "auth_token_login_enabled"),
-			Domain:    domain,
-			GoogleOrg: dashboardSettingRow(raw, authGoogleOrgSignupSetting),
-			Google:    google,
-			GitHub:    github,
-			OIDC:      oidc,
-			Providers: []webui.OAuthProviderSettings{google, github, oidc},
+			Token:      dashboardSettingRow(raw, "auth_token_login_enabled"),
+			Domain:     domain,
+			GoogleOrg:  dashboardLockedRow(raw, locked, authGoogleOrgSignupSetting),
+			OIDCSignup: dashboardLockedRow(raw, locked, authOIDCSignupSetting),
+			Google:     google,
+			GitHub:     github,
+			OIDC:       oidc,
+			Providers:  []webui.OAuthProviderSettings{google, github, oidc},
 		},
 		Storage:  dashboardStorageSettings(raw),
 		Email:    dashboardEmailSettings(raw),
@@ -416,14 +436,22 @@ func dashboardSettingsPanel(raw map[string]string) webui.DashboardSettings {
 	}
 }
 
-func dashboardOAuthProviderSettings(raw map[string]string, key, name string) webui.OAuthProviderSettings {
-	enabled := dashboardSettingRow(raw, "oauth_"+key+"_enabled")
-	clientID := dashboardSettingRow(raw, "oauth_"+key+"_client_id")
-	clientSecret := dashboardSettingRow(raw, "oauth_"+key+"_client_secret")
+// dashboardLockedRow is dashboardSettingRow plus the variable that locks the
+// setting, if any.
+func dashboardLockedRow(raw, locked map[string]string, key string) settingsRow {
+	row := dashboardSettingRow(raw, key)
+	row.LockedBy = locked[key]
+	return row
+}
+
+func dashboardOAuthProviderSettings(raw, locked map[string]string, key, name string) webui.OAuthProviderSettings {
+	enabled := dashboardLockedRow(raw, locked, "oauth_"+key+"_enabled")
+	clientID := dashboardLockedRow(raw, locked, "oauth_"+key+"_client_id")
+	clientSecret := dashboardLockedRow(raw, locked, "oauth_"+key+"_client_secret")
 	fields := []webui.SettingRow{clientID, clientSecret}
 	if key == "oidc" {
 		fields = []webui.SettingRow{
-			dashboardSettingRow(raw, "oauth_oidc_issuer_url"),
+			dashboardLockedRow(raw, locked, "oauth_oidc_issuer_url"),
 			clientID,
 			clientSecret,
 		}

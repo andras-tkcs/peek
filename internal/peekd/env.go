@@ -81,6 +81,9 @@ func secretFlagWarnings(fs *flag.FlagSet) []string {
 		"secret":        "PEEK_SECRET_FILE",
 		"s3-secret-key": "PEEK_S3_SECRET_KEY_FILE",
 		"metrics-token": "PEEK_METRICS_TOKEN_FILE",
+
+		"google-client-secret": "PEEK_GOOGLE_CLIENT_SECRET_FILE",
+		"oidc-client-secret":   "PEEK_OIDC_CLIENT_SECRET_FILE",
 	}
 	var out []string
 	fs.Visit(func(f *flag.Flag) {

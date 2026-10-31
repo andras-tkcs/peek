@@ -599,3 +599,140 @@ func TestRunHelpPrintsUsageAndExitsZero(t *testing.T) {
 		}
 	}
 }
+
+func TestParseServeConfigSignInFlagsAndEnv(t *testing.T) {
+	secretFile := writeSecretFile(t, "oidc-secret\n")
+	t.Setenv("PEEK_GOOGLE_CLIENT_ID", "gid")
+	t.Setenv("PEEK_GOOGLE_CLIENT_SECRET", "gsecret")
+	t.Setenv("PEEK_OIDC_ISSUER_URL", "https://sso.example.test")
+	t.Setenv("PEEK_OIDC_CLIENT_ID", "oid")
+	t.Setenv("PEEK_OIDC_CLIENT_SECRET_FILE", secretFile)
+	t.Setenv("PEEK_ALLOWED_EMAIL_DOMAIN", "corp.test")
+	t.Setenv("PEEK_GOOGLE_ORG_SIGNUP", "false")
+	t.Setenv("PEEK_OIDC_SIGNUP", "true")
+	cfg, _, err := parseServeConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GoogleClientID != "gid" || cfg.GoogleClientSecret != "gsecret" || cfg.OIDCIssuerURL != "https://sso.example.test" ||
+		cfg.OIDCClientID != "oid" || cfg.OIDCClientSecret != "oidc-secret" || cfg.AllowedEmailDomain != "corp.test" ||
+		cfg.GoogleOrgSignup || !cfg.OIDCSignup {
+		t.Fatalf("cfg = %+v", cfg)
+	}
+	locked := lockedSettings(cfg)
+	for key, env := range map[string]string{
+		"oauth_google_enabled":       "PEEK_GOOGLE_CLIENT_ID",
+		"oauth_google_client_secret": "PEEK_GOOGLE_CLIENT_SECRET",
+		"oauth_oidc_enabled":         "PEEK_OIDC_ISSUER_URL",
+		"oauth_oidc_client_secret":   "PEEK_OIDC_CLIENT_SECRET",
+		"auth_allowed_email_domain":  "PEEK_ALLOWED_EMAIL_DOMAIN",
+		"auth_oidc_signup":           "PEEK_OIDC_SIGNUP",
+	} {
+		if locked[key].Env != env || locked[key].Value == "" {
+			t.Fatalf("locked[%s] = %+v, want env %s", key, locked[key], env)
+		}
+	}
+	if _, ok := locked["auth_google_org_signup"]; ok {
+		t.Fatal("a false bool must not lock")
+	}
+	if lockedSettings(serveConfig{}) != nil {
+		t.Fatal("empty config locks nothing")
+	}
+}
+
+func TestParseServeConfigSignInFlags(t *testing.T) {
+	cfg, _, err := parseServeConfig([]string{
+		"--google-client-id", "g", "--google-client-secret", "gs",
+		"--oidc-issuer-url", "https://i.test", "--oidc-client-id", "o", "--oidc-client-secret", "os",
+		"--allowed-email-domain", "corp.test", "--google-org-signup", "--oidc-signup=false",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GoogleClientID != "g" || cfg.OIDCClientSecret != "os" || cfg.AllowedEmailDomain != "corp.test" || !cfg.GoogleOrgSignup || cfg.OIDCSignup {
+		t.Fatalf("cfg = %+v", cfg)
+	}
+}
+
+func TestParseServeConfigSignInPairErrors(t *testing.T) {
+	google := "set PEEK_GOOGLE_CLIENT_ID and PEEK_GOOGLE_CLIENT_SECRET (or PEEK_GOOGLE_CLIENT_SECRET_FILE) together"
+	oidc := "set PEEK_OIDC_ISSUER_URL, PEEK_OIDC_CLIENT_ID and PEEK_OIDC_CLIENT_SECRET (or PEEK_OIDC_CLIENT_SECRET_FILE) together"
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--google-client-id", "g"}, google},
+		{[]string{"--google-client-secret", "s"}, google},
+		{[]string{"--oidc-issuer-url", "https://i.test"}, oidc},
+		{[]string{"--oidc-issuer-url", "https://i.test", "--oidc-client-id", "o"}, oidc},
+		{[]string{"--oidc-client-id", "o", "--oidc-client-secret", "s"}, oidc},
+	} {
+		if _, _, err := parseServeConfig(tc.args); err == nil || err.Error() != tc.want {
+			t.Fatalf("args %v: err = %v", tc.args, err)
+		}
+	}
+}
+
+func TestServeUsageListsSignInSecretFileForms(t *testing.T) {
+	var out strings.Builder
+	writeServeUsage(&out, flag.NewFlagSet("t", flag.ContinueOnError))
+	for _, want := range []string{"PEEK_GOOGLE_CLIENT_SECRET", "PEEK_OIDC_CLIENT_SECRET", "_FILE"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("usage missing %s: %s", want, out.String())
+		}
+	}
+}
+
+func TestParseServeConfigProvisioningKeyFile(t *testing.T) {
+	dir := t.TempDir()
+	write := func(content string) string {
+		p := filepath.Join(dir, "key")
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	good := "peekprov_" + strings.Repeat("a", 40)
+
+	cfg, _, err := parseServeConfig([]string{"--provisioning-key-file", write(good + "\n")})
+	if err != nil || cfg.ProvisioningKey != good || cfg.ProvisioningKeyName != "PrivacyFence" {
+		t.Fatalf("cfg = %+v, %v", cfg, err)
+	}
+	cfg, _, err = parseServeConfig(nil)
+	if err != nil || cfg.ProvisioningKey != "" {
+		t.Fatalf("unset: %+v, %v", cfg, err)
+	}
+	cfg, _, err = parseServeConfig([]string{"--provisioning-key-file", write(good), "--provisioning-key-name", "  Other "})
+	if err != nil || cfg.ProvisioningKeyName != "Other" {
+		t.Fatalf("name: %+v, %v", cfg, err)
+	}
+
+	const shape = "PEEK_PROVISIONING_KEY_FILE must hold a key that starts with peekprov_ and is at least 40 characters"
+	for _, content := range []string{"nope", "peekprov_short", "xpeekprov_" + strings.Repeat("a", 40)} {
+		if _, _, err := parseServeConfig([]string{"--provisioning-key-file", write(content)}); err == nil || err.Error() != shape {
+			t.Fatalf("%q: err = %v", content, err)
+		}
+	}
+	_, _, err = parseServeConfig([]string{"--provisioning-key-file", filepath.Join(dir, "missing")})
+	if err == nil || !strings.HasPrefix(err.Error(), "PEEK_PROVISIONING_KEY_FILE cannot be read: ") {
+		t.Fatalf("missing: %v", err)
+	}
+	for _, name := range []string{"   ", strings.Repeat("x", 101)} {
+		_, _, err = parseServeConfig([]string{"--provisioning-key-file", write(good), "--provisioning-key-name", name})
+		if err == nil || err.Error() != "PEEK_PROVISIONING_KEY_NAME must be 1 to 100 characters" {
+			t.Fatalf("name %q: %v", name, err)
+		}
+	}
+}
+
+func TestParseServeConfigAdminEmails(t *testing.T) {
+	cfg, _, err := parseServeConfig([]string{"--admin-emails", "A@x.test, b@x.test"})
+	if err != nil || cfg.AdminEmails != "A@x.test, b@x.test" {
+		t.Fatalf("cfg = %+v, %v", cfg, err)
+	}
+	t.Setenv("PEEK_ADMIN_EMAILS", "env@x.test")
+	cfg, _, err = parseServeConfig(nil)
+	if err != nil || cfg.AdminEmails != "env@x.test" {
+		t.Fatalf("env: cfg = %+v, %v", cfg, err)
+	}
+}

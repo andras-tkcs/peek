@@ -4,6 +4,13 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ## [Unreleased]
 
+### Added
+
+- SSO sign-up: the first SSO sign-in of anyone in the allowed email domain creates the account, like Google org sign-in.
+- Sign-in from the environment: `PEEK_GOOGLE_CLIENT_ID`/`_SECRET`, `PEEK_OIDC_ISSUER_URL`/`_CLIENT_ID`/`_SECRET`, `PEEK_ALLOWED_EMAIL_DOMAIN`, `PEEK_GOOGLE_ORG_SIGNUP` and `PEEK_OIDC_SIGNUP` set the sign-in settings at every start and lock them on the Admin page.
+- `PEEK_PROVISIONING_KEY_FILE` registers a provisioning key at every start, and replacing the file rotates it in place, so PrivacyFence can provision accounts without `peek provisioner create`.
+- `PEEK_ADMIN_EMAILS` names the admins by email, who become admins at their Google or SSO sign-in. First-run `/setup` is skipped when admin emails are set, or when sign-in and accounts come from the environment.
+
 ## [0.17.0] - 2026-10-30
 
 ### Added
