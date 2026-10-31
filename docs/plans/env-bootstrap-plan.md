@@ -6,10 +6,11 @@ A new Peek server can start already set up, with no first-run `/setup` code from
 clicks on the Admin page. This is what the `privacyfence-suite` Docker stack needs, and it is
 useful to any container deployment:
 
-- **Admins by email.** `PEEK_ADMIN_EMAILS` names the admins, as `PRIVACYFENCE_ADMIN_EMAILS` does in
-  PrivacyFence. They become admins when they first sign in with Google or SSO. `/setup` is skipped.
-  For a server with no identity provider (the suite's localhost stack), `PEEK_ADMIN_PASSWORD_FILE`
-  gives the one listed admin a password instead.
+- **Admins by email, no first-run code.** `PEEK_ADMIN_EMAILS` names the admins, as
+  `PRIVACYFENCE_ADMIN_EMAILS` does in PrivacyFence. They become admins when they first sign in with
+  Google or SSO. `/setup` is skipped when admin emails are set, or when Google or SSO sign-in comes
+  from the environment. In the suite, SSO is PrivacyFence itself (its OIDC provider at
+  `<privacyfence>/oidc`).
 - **Sign-in from the environment.** Google sign-in, Google org sign-in (automatic accounts for the
   allowed domain), generic OIDC (SSO) sign-in with a new matching OIDC sign-up, and the allowed email
   domain can be set by variables. They are then locked on the Admin page.
@@ -74,7 +75,6 @@ ones are. Secrets also accept `_FILE` through `getenvSecret`.
 | `--google-org-signup` | `PEEK_GOOGLE_ORG_SIGNUP` | `auth_google_org_signup` (only when true) | bool |
 | `--oidc-signup` | `PEEK_OIDC_SIGNUP` | `auth_oidc_signup` (only when true; new setting) | bool |
 | `--admin-emails` | `PEEK_ADMIN_EMAILS` | (no setting) | comma list |
-| `--admin-password-file` | `PEEK_ADMIN_PASSWORD_FILE` | (no setting) | a path |
 | `--provisioning-key-file` | `PEEK_PROVISIONING_KEY_FILE` | (no setting) | a path |
 
 - **Empty means not set.** An empty value means "not set by the environment". The setting then
@@ -146,12 +146,19 @@ ones are. Secrets also accept `_FILE` through `getenvSecret`.
   domain (same rule as `accountAllowedByEmailDomain`), else the start fails with
   `PEEK_ADMIN_EMAILS has <email>, outside PEEK_ALLOWED_EMAIL_DOMAIN`.
 - **A sign-in for the admins.** With `AdminEmails` set, the start fails with
-  `PEEK_ADMIN_EMAILS needs a sign-in for the admins: set Google or SSO sign-in in the environment, or PEEK_ADMIN_PASSWORD_FILE`
-  unless Google or OIDC is locked on, or `PEEK_ADMIN_PASSWORD_FILE` is set.
-- **Setup is skipped.** `bootstrapSetup` gains an `adminEmails []string` parameter. When it is
-  non-empty, it removes `setup.key`, writes no code and prints
-  `Peek first-run setup is skipped: PEEK_ADMIN_EMAILS names the admins.` instead of the URL.
-  `setupRequired` returns false when `s.adminEmails` is non-empty.
+  `PEEK_ADMIN_EMAILS needs a sign-in for the admins: set Google or SSO sign-in in the environment`
+  unless Google or OIDC is locked on.
+- **Setup is skipped.** `bootstrapSetup` gains a `skipReason string` parameter:
+  - `PEEK_ADMIN_EMAILS names the admins` when `AdminEmails` is non-empty;
+  - otherwise `sign-in comes from the environment` when Google or OIDC is locked on;
+  - otherwise empty.
+
+  When it is non-empty, `bootstrapSetup` removes `setup.key`, writes no code, and prints
+  `Peek first-run setup is skipped: <skipReason>.` instead of the URL. `Server` keeps `setupSkipped bool`,
+  and `setupRequired` returns false when it is true. A server skipped for the second reason, with no
+  admin emails, has no admin until one is promoted on the Admin page by another admin. That is
+  intended for single-person installs (the suite's localhost stack), where every setting comes from
+  the environment.
 - **Admins are made at OAuth sign-in.** In `resolveOAuthAccountCreated`, once the account is
   resolved or created, a verified email in `s.adminEmails` gets `SetAccountAdmin(id, true)` if the
   account is not an admin yet. A listed email with no account and no other way in (no invite, no
@@ -161,22 +168,6 @@ ones are. Secrets also accept `_FILE` through `getenvSecret`.
 - **A provisioned account becomes an admin too.** An account Peek made through provisioning, which
   is later named in `PEEK_ADMIN_EMAILS`, becomes an admin at its first OAuth sign-in. From then on
   provisioning answers 409 for it, as for any admin; PrivacyFence documents this.
-
-### Admin password (phase p2)
-
-- **One admin only.** `PEEK_ADMIN_PASSWORD_FILE` requires `PEEK_ADMIN_EMAILS` with exactly one
-  entry, else `PEEK_ADMIN_PASSWORD_FILE needs exactly one email in PEEK_ADMIN_EMAILS`.
-- **File rules.** The file is read at start and trimmed of trailing `\r\n`. It must hold 12 to 72
-  bytes, else `PEEK_ADMIN_PASSWORD_FILE must hold a password of 12 to 72 bytes`. An unreadable file
-  gives `PEEK_ADMIN_PASSWORD_FILE cannot be read: <os error>`.
-- **What the start does.** `server.New` calls `ensureEnvAdmin(ctx, store, email, password)`:
-  - With no account for the email, it creates one with `CreateAccountWithPassword(email, "Admin", bcrypt hash, true)`.
-  - With an account, it makes it an admin if needed and, if `bcrypt.CompareHashAndPassword` fails,
-    stores a new hash with the new `db.Store.SetAccountPasswordHash(ctx, id, hash)`.
-
-  Use the bcrypt cost `/setup` uses. This runs after `applyLockedSettings`.
-- **Admins keep password sign-in.** Existing behaviour keeps password login for admins even when an
-  OAuth provider is on.
 
 ### Provisioning key from a file (phase p3)
 
@@ -194,8 +185,8 @@ ones are. Secrets also accept `_FILE` through `getenvSecret`.
     never the key.
 
   Replacing the file therefore rotates the key at the next start.
-- **Order.** It runs after `ensureEnvAdmin`. It works with no admin account, so a server with
-  `PEEK_ADMIN_EMAILS` and no password file can be provisioned before any admin signs in.
+- **Order.** It runs after `checkAdminEmails`. It works with no admin account, so a server can be
+  provisioned before any admin signs in.
 - **Locked on the Admin page.** A provisioner registered this way can still be revoked on the Admin
   page. It comes back at the next start, which the Admin page says under the provisioners list when
   the server has a key file: `The key named <name> is registered from PEEK_PROVISIONING_KEY_FILE at every start.`
@@ -207,11 +198,13 @@ ones are. Secrets also accept `_FILE` through `getenvSecret`.
 - **Seeding the settings once, like `initDefaultSettings`.** A compose file is re-run with the same
   environment. A one-time seed diverges silently after the first Admin-page edit, and a client-secret
   rotation in the secret file would never reach the database.
-- **An admin password in a plain variable.** It shows in `docker inspect`; only the file form exists.
+- **An admin password from a file.** It would be a second sign-in path to maintain. Every suite
+  configuration signs in through SSO (PrivacyFence), and `/setup` remains for servers configured on
+  the Admin page.
 - **Creating the first admin through a token in the environment.** An admin token outlives its use
   and grants API access; an email list grants nothing until the person signs in.
-- **Letting a provisioning key reach admin accounts.** The suite's localhost stack gives the
-  PrivacyFence person (`admin@localhost`) and the Peek admin different addresses instead.
+- **Letting a provisioning key reach admin accounts.** The suite's localhost stack simply has no
+  Peek admin instead.
 
 ## Manual steps
 
@@ -220,8 +213,8 @@ None. The suite plan's `manual_after` signs in to a real Google-configured Peek.
 ## Risks and open questions
 
 - **`server.New`'s order matters.** `bootstrapSetup` runs before `initDefaultSettings`
-  (`server.go:140-158`). p2 must call `bootstrapSetup` with the admin emails and run `ensureEnvAdmin`
-  after `applyLockedSettings`. If `server.New` is structured differently from these line numbers, stop
+  (`server.go:140-158`). p2 must compute the skip reason from the config (`AdminEmails` and
+  `LockedSettings`, not the database), so `bootstrapSetup` can stay first. If `server.New` is structured differently from these line numbers, stop
   with `status=blocked`.
 - **The template's provider rows are a range over `Providers`.** If a locked provider row cannot be
   rendered disabled without restructuring that range, stop with `status=blocked`.
@@ -238,7 +231,7 @@ verify_after_merge:
   - go test ./internal/server/... ./internal/peekd/... ./internal/db/...
 final_checks:
   - docs/plans/env-bootstrap-plan.md is deleted and nothing links to it
-  - CHANGELOG.md has entries under "## [Unreleased]" for locked sign-in settings, SSO sign-up, PEEK_ADMIN_EMAILS, PEEK_ADMIN_PASSWORD_FILE and PEEK_PROVISIONING_KEY_FILE, and no new version heading
+  - CHANGELOG.md has entries under "## [Unreleased]" for locked sign-in settings, SSO sign-up, PEEK_ADMIN_EMAILS and the skipped setup, and PEEK_PROVISIONING_KEY_FILE, and no new version heading
 phases:
   - id: p1-locked-settings
     title: Sign-in settings from the environment, locked on the Admin page, and SSO sign-up
@@ -309,7 +302,7 @@ phases:
       - grep -n "auth_oidc_signup requires auth_allowed_email_domain" internal/server/auth_oidc_signup.go finds the message
 
   - id: p2-admin-emails
-    title: PEEK_ADMIN_EMAILS replaces /setup, and PEEK_ADMIN_PASSWORD_FILE for servers without sign-in
+    title: PEEK_ADMIN_EMAILS, and /setup skipped when admins or sign-in come from the environment
     depends_on: [p1-locked-settings]
     complexity: M
     touches:
@@ -322,41 +315,38 @@ phases:
       - internal/server/env_admins_test.go
       - internal/server/oauth_accounts.go
       - internal/server/oauth_accounts_test.go
-      - internal/db/accounts.go
-      - internal/db/accounts_test.go
       - CHANGELOG.md
     brief: |
-      Read docs/plans/env-bootstrap-plan.md, sections "Admins by email" and "Admin password".
-      1. run.go: add --admin-emails (PEEK_ADMIN_EMAILS) and --admin-password-file
-         (PEEK_ADMIN_PASSWORD_FILE). Parse and validate the list (invalid-email error), the
-         exactly-one-email rule, and read and validate the password file (both errors). Put
-         AdminEmails []string and AdminPassword string on server.Config.
-      2. New internal/server/env_admins.go: checkAdminEmails(cfg, locked) for the domain and
-         "needs a sign-in" start errors; ensureEnvAdmin(ctx, store, email, password); and
-         promoteListedAdmin(ctx, account) used by OAuth resolution.
-      3. internal/db/accounts.go: add SetAccountPasswordHash(ctx, id int64, hash string) error,
-         updating password_hash and updated_at. Test it in accounts_test.go.
-      4. bootstrap.go: bootstrapSetup(ctx, store, dataDir, baseURL, adminEmails) skips the code as
-         designed, with the exact log line; setupRequired returns false when s.adminEmails is set.
-         server.go: pass cfg.AdminEmails, keep it on Server, call checkAdminEmails after
-         applyLockedSettings and ensureEnvAdmin after that. Stop condition: see Risks (server.New's order).
-      5. oauth_accounts.go, resolveOAuthAccountCreated: promote a listed verified email, and create a
+      Read docs/plans/env-bootstrap-plan.md, section "Admins by email".
+      1. run.go: add --admin-emails (PEEK_ADMIN_EMAILS). Parse and validate the list (the
+         invalid-email error) and put AdminEmails []string on server.Config.
+      2. New internal/server/env_admins.go: checkAdminEmails(cfg) for the domain and "needs a sign-in"
+         start errors (it reads cfg.LockedSettings, not the database), setupSkipReason(cfg) string
+         returning the two reasons from the Design, and promoteListedAdmin(ctx, account) used by OAuth
+         resolution.
+      3. bootstrap.go: bootstrapSetup(ctx, store, dataDir, baseURL, skipReason) skips the code with
+         the exact log line when skipReason is non-empty. setupRequired returns false when
+         s.setupSkipped. server.go: compute the reason with setupSkipReason(cfg) before bootstrapSetup,
+         keep setupSkipped and adminEmails on Server, and call checkAdminEmails before
+         applyLockedSettings. Stop condition: see Risks (server.New's order).
+      4. oauth_accounts.go, resolveOAuthAccountCreated: promote a listed verified email, and create a
          listed email as admin when no other path applies, before the invite branch. The audit line is
          "account promoted" with reason PEEK_ADMIN_EMAILS.
-      6. Tests: run_test.go (parsing and errors); bootstrap_test.go (no setup.key and the log line with
-         admin emails; /login does not redirect to /setup); env_admins_test.go (password create,
-         rotate, promote; both start errors); oauth_accounts_test.go (a listed Google sign-in becomes
-         admin; a listed email with no account is created as admin; an unlisted one still needs an
-         invite).
-      7. CHANGELOG.md "### Added":
-         "- `PEEK_ADMIN_EMAILS` names the admins by email, who become admins at their first Google or SSO sign-in; first-run `/setup` is skipped."
-         "- `PEEK_ADMIN_PASSWORD_FILE` gives the one listed admin a password, for servers without Google or SSO sign-in."
-      8. Run `mise run check-full`.
+      5. Tests:
+         - run_test.go: parsing and errors.
+         - bootstrap_test.go: no setup.key and the log line for each reason; /login does not redirect
+           to /setup; /api/cli/login/start is not refused.
+         - env_admins_test.go: both start errors; each skip reason; empty without either.
+         - oauth_accounts_test.go: a listed SSO sign-in becomes admin; a listed email with no account
+           is created as admin; an unlisted one still needs an invite or sign-up.
+      6. CHANGELOG.md "### Added":
+         "- `PEEK_ADMIN_EMAILS` names the admins by email, who become admins at their first Google or SSO sign-in. First-run `/setup` is skipped when admin emails are set, or when Google or SSO sign-in comes from the environment."
+      7. Run `mise run check-full`.
     acceptance:
-      - go test ./internal/server/... ./internal/db/... ./internal/peekd/... passes
+      - go test ./internal/server/... ./internal/peekd/... passes
       - mise run check-full passes
-      - grep -n "first-run setup is skipped: PEEK_ADMIN_EMAILS names the admins" internal/server/bootstrap.go finds the line
-      - grep -n "func (s \*Store) SetAccountPasswordHash" internal/db/accounts.go finds the method
+      - grep -n "first-run setup is skipped" internal/server/bootstrap.go finds the line
+      - grep -n "func setupSkipReason" internal/server/env_admins.go finds it
 
   - id: p3-provisioning-key-file
     title: PEEK_PROVISIONING_KEY_FILE registers a provisioning key at every start
@@ -381,7 +371,7 @@ phases:
          ProvisioningKeyName on server.Config.
       2. New internal/server/provisioning_seed.go: seedProvisioner(ctx, store, name, key) as designed,
          using GetProvisionerByKey, ListProvisioners, DeleteProvisioner and CreateProvisioner(name, key, 0).
-         Call it from server.New after ensureEnvAdmin when cfg.ProvisioningKey is set.
+         Call it from server.New after applyLockedSettings when cfg.ProvisioningKey is set.
       3. Admin page: add ProvisioningKeyFromFile string to the admin page data in
          internal/web/renderer.go, fill it in admin.go where the provisioners list is built, and render
          the sentence from the Design under the provisioners list in admin.gohtml
@@ -414,7 +404,7 @@ phases:
       2. docs/src/content/docs/auth-access.md: a section "Configure sign-in from the environment"
          covering locked settings (what the Admin page shows, that the API refuses them), SSO sign-up,
          PEEK_ADMIN_EMAILS (no demotion on removal, provisioned accounts become admins and are then
-         refused by provisioning) and PEEK_ADMIN_PASSWORD_FILE; and in the provisioning part,
+         refused by provisioning), and when /setup is skipped; and in the provisioning part,
          PEEK_PROVISIONING_KEY_FILE (rotation by replacing the file, revocation comes back at restart).
       3. docs/src/content/docs/server-setup.md and docs/operations.md "First run": say that
          PEEK_ADMIN_EMAILS skips /setup, with a minimal example (PEEK_BASE_URL, PEEK_GOOGLE_CLIENT_ID,
