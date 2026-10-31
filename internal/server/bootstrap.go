@@ -94,7 +94,9 @@ func setupCodePath(dataDir string) string {
 
 // bootstrapSetup prepares a one-time setup URL when the database has no
 // accounts. The first admin is created through /setup, not through a token.
-func bootstrapSetup(ctx context.Context, store *db.Store, dataDir, baseURL string) (string, error) {
+// A non-empty skipReason means the environment provides the way in: no code is
+// written and the reason is printed instead.
+func bootstrapSetup(ctx context.Context, store *db.Store, dataDir, baseURL, skipReason string) (string, error) {
 	n, err := store.CountAccounts(ctx)
 	if err != nil {
 		return "", err
@@ -105,6 +107,11 @@ func bootstrapSetup(ctx context.Context, store *db.Store, dataDir, baseURL strin
 	}
 
 	path := setupCodePath(dataDir)
+	if skipReason != "" {
+		_ = os.Remove(path)
+		fmt.Printf("Peek first-run setup is skipped: %s.\n", skipReason)
+		return "", nil
+	}
 	if b, err := os.ReadFile(path); err == nil {
 		code := strings.TrimSpace(string(b))
 		if code != "" {
@@ -132,6 +139,9 @@ func printSetupURL(baseURL, code string) {
 }
 
 func (s *Server) setupRequired(ctx context.Context) bool {
+	if s.setupSkipped {
+		return false
+	}
 	n, err := s.store.CountAccounts(ctx)
 	return err == nil && n == 0
 }

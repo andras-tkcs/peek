@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/privacyfence/peek/internal/models"
 )
 
 func oauthCovProfile(email string) *oauthProfile {
@@ -182,5 +184,116 @@ func TestOAuthCovDisplayNameFallsBackToUser(t *testing.T) {
 	}
 	if got := displayName(" ", " Ann ", "x"); got != "Ann" {
 		t.Fatalf("displayName = %q", got)
+	}
+}
+
+func listedServer(t *testing.T, emails ...string) *Server {
+	t.Helper()
+	s := newTestServer(t)
+	s.adminEmails = emails
+	return s
+}
+
+func listedProfile(provider, email string) *oauthProfile {
+	return &oauthProfile{Provider: provider, ProviderUserID: provider + "-1", Email: email, EmailVerified: true, Name: "N"}
+}
+
+func resolveListed(t *testing.T, s *Server, p *oauthProfile) (*models.Account, bool, error) {
+	t.Helper()
+	return s.resolveOAuthAccountCreated(httptest.NewRequest(http.MethodGet, "/", nil), p)
+}
+
+func hasAudit(t *testing.T, s *Server, action string) bool {
+	t.Helper()
+	logs, _ := s.store.ListAuditLog(context.Background(), 20)
+	for _, e := range logs {
+		if e.Action == action {
+			return true
+		}
+	}
+	return false
+}
+
+func TestListedSSOSignInPromoted(t *testing.T) {
+	s := listedServer(t, "boss@example.test")
+	ctx := context.Background()
+	if _, err := s.store.CreateAccount(ctx, "boss@example.test", "Boss", false); err != nil {
+		t.Fatal(err)
+	}
+	acc, _, err := resolveListed(t, s, listedProfile("oidc", "boss@example.test"))
+	if err != nil || !acc.IsAdmin {
+		t.Fatalf("acc = %+v, err = %v", acc, err)
+	}
+	stored, _ := s.store.GetAccountByEmail(ctx, "boss@example.test")
+	if !stored.IsAdmin {
+		t.Fatal("promotion not stored")
+	}
+	if !hasAudit(t, s, "account promoted") {
+		t.Fatal("no account promoted audit entry")
+	}
+	// Linked identity path promotes at the next sign-in, too.
+	if err := s.store.UpsertOAuthIdentity(ctx, stored.ID, "oidc", "oidc-1", stored.Email, "Boss"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.SetAccountAdmin(ctx, stored.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	acc, _, err = resolveListed(t, s, listedProfile("oidc", "boss@example.test"))
+	if err != nil || !acc.IsAdmin {
+		t.Fatalf("linked: acc = %+v, err = %v", acc, err)
+	}
+}
+
+func TestListedGitHubSignInNotPromoted(t *testing.T) {
+	s := listedServer(t, "boss@example.test")
+	if _, err := s.store.CreateAccount(context.Background(), "boss@example.test", "Boss", false); err != nil {
+		t.Fatal(err)
+	}
+	acc, _, err := resolveListed(t, s, listedProfile("github", "boss@example.test"))
+	if err != nil || acc.IsAdmin {
+		t.Fatalf("acc = %+v, err = %v", acc, err)
+	}
+}
+
+func TestListedEmailWithoutAccountCreatedAsAdmin(t *testing.T) {
+	s := listedServer(t, "boss@example.test")
+	acc, created, err := resolveListed(t, s, listedProfile("google", "boss@example.test"))
+	if err != nil || !created || !acc.IsAdmin {
+		t.Fatalf("acc = %+v, created = %v, err = %v", acc, created, err)
+	}
+	// GitHub sign-in of a listed email with no account still needs an invite.
+	s = listedServer(t, "boss@example.test")
+	if _, _, err := resolveListed(t, s, listedProfile("github", "boss@example.test")); err == nil || err.Error() != "invite required" {
+		t.Fatalf("github err = %v", err)
+	}
+}
+
+func TestUnlistedStillNeedsInvite(t *testing.T) {
+	s := listedServer(t, "boss@example.test")
+	if _, _, err := resolveListed(t, s, listedProfile("oidc", "other@example.test")); err == nil || err.Error() != "invite required" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestPromotionNeedsMatchingEmail(t *testing.T) {
+	s := listedServer(t, "boss@example.test")
+	ctx := context.Background()
+	a, err := s.store.CreateAccount(ctx, "someone@example.test", "S", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.UpsertOAuthIdentity(ctx, a.ID, "oidc", "oidc-1", a.Email, "S"); err != nil {
+		t.Fatal(err)
+	}
+	// The provider now reports a listed email for an identity linked to another account.
+	acc, _, err := resolveListed(t, s, listedProfile("oidc", "boss@example.test"))
+	if err != nil || acc.IsAdmin {
+		t.Fatalf("acc = %+v, err = %v", acc, err)
+	}
+	// An unverified email is refused before any promotion.
+	p := listedProfile("oidc", "boss@example.test")
+	p.EmailVerified = false
+	if _, _, err := resolveListed(t, s, p); err == nil {
+		t.Fatal("unverified email accepted")
 	}
 }
