@@ -15,8 +15,10 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/privacyfence/peek/internal/backends"
 	"github.com/privacyfence/peek/internal/groups"
@@ -50,6 +52,10 @@ type serveConfig struct {
 	AllowedEmailDomain string
 	GoogleOrgSignup    bool
 	OIDCSignup         bool
+
+	// ProvisioningKey is the trimmed content of PEEK_PROVISIONING_KEY_FILE.
+	ProvisioningKey     string
+	ProvisioningKeyName string
 
 	MaxTotalSize      int64
 	RetentionDays     int
@@ -200,6 +206,9 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 	googleOrgSignup := fs.Bool("google-org-signup", googleOrgSignupDefault, "Google org sign-in: the first Google sign-in in the allowed email domain creates the account")
 	oidcSignup := fs.Bool("oidc-signup", oidcSignupDefault, "SSO sign-up: the first SSO sign-in in the allowed email domain creates the account")
 
+	provisioningKeyFile := fs.String("provisioning-key-file", getenv("PEEK_PROVISIONING_KEY_FILE", ""), "path to a file holding a provisioning key to register (or rotate to) at every start")
+	provisioningKeyName := fs.String("provisioning-key-name", getenv("PEEK_PROVISIONING_KEY_NAME", "PrivacyFence"), "name of the provisioner registered from --provisioning-key-file")
+
 	maxTotalSize := fs.Int64("max-total-size", maxTotalSizeDefault, "max total storage bytes across all uploads (0 = unlimited)")
 	retentionDays := fs.Int("retention-days", retentionDaysDefault, "auto-delete uploads older than N days (0 = off)")
 	trustedProxy := fs.Bool("trusted-proxy", trustedProxyDefault, "trust X-Forwarded-For header (set when behind a reverse proxy)")
@@ -247,6 +256,10 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 			return serveConfig{}, false, fmt.Errorf("set PEEK_OIDC_ISSUER_URL, PEEK_OIDC_CLIENT_ID and PEEK_OIDC_CLIENT_SECRET (or PEEK_OIDC_CLIENT_SECRET_FILE) together")
 		}
 	}
+	provisioningKey, provisioningName, err := readProvisioningKey(*provisioningKeyFile, *provisioningKeyName)
+	if err != nil {
+		return serveConfig{}, false, err
+	}
 	if *googleGroupCacheTTL < time.Second || *googleGroupCacheTTL > time.Hour {
 		return serveConfig{}, false, fmt.Errorf("google group cache ttl must be between 1s and 1h")
 	}
@@ -282,6 +295,9 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		GoogleOrgSignup:    *googleOrgSignup,
 		OIDCSignup:         *oidcSignup,
 
+		ProvisioningKey:     provisioningKey,
+		ProvisioningKeyName: provisioningName,
+
 		MaxTotalSize:      *maxTotalSize,
 		RetentionDays:     *retentionDays,
 		TrustedProxy:      *trustedProxy,
@@ -295,6 +311,31 @@ func parseServeConfig(args []string) (serveConfig, bool, error) {
 		DockerHost:     *dockerHost,
 		BackendNetwork: *backendNetwork,
 	}, false, nil
+}
+
+// readProvisioningKey reads and checks PEEK_PROVISIONING_KEY_FILE. With no file
+// set it returns an empty key; the name is checked either way.
+func readProvisioningKey(file, name string) (key, trimmedName string, err error) {
+	trimmedName = strings.TrimSpace(name)
+	if n := utf8.RuneCountInString(trimmedName); n < 1 || n > 100 {
+		return "", "", fmt.Errorf("PEEK_PROVISIONING_KEY_NAME must be 1 to 100 characters")
+	}
+	if file == "" {
+		return "", trimmedName, nil
+	}
+	b, err := os.ReadFile(file)
+	if err != nil {
+		var pe *os.PathError
+		if errors.As(err, &pe) {
+			err = pe.Err
+		}
+		return "", "", fmt.Errorf("PEEK_PROVISIONING_KEY_FILE cannot be read: %v", err)
+	}
+	key = strings.TrimSpace(string(b))
+	if !strings.HasPrefix(key, "peekprov_") || len(key) < 40 {
+		return "", "", fmt.Errorf("PEEK_PROVISIONING_KEY_FILE must hold a key that starts with peekprov_ and is at least 40 characters")
+	}
+	return key, trimmedName, nil
 }
 
 // lockedSettings maps the sign-in settings given by the environment to the
@@ -433,6 +474,8 @@ func runServe(cfg serveConfig) int {
 		S3AllowPrivateEndpoint: cfg.S3AllowPrivateEndpoint,
 		OIDCAllowPrivateIssuer: cfg.OIDCAllowPrivateIssuer,
 		LockedSettings:         lockedSettings(cfg),
+		ProvisioningKey:        cfg.ProvisioningKey,
+		ProvisioningKeyName:    cfg.ProvisioningKeyName,
 
 		MaxTotalSize:      cfg.MaxTotalSize,
 		RetentionDays:     cfg.RetentionDays,

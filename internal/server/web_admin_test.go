@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -292,5 +293,54 @@ func TestAdminPageShowsNoProvisioningKeys(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "Managed by") {
 		t.Fatal("Managed by badge without a provisioner")
+	}
+}
+
+func TestFileProvisionerHasNoRevoke(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	s.provisioningKeyName = "PrivacyFence"
+	if err := s.seedProvisioner(context.Background(), "PrivacyFence", seedKeyA); err != nil {
+		t.Fatal(err)
+	}
+	other := newProvisionedFixture(t, s, "Other", "u@example.test", "e1")
+
+	body := doRequest(t, s, http.MethodGet, "/admin", nil, asSession(s, admin.ID)).Body.String()
+	if !strings.Contains(body, "Registered from PEEK_PROVISIONING_KEY_FILE: replace the file and restart to rotate it.") {
+		t.Fatal("sentence missing")
+	}
+	if strings.Count(body, "/revoke\"") < 1 || !strings.Contains(body, "/dashboard/provisioners/"+strconv.FormatInt(other.Provisioner.ID, 10)+"/revoke") {
+		t.Fatal("other provisioner lost its Revoke")
+	}
+	list, _ := s.store.ListProvisioners(context.Background())
+	for _, p := range list {
+		if p.Name == "PrivacyFence" && strings.Contains(body, "/dashboard/provisioners/"+strconv.FormatInt(p.ID, 10)+"/revoke") {
+			t.Fatal("file provisioner has a Revoke form")
+		}
+	}
+}
+
+func TestRevokeFileProvisionerRefused(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	s.provisioningKeyName = "PrivacyFence"
+	if err := s.seedProvisioner(context.Background(), "PrivacyFence", seedKeyA); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.store.GetProvisionerByKey(context.Background(), seedKeyA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	s.handleDashboardProvisionerRevoke(rec, dashboardProvisionerRevokeRequest(s, admin.ID, strconv.FormatInt(p.ID, 10)))
+	if rec.Header().Get("Location") != "/admin?err=provisioner_from_file" {
+		t.Fatalf("location = %q", rec.Header().Get("Location"))
+	}
+	if _, err := s.store.GetProvisionerByKey(context.Background(), seedKeyA); err != nil {
+		t.Fatalf("provisioner was deleted: %v", err)
+	}
+	page := doRequest(t, s, http.MethodGet, rec.Header().Get("Location"), nil, asSession(s, admin.ID)).Body.String()
+	if !strings.Contains(page, "registered from PEEK_PROVISIONING_KEY_FILE; replace the file and restart instead.") {
+		t.Fatal("flash message not shown")
 	}
 }

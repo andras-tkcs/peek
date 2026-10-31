@@ -682,3 +682,45 @@ func TestServeUsageListsSignInSecretFileForms(t *testing.T) {
 		}
 	}
 }
+
+func TestParseServeConfigProvisioningKeyFile(t *testing.T) {
+	dir := t.TempDir()
+	write := func(content string) string {
+		p := filepath.Join(dir, "key")
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	good := "peekprov_" + strings.Repeat("a", 40)
+
+	cfg, _, err := parseServeConfig([]string{"--provisioning-key-file", write(good + "\n")})
+	if err != nil || cfg.ProvisioningKey != good || cfg.ProvisioningKeyName != "PrivacyFence" {
+		t.Fatalf("cfg = %+v, %v", cfg, err)
+	}
+	cfg, _, err = parseServeConfig(nil)
+	if err != nil || cfg.ProvisioningKey != "" {
+		t.Fatalf("unset: %+v, %v", cfg, err)
+	}
+	cfg, _, err = parseServeConfig([]string{"--provisioning-key-file", write(good), "--provisioning-key-name", "  Other "})
+	if err != nil || cfg.ProvisioningKeyName != "Other" {
+		t.Fatalf("name: %+v, %v", cfg, err)
+	}
+
+	const shape = "PEEK_PROVISIONING_KEY_FILE must hold a key that starts with peekprov_ and is at least 40 characters"
+	for _, content := range []string{"nope", "peekprov_short", "xpeekprov_" + strings.Repeat("a", 40)} {
+		if _, _, err := parseServeConfig([]string{"--provisioning-key-file", write(content)}); err == nil || err.Error() != shape {
+			t.Fatalf("%q: err = %v", content, err)
+		}
+	}
+	_, _, err = parseServeConfig([]string{"--provisioning-key-file", filepath.Join(dir, "missing")})
+	if err == nil || !strings.HasPrefix(err.Error(), "PEEK_PROVISIONING_KEY_FILE cannot be read: ") {
+		t.Fatalf("missing: %v", err)
+	}
+	for _, name := range []string{"   ", strings.Repeat("x", 101)} {
+		_, _, err = parseServeConfig([]string{"--provisioning-key-file", write(good), "--provisioning-key-name", name})
+		if err == nil || err.Error() != "PEEK_PROVISIONING_KEY_NAME must be 1 to 100 characters" {
+			t.Fatalf("name %q: %v", name, err)
+		}
+	}
+}

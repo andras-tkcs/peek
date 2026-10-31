@@ -149,6 +149,7 @@ type ProvisionerDashboardRow struct {
 	Created  string // RFC 3339 date, as the other rows format dates
 	LastUsed string // "never" for 0
 	Accounts int64
+	FromFile bool // registered from PEEK_PROVISIONING_KEY_FILE; cannot be revoked here
 }
 
 type SettingRow struct {
@@ -265,8 +266,11 @@ type AdminData struct {
 	Invites         []InviteDashboardRow
 	Accounts        []AccountDashboardRow
 	Provisioners    []ProvisionerDashboardRow
-	Error           string
-	FlashSuccess    string
+	// ProvisioningKeyFromFile is the name of the provisioner registered from
+	// PEEK_PROVISIONING_KEY_FILE, empty when unset.
+	ProvisioningKeyFromFile string
+	Error                   string
+	FlashSuccess            string
 }
 
 type StatsVisit struct {
